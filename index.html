@@ -474,6 +474,17 @@ for(const [id,amount] of needs){
 save();
 const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
   orders.unshift({no,name,phone,type,pay,addr,obs,total:total(),detail,created:new Date().toISOString(),updated:new Date().toISOString(),status:'recibido',statusHistory:[{status:'recibido',date:new Date().toISOString()}]});
+  if(SP_DB_ON){
+    try{
+      const centralItems=cart.map(x=>({product_id:spMap('prod',x.id),product_name:(products.find(p=>p.id===x.id)?.name||'Producto'),quantity:Number(x.qty||1),notes:x.note||'',toppings:(x.toppings||[]).map(t=>({topping_id:spMap('top',t.id),topping_name:t.name,quantity:1}))}));
+      const {data:centralOrder,error:centralError}=await SP_DB.rpc('sp_create_public_order',{
+        p_order:{order_number:no,name,phone,type,address:addr,observations:obs,payment_method:pay},
+        p_items:centralItems
+      });
+      if(centralError) console.warn('Pedido central pendiente:',centralError.message);
+      else if(centralOrder?.length) orders[0].centralId=centralOrder[0].id;
+    }catch(e){console.warn('No se pudo centralizar el pedido:',e);}
+  }
   localStorage.setItem(ORDERS,JSON.stringify(orders));
   queueKitchenOrder(no);
 
@@ -507,16 +518,20 @@ function statusMarkup(order){
   const editable=can('allowOrders');
   return `<div class="statusHero">${list.map((x,i)=>{const cls=`statusStep ${i<idx?'done ':''}${i===idx?'current':''}`; return editable?`<button type="button" class="${cls}" onclick="setOrderStatus(\'${esc(order.no)}\',\'${x[0]}\',true)" title="Cambiar a ${x[2]}"><span class="statusDot">${x[1]}</span>${x[2]}</button>`:`<div class="${cls}"><span class="statusDot">${x[1]}</span>${x[2]}</div>`;}).join('')}</div>`;
 }
-function setOrderStatus(no,status,stayDetail=false){
+async function setOrderStatus(no,status,stayDetail=false){
   const __ordersGuard=JSON.parse(localStorage.getItem(ORDERS)||'[]'), __orderGuard=__ordersGuard.find(x=>x.no===no);
   if(__orderGuard && __orderGuard.type==='Domicilio' && status==='camino' && !__orderGuard.driverId){alert('Asigna primero un domiciliario activo antes de poner este pedido En camino.');return;}
-  if(!requirePermission('allowOrders'))return
+  if(!requirePermission('allowOrders'))return;
   const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
   const o=orders.find(x=>x.no===no);if(!o)return;
   const valid=statusList(o).some(x=>x[0]===status);if(!valid)return;
   if((o.status||'recibido')===status)return;
   let reason='Cambio de estado operativo';
   if(!isAdmin()){reason=askReason('Explica por qué cambias el estado de este pedido:');if(reason===null)return;}
+  if(currentUser?.central && SP_DB_ON && o.centralId){
+    const {data,error}=await SP_DB.rpc('sp_update_order_status',{p_order_id:o.centralId,p_status:status});
+    if(error){alert('No se pudo actualizar el estado central: '+error.message);return;}
+  }
   o.status=status;
   o.updated=new Date().toISOString();
   o.statusHistory=o.statusHistory||[];
@@ -524,8 +539,7 @@ function setOrderStatus(no,status,stayDetail=false){
   localStorage.setItem(ORDERS,JSON.stringify(orders));
   auditLog('Cambio de estado',reason,no);
   queueStatusNotification(o,status);
-  if(stayDetail){trackOrder(no);}
-  else{adminOrders();}
+  if(stayDetail){trackOrder(no);} else{adminOrders();}
 }
 function registerOrderIncident(no,type){
   if(!requirePermission('allowOrders'))return;
@@ -604,8 +618,28 @@ function openStatusWhatsAppFromOrder(no,status){
   const phone=normalizeWhatsAppPhone(o.phone);if(!phone){alert('Este pedido no tiene un teléfono válido.');return;}
   window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(statusNotificationText(o,status)),'_blank');
 }
-function trackOrder(noFromButton){
+async function trackOrder(noFromButton){
   const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
+  if(!noFromButton && SP_DB_ON){
+    const entered=prompt('Escribe tu número de pedido (ej. SP-123456):');
+    if(entered===null||!entered.trim())return;
+    noFromButton=entered.trim().toUpperCase();
+  }
+  if(noFromButton && SP_DB_ON && !can('allowOrders')){
+    const {data,error}=await SP_DB.rpc('sp_get_order_status',{p_order_number:String(noFromButton).trim()});
+    if(!error && data?.length){
+      const central=data[0];
+      document.getElementById('panel').innerHTML=`
+        <div class="panelHead"><h2>📍 Estado del pedido</h2><button class="close" onclick="closeModal()">✕</button></div>
+        <div class="notice" style="margin:14px 0">Pedido <b>${esc(central.order_number)}</b></div>
+        ${statusMarkup({no:central.order_number,status:central.status,updated:central.updated_at})}
+        <div class="totalBox"><span>ESTADO ACTUAL</span><span>${statusLabel({status:central.status})}</span></div>
+        <div class="muted">Última actualización: ${new Date(central.updated_at).toLocaleString('es-CO')}</div>`;
+      document.getElementById('modal').classList.add('open');
+      return;
+    }
+    if(error){console.warn('Consulta central de estado:',error.message);}
+  }
   if(!noFromButton){
     if(can('allowOrders')){
       const list=orders.slice().sort((a,b)=>new Date(b.created)-new Date(a.created));
