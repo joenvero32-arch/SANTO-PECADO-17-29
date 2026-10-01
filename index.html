@@ -373,7 +373,7 @@ function render(){
       <div class="cardBody">
         <h3>${esc(p.name)}</h3>
         <div class="desc">${esc(p.desc)}</div>
-        <div class="bottom"><div class="price">${money(p.price)}</div><button type="button" class="add" data-product-id="${esc(String(p.id))}">+ Agregar</button></div>
+        <div class="bottom"><div class="price">${money(p.price)}</div><button type="button" class="add" onclick="window.addWithToppings(${JSON.stringify(String(p.id))})">+ Agregar</button></div>
       </div>
     </article>`).join(''):`<div class="empty">No encontramos productos con esa búsqueda.</div>`;
   updateCart();
@@ -402,9 +402,8 @@ function addWithToppings(id){
     <div class="notice" style="margin:14px 0">Elige salsas, toppings o adiciones para este producto.</div>
     <div id="toppingList">${opts||'<div class="muted">No hay adicionales configurados.</div>'}</div>
     <div class="field"><label>OBSERVACIÓN</label><textarea id="lineNote" placeholder="Ej. salsa aparte, sin cebolla..."></textarea></div>
-    <div class="modalBtns"><button type="button" class="primary" id="confirmAddBtn" data-product-id="${esc(String(p.id))}" style="touch-action:manipulation;pointer-events:auto;">Agregar al pedido</button><button type="button" class="secondary" onclick="window.addProductDirect(${JSON.stringify(String(p.id))})">Agregar sin adicionales</button></div>`;
+    <div class="modalBtns"><button type="button" class="primary" onclick="window.confirmToppings(${JSON.stringify(String(p.id))})">Agregar al pedido</button><button type="button" class="secondary" onclick="window.addProductDirect(${JSON.stringify(String(p.id))})">Agregar sin adicionales</button></div>`;
   document.getElementById('modal').classList.add('open');
-  bindProductTouchEvents();
 }
 function confirmToppings(id){
   try{
@@ -438,28 +437,6 @@ function addProductDirect(id){
 window.addWithToppings=addWithToppings;
 window.confirmToppings=confirmToppings;
 window.addProductDirect=addProductDirect;
-function bindProductTouchEvents(){
-  const btn=document.getElementById('confirmAddBtn');
-  if(btn){
-    btn.addEventListener('pointerup',function(e){
-      e.preventDefault();
-      e.stopPropagation();
-      if(btn.dataset.busy==='1')return;
-      btn.dataset.busy='1';
-      window.confirmToppings(btn.getAttribute('data-product-id'));
-      setTimeout(()=>{try{btn.dataset.busy='0'}catch(_e){}},500);
-    },{passive:false});
-  }
-  document.querySelectorAll('#products button.add').forEach(b=>{
-    if(b.dataset.bound==='1')return;
-    b.dataset.bound='1';
-    b.addEventListener('pointerup',function(e){
-      e.preventDefault();
-      e.stopPropagation();
-      window.addWithToppings(b.getAttribute('data-product-id'));
-    },{passive:false});
-  });
-}
 function openCart(keep=false){
   const lines=cart.map(x=>{const p=products.find(a=>String(a.id)===String(x.id));if(!p)return '';return `
     <div class="cartLine">
