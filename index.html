@@ -1197,8 +1197,9 @@ function queueKitchenOrder(no){
 function kitchenOrders(){
   return JSON.parse(localStorage.getItem(ORDERS)||'[]').filter(o=>o.status!=='entregado');
 }
-function adminKitchen(){
+async function adminKitchen(){
   if(!can('allowOrders')){alert('Tu usuario no tiene permiso para gestionar pedidos.');return}
+  await syncCentralOrdersToLocal();
   const a=kitchenOrders().sort((x,y)=>new Date(y.created)-new Date(x.created));
   const q=JSON.parse(localStorage.getItem('KITCHEN_QUEUE')||'[]');
   document.getElementById('panel').innerHTML=`
@@ -1222,29 +1223,9 @@ function printComanda(no){
   w.document.close();
   const q=JSON.parse(localStorage.getItem('KITCHEN_QUEUE')||'[]');const item=q.find(x=>String(x.no)===String(no));if(item){item.printed=true;item.printedAt=new Date().toISOString();item.printedBy=currentUser?.username||'usuario';localStorage.setItem('KITCHEN_QUEUE',JSON.stringify(q));}
 }
-async function adminOrders(){
-  if(!can('allowOrders')){alert('Tu usuario no tiene permiso para gestionar pedidos.');return}
   let a=JSON.parse(localStorage.getItem(ORDERS)||'[]');
-  if(currentUser?.central && SP_DB_ON){
-    try{
-      const {data,error}=await SP_DB.from('orders').select('*,order_items(*,order_item_toppings(*))').order('created_at',{ascending:false});
-      if(error) throw error;
-      const central=(data||[]).map(o=>({
-        no:o.order_number,centralId:o.id,name:o.customer_name,phone:o.customer_phone,
-        type:o.order_type==='delivery'?'Domicilio':o.order_type==='pickup'?'Recoger':'En el local',
-        tableNumber:o.table_number||null,pay:o.payment_method||'',addr:o.address||'',obs:o.observations||'',total:Number(o.total||0),
-        created:o.created_at,updated:o.updated_at,status:o.status||'recibido',
-        statusHistory:[],detail:(o.order_items||[]).map(it=>{
-          const tops=(it.order_item_toppings||[]).map(t=>t.topping_name).join(', ');
-          return (it.quantity||1)+' x '+(it.product_name||'Producto')+(tops?' + '+tops:'');
-        }).join('\n')
-      }));
-      const byNo=new Map(a.map(x=>[String(x.no),x]));
-      central.forEach(c=>{const old=byNo.get(String(c.no));byNo.set(String(c.no),{...(old||{}),...c})});
-      a=Array.from(byNo.values()).sort((x,y)=>new Date(y.created)-new Date(x.created));
-      localStorage.setItem(ORDERS,JSON.stringify(a));
-    }catch(e){console.warn('No se pudieron cargar los pedidos centrales:',e.message||e)}
-  }
+  await syncCentralOrdersToLocal();
+  a=JSON.parse(localStorage.getItem(ORDERS)||'[]');
   document.getElementById('panel').innerHTML=`
     <div class="panelHead"><h2>📋 Pedidos</h2><button class="close" onclick="closeModal()">✕</button></div>
     ${navTabs('orders')}
