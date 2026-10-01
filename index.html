@@ -1221,20 +1221,6 @@ setTimeout(async()=>{
     console.warn('Santo Pecado 17-29: sincronización central pendiente.',e);
   }
 },800);
-
-/* CENTRALIZACIÓN: sincronizar catálogo y clientes con Supabase al cargar */
-setTimeout(async()=>{
-  try{
-    if(window.SantoPecadoCentral?.connected){
-      await window.SantoPecadoCentral.sync();
-      console.log('Santo Pecado 17-29: sincronización central completada.');
-    }else{
-      console.warn('Santo Pecado 17-29: Supabase no está disponible.');
-    }
-  }catch(e){
-    console.warn('Santo Pecado 17-29: sincronización central pendiente.',e);
-  }
-},800);
 </script>
 </body>
 </html>
