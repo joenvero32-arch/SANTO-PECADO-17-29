@@ -130,7 +130,7 @@ try{
   }
 }catch(e){console.warn('Supabase no pudo inicializarse',e)}
 function spUuid(){return crypto.randomUUID()}
-function spMap(key,id){const k='sp_central_map_'+key;const m=JSON.parse(localStorage.getItem(k)||'{}');if(!m[id]){m[id]=spUuid();localStorage.setItem(k,JSON.stringify(m))}return m[id]}
+function spMap(key,id){if(typeof id==='string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))return id;const k='sp_central_map_'+key;const m=JSON.parse(localStorage.getItem(k)||'{}');if(!m[id]){m[id]=spUuid();localStorage.setItem(k,JSON.stringify(m))}return m[id]}
 async function spUpsert(table,rows){if(!SP_DB_ON||!rows.length)return;const {error}=await SP_DB.from(table).upsert(rows,{onConflict:'id'});if(error)throw error}
 async function spSyncCatalog(){
   if(!SP_DB_ON)return;
@@ -154,6 +154,24 @@ async function spSyncCustomers(){
   }catch(e){console.warn('Clientes aún no sincronizados:',e.message||e)}
 }
 window.SantoPecadoCentral={get connected(){return SP_DB_ON},get lastSync(){return SP_DB_LAST||localStorage.getItem('sp_central_last_sync')||''},sync:async()=>{await spSyncCatalog();await spSyncCustomers()}};
+window.loadPublicCatalog=async function(){
+  if(!SP_DB_ON)return;
+  try{
+    const [cr,pr,tr]=await Promise.all([
+      SP_DB.from('categories').select('id,name,active,sort_order').eq('active',true).order('sort_order'),
+      SP_DB.from('products').select('id,category_id,name,description,price,image_url,stock,minimum_stock,active,sort_order').eq('active',true).order('sort_order'),
+      SP_DB.from('toppings').select('id,name,description,price,unit,consumption_per_addition,stock,minimum_stock,active').eq('active',true).order('name')
+    ]);
+    if(cr.error)throw cr.error;if(pr.error)throw pr.error;if(tr.error)throw tr.error;
+    const catMap=Object.fromEntries((cr.data||[]).map(c=>[c.id,c.name]));
+    categories=(cr.data||[]).map(c=>c.name);
+    products=(pr.data||[]).map((p,i)=>({id:p.id,cat:catMap[p.category_id]||'Sin categoría',name:p.name,desc:p.description||'',price:Number(p.price||0),img:p.image_url||'',stock:Number(p.stock||0),minStock:Number(p.minimum_stock||0),active:p.active!==false,sort_order:p.sort_order??i}));
+    toppings=(tr.data||[]).map(t=>({id:t.id,name:t.name,description:t.description||'',price:Number(t.price||0),unit:t.unit||'Porción',usage:Number(t.consumption_per_addition||1),stock:Number(t.stock||0),minStock:Number(t.minimum_stock||0),tracked:true,active:t.active!==false}));
+    localStorage.setItem(KEY,JSON.stringify(products));
+    localStorage.setItem(CATS,JSON.stringify(categories));
+    localStorage.setItem(TOP,JSON.stringify(toppings));
+  }catch(e){console.warn('No se pudo cargar el catálogo central:',e.message||e)}
+};
 </script>
 </head>
 <body>
@@ -486,7 +504,7 @@ const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
     try{
       const centralItems=cart.map(x=>({product_id:spMap('prod',x.id),product_name:(products.find(p=>p.id===x.id)?.name||'Producto'),quantity:Number(x.qty||1),unit_price:Number((x.base ?? (products.find(p=>p.id===x.id)||{}).price) || 0),notes:x.note||'',toppings:(x.toppings||[]).map(t=>({topping_id:spMap('top',t.id),topping_name:t.name,quantity:1,unit_price:Number(t.price||0)}))}));
       const {data:centralOrder,error:centralError}=await SP_DB.rpc('sp_create_public_order',{
-        p_order:{order_number:no,name,phone,type,address:addr,observations:obs,payment_method:pay,total:total(),subtotal:total()},
+        p_order:{order_number:no,name,phone,type:(type==='Domicilio'?'delivery':type==='Recoger en el local'?'pickup':'local'),address:addr,observations:obs,payment_method:pay,total:total(),subtotal:total()},
         p_items:centralItems
       });
       if(centralError) console.warn('Pedido central pendiente:',centralError.message);
@@ -1275,60 +1293,16 @@ function saveSettings(){
   settings.whatsapp=v;save();alert('Número de WhatsApp guardado correctamente. Los nuevos pedidos se enviarán a este número.');adminProducts();
 }
 
-render();
-renderPromotions();
-
-/* CENTRALIZACIÓN: solo sincronizar al existir una sesión autenticada */
-setTimeout(async()=>{
+(async()=>{
+  await window.loadPublicCatalog?.();
+  render();
+  renderPromotions();
   try{
-    if(!window.SantoPecadoCentral?.connected)return;
-    const {data}=await SP_DB.auth.getSession();
-    if(data?.session){
-      await window.SantoPecadoCentral.sync();
-      console.log('Santo Pecado 17-29: sincronización central completada.');
+    if(window.SantoPecadoCentral?.connected){
+      const {data}=await SP_DB.auth.getSession();
+      if(data?.session) await window.SantoPecadoCentral.sync();
     }
-  }catch(e){
-    console.warn('Santo Pecado 17-29: sincronización central pendiente.',e);
-  }
-},800);
-</script>
-<script>
-(function(){
-  const db=window.supabase.createClient('https://ghucwrrvqivmbogtcgcr.supabase.co','sb_publishable_chFTmgoaIVvJSdpgTTuUSQ_fBNEq4WJ');
-  const wa='573116637215';
-  let products=[],cart=[];
-  const money=n=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(Number(n||0));
-  const safe=s=>String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-  function show(html){document.getElementById('panel').innerHTML=html;document.getElementById('modal').classList.add('open')}
-  function total(){return cart.reduce((s,x)=>s+x.price*x.qty,0)}
-  function refreshCart(){const n=cart.reduce((s,x)=>s+x.qty,0);document.querySelectorAll('#cartCount2').forEach(x=>x.textContent=n);const t=document.getElementById('barTotal');if(t)t.textContent=money(total())}
-  window.render=async function(){
-    const box=document.getElementById('products');if(!box)return;
-    const r=await db.from('products').select('id,name,description,price,image_url,active').eq('active',true).order('sort_order');
-    if(r.error){box.innerHTML='<div class="empty">No se pudo cargar el menú.</div>';return}
-    products=r.data||[];
-    box.innerHTML=products.map(p=>'<article class="card"><div class="photo">'+(p.image_url?'<img src="'+safe(p.image_url)+'" alt="'+safe(p.name)+'">':'<div class="placeholder">🍔</div>')+'</div><div class="cardBody"><h3>'+safe(p.name)+'</h3><div class="desc">'+safe(p.description)+'</div><div class="bottom"><div class="price">'+money(p.price)+'</div><button class="add" onclick="addBackup(&quot;'+p.id+'&quot;)">+ Agregar</button></div></div></article>').join('');
-  };
-  window.addBackup=function(id){const p=products.find(x=>x.id===id);if(!p)return;const x=cart.find(x=>x.id===id);if(x)x.qty++;else cart.push({id:p.id,name:p.name,price:Number(p.price||0),qty:1});refreshCart();showCart()};
-  window.openCart=function(){showCart()};
-  function showCart(){
-    const lines=cart.map((x,i)=>'<div class="cartLine"><div class="cartLineInfo"><b>'+safe(x.name)+'</b><span>'+money(x.price)+' · '+x.qty+'</span></div><button class="mini" onclick="cartBackup('+i+',-1)">−</button><button class="mini" onclick="cartBackup('+i+',1)">+</button></div>').join('');
-    show('<div class="panelHead"><h2>🛒 Mi pedido</h2><button class="close" onclick="closeModal()">✕</button></div>'+(lines||'<div class="empty">Tu pedido está vacío.</div>')+(cart.length?'<div class="totalBox"><span>TOTAL</span><span>'+money(total())+'</span></div><div class="field"><label>NOMBRE</label><input id="bn"></div><div class="field"><label>TELÉFONO</label><input id="bp"></div><div class="field"><label>TIPO</label><select id="bt"><option>Domicilio</option><option>Recoger</option><option>Local</option></select></div><div class="field"><label>PAGO</label><select id="bpay"><option>Efectivo</option><option>Transferencia</option><option>Pago en el local</option></select></div><div class="field"><label>DIRECCIÓN</label><input id="ba"></div><button class="primary" style="width:100%" onclick="sendBackup()">CONFIRMAR PEDIDO</button>':''));
-  }
-  window.cartBackup=function(i,d){cart[i].qty+=d;if(cart[i].qty<=0)cart.splice(i,1);refreshCart();showCart()};
-  window.sendBackup=async function(){
-    const name=document.getElementById('bn').value.trim(),phone=document.getElementById('bp').value.trim(),type=document.getElementById('bt').value,pay=document.getElementById('bpay').value,addr=document.getElementById('ba').value.trim();
-    if(!name||!phone){alert('Completa nombre y teléfono.');return}
-    const no='SP-'+Math.floor(100000+Math.random()*900000),tot=total();
-    const items=cart.map(x=>({product_id:x.id,product_name:x.name,quantity:x.qty,unit_price:x.price,notes:''}));
-    const r=await db.rpc('sp_create_public_order',{p_order:{order_number:no,name,phone,type,address:addr,observations:'',payment_method:pay,total:tot,subtotal:tot},p_items:items});
-    if(r.error){alert('Error registrando pedido: '+r.error.message);return}
-    const msg='🍔 SANTO PECADO 17-29\nNUEVO PEDIDO '+no+'\nCliente: '+name+'\nTeléfono: '+phone+'\nTipo: '+type+'\nTotal: '+money(tot);
-    cart=[];refreshCart();
-    show('<div class="panelHead"><h2>✅ Pedido recibido</h2><button class="close" onclick="closeModal()">✕</button></div><div class="notice">Pedido <b>'+no+'</b> registrado correctamente.</div><div class="modalBtns"><button class="primary" onclick="location.href='+JSON.stringify('https://wa.me/'+wa+'?text='+encodeURIComponent(msg))+'>📲 WhatsApp</button><button class="secondary" onclick="trackBackup('+JSON.stringify(no)+')">📍 Ver estado</button></div>');
-  };
-  window.trackBackup=async function(no){const r=await db.rpc('sp_get_order_status',{p_order_number:no});if(r.error||!r.data?.length){alert('No encontramos el pedido.');return}const x=r.data[0];show('<div class="panelHead"><h2>📍 Estado</h2><button class="close" onclick="closeModal()">✕</button></div><div class="notice">Pedido <b>'+safe(x.order_number)+'</b></div><div class="totalBox"><span>ESTADO</span><span>'+safe(x.status)+'</span></div>')};
-  document.addEventListener('DOMContentLoaded',()=>{render();refreshCart()});
+  }catch(e){console.warn('Sincronización central pendiente.',e)}
 })();
 </script></body>
 </html>
