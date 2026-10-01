@@ -519,6 +519,7 @@ function checkout(){
     </div>
     <div class="totalBox"><span>TOTAL</span><span>${money(total())}</span></div>
     <div class="modalBtns"><button type="button" id="sendOrderBtn" class="primary" onclick="window.sendOrder()">📲 Enviar pedido</button><button class="secondary" onclick="openCart()">Volver</button></div>`;
+  selectTable(1);
 }
 function upsertCustomerFromOrder(name,phone,type,addr){const clean=phone.replace(/\D/g,'');let c=customers.find(x=>x.phone===clean);if(!c){c={id:Date.now(),name,phone:clean,created:new Date().toISOString(),orders:0,total:0,addresses:[]};customers.push(c)}c.name=name;c.lastOrder=new Date().toISOString();c.orders=Number(c.orders||0)+1;c.total=Number(c.total||0)+total();c.type=type;if(addr&&!c.addresses.includes(addr))c.addresses.unshift(addr);c.addresses=c.addresses.slice(0,10);save();}
 
@@ -570,7 +571,7 @@ async function sendOrder(){
   localStorage.setItem(LAST_ORDER,no);save();queueKitchenOrder(no);
   const url='https://wa.me/'+(settings.whatsapp||ADMIN_WA)+'?text='+encodeURIComponent(msg);cart=[];updateCart();
   document.getElementById('panel').innerHTML='<div class="panelHead"><h2>✅ Pedido enviado</h2><button class="close" onclick="closeModal()">✕</button></div><div class="notice" style="margin:16px 0">El pedido <b>'+no+'</b> fue guardado en el sistema. Abriendo WhatsApp…</div><div class="modalBtns"><button class="primary" type="button" onclick="location.href=\''+url+'\'">📲 Abrir WhatsApp</button><button class="secondary" onclick="printOrder(\''+no+'\')">🖨️ Imprimir soporte</button><button class="secondary" onclick="trackOrder(\''+no+'\')">📍 Ver estado</button></div>';
-  setTimeout(function(){try{location.href=url}catch(e){}},250);
+  /* WhatsApp se abre únicamente al pulsar el botón. */
   }catch(e){
     console.error('Error inesperado al enviar pedido:',e);
     alert('No se pudo enviar el pedido.\n\n'+(e?.message||e)+'\n\nRevisa los datos e inténtalo nuevamente.');
@@ -704,7 +705,7 @@ function openStatusWhatsAppFromOrder(no,status){
 async function trackOrder(noFromButton){
   if(spStatusPollTimer){clearInterval(spStatusPollTimer);spStatusPollTimer=null}
   const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
-  if(!noFromButton){
+  if(!noFromButton && !can('allowOrders')){
     noFromButton=localStorage.getItem(LAST_ORDER)||'';
     if(!noFromButton){const entered=prompt('Escribe tu número de pedido (ej. SP-123456):');if(entered===null||!entered.trim())return;noFromButton=entered.trim().toUpperCase();}
   }
@@ -1358,6 +1359,12 @@ function saveSettings(){
 
 (async()=>{
   await window.loadPublicCatalog?.();
+  try{
+    if(Array.isArray(products)&&products.length&&Array.isArray(cart)){
+      cart=cart.filter(x=>products.some(p=>String(p.id)===String(x.id))).map(x=>({...x,toppings:(x.toppings||[]).filter(t=>toppings.some(tt=>String(tt.id)===String(t.id)||tt.name===t.name))}));
+      localStorage.setItem('sp_premium_cart_v2',JSON.stringify(cart));
+    }
+  }catch(e){console.warn('No se pudo limpiar el carrito:',e)}
   render();
   renderPromotions();
   try{
