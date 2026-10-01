@@ -55,7 +55,7 @@ button{cursor:pointer}
 .sectionTitle h2{margin:0;font-size:22px}.sectionTitle p{margin:4px 0 0;color:#777;font-size:12px}
 .search{width:min(360px,100%);background:#111;border:1px solid #292929;color:#fff;border-radius:13px;padding:11px 13px;outline:none}
 .cats{display:flex;gap:8px;overflow:auto;padding:2px 0 14px;scrollbar-width:none}.cats::-webkit-scrollbar{display:none}
-.cat{white-space:nowrap;border:1px solid #292929;background:#111;color:#d7d7d7;border-radius:99px;padding:9px 14px;font-weight:850}
+.cat{white-space:nowrap;border:1px solid #292929;background:#111;color:#d7d7d7;border-radius:99px;padding:11px 16px;font-weight:850;cursor:pointer;touch-action:manipulation;pointer-events:auto;-webkit-tap-highlight-color:transparent}.cat:active{transform:scale(.98)}
 .cat.active{color:#111;background:linear-gradient(135deg,#ffd66d,#f0a916);border-color:transparent}
 .grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px}
 .card{position:relative;background:linear-gradient(180deg,#151515,#101010);border:1px solid #262626;border-radius:20px;overflow:hidden;transition:.2s transform,.2s border-color;box-shadow:0 10px 30px rgba(0,0,0,.22)}
@@ -326,36 +326,30 @@ function total(){
   },0)
 }
 function cartCount(){return cart.reduce((s,x)=>s+x.qty,0)}
+function setCategory(cat){
+  currentCat=cat||'Todos';
+  render();
+  const menu=document.getElementById('menu');
+  if(menu) menu.scrollIntoView({behavior:'smooth',block:'start'});
+}
+window.setCategory=setCategory;
 function render(){
   const cats=['Todos',...categories.filter(Boolean)];
-  const catsEl=document.getElementById('cats');
-  if(catsEl) catsEl.innerHTML=cats.map(c=>`<button type="button" class="cat ${currentCat===c?'active':''}" onclick="currentCat='${esc(c)}';render()">${esc(c)}</button>`).join('');
-  const searchEl=document.getElementById('search');
-  const q=(searchEl?.value||'').toLowerCase().trim();
-  const list=products.filter(p=>p.active&&(currentCat==='Todos'||p.cat===currentCat)&&(!q||String(p.name||'').toLowerCase().includes(q)||String(p.desc||'').toLowerCase().includes(q)));
-  const productsEl=document.getElementById('products');
-  if(productsEl){
-    productsEl.innerHTML=list.length?list.map(p=>`
-      <article class="card">
-        <div class="photo">${p.img?`<img src="${p.img}" alt="${esc(p.name)}">`:`<div class="placeholder">${p.emoji||'🍔'}</div>`}<span class="badge">DESTACADO</span></div>
-        <div class="cardBody">
-          <h3>${esc(p.name)}</h3>
-          <div class="desc">${esc(p.desc)}</div>
-          <div class="bottom"><div class="price">${money(p.price)}</div><button type="button" class="add addProductBtn" data-product-id="${String(p.id)}">+ Agregar</button></div>
-        </div>
-      </article>`).join(''):`<div class="empty">No encontramos productos con esa búsqueda.</div>`;
-  }
+  document.getElementById('cats').innerHTML=cats.map(c=>`<button type="button" class="cat ${currentCat===c?'active':''}" data-cat="${esc(c)}" onclick="setCategory(this.dataset.cat)">${esc(c)}</button>`).join('');
+  const q=(document.getElementById('search').value||'').toLowerCase().trim();
+  const list=products.filter(p=>p.active&&(currentCat==='Todos'||p.cat===currentCat)&&(!q||p.name.toLowerCase().includes(q)||p.desc.toLowerCase().includes(q)));
+  document.getElementById('products').innerHTML=list.length?list.map(p=>`
+    <article class="card">
+      <div class="photo">${p.img?`<img src="${p.img}" alt="${esc(p.name)}">`:`<div class="placeholder">${p.emoji||'🍔'}</div>`}<span class="badge">DESTACADO</span></div>
+      <div class="cardBody">
+        <h3>${esc(p.name)}</h3>
+        <div class="desc">${esc(p.desc)}</div>
+        <div class="bottom"><div class="price">${money(p.price)}</div><button type="button" class="add" onclick="addWithToppings(${p.id})">+ Agregar</button></div>
+      </div>
+    </article>`).join(''):`<div class="empty">No encontramos productos con esa búsqueda.</div>`;
   updateCart();
   renderPromotions();
 }
-document.addEventListener('click',function(e){
-  const btn=e.target.closest?.('.addProductBtn');
-  if(!btn)return;
-  e.preventDefault();
-  e.stopPropagation();
-  const id=btn.getAttribute('data-product-id');
-  if(id!==null) addWithToppings(id);
-});
 function updateCart(){localStorage.setItem('sp_premium_cart_v2',JSON.stringify(cart));
   const n=cartCount(),t=total();
   document.getElementById('cartCount').textContent=n;
