@@ -410,7 +410,7 @@ function checkout(){
 }
 function upsertCustomerFromOrder(name,phone,type,addr){const clean=phone.replace(/\D/g,'');let c=customers.find(x=>x.phone===clean);if(!c){c={id:Date.now(),name,phone:clean,created:new Date().toISOString(),orders:0,total:0,addresses:[]};customers.push(c)}c.name=name;c.lastOrder=new Date().toISOString();c.orders=Number(c.orders||0)+1;c.total=Number(c.total||0)+total();c.type=type;if(addr&&!c.addresses.includes(addr))c.addresses.unshift(addr);c.addresses=c.addresses.slice(0,10);save();}
 
-function sendOrder(){
+async function sendOrder(){
   const name=document.getElementById('cn').value.trim(),phone=document.getElementById('ct').value.trim();
   const type=document.getElementById('type').value,pay=document.getElementById('pay').value;
   const addr=document.getElementById('addr').value.trim(),obs=document.getElementById('obs').value.trim();
@@ -477,7 +477,7 @@ const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
   orders.unshift({no,name,phone,type,pay,addr,obs,total:total(),detail,created:new Date().toISOString(),updated:new Date().toISOString(),status:'recibido',statusHistory:[{status:'recibido',date:new Date().toISOString()}]});
   if(SP_DB_ON){
     try{
-      const centralItems=cart.map(x=>({product_id:spMap('prod',x.id),product_name:(products.find(p=>p.id===x.id)?.name||'Producto'),quantity:Number(x.qty||1),unit_price:Number(x.base??(products.find(p=>p.id===x.id)||{}).price||0),notes:x.note||'',toppings:(x.toppings||[]).map(t=>({topping_id:spMap('top',t.id),topping_name:t.name,quantity:1,unit_price:Number(t.price||0)}))}));
+      const centralItems=cart.map(x=>({product_id:spMap('prod',x.id),product_name:(products.find(p=>p.id===x.id)?.name||'Producto'),quantity:Number(x.qty||1),unit_price:Number((x.base ?? (products.find(p=>p.id===x.id)||{}).price) || 0),notes:x.note||'',toppings:(x.toppings||[]).map(t=>({topping_id:spMap('top',t.id),topping_name:t.name,quantity:1,unit_price:Number(t.price||0)}))}));
       const {data:centralOrder,error:centralError}=await SP_DB.rpc('sp_create_public_order',{
         p_order:{order_number:no,name,phone,type,address:addr,observations:obs,payment_method:pay,total:total(),subtotal:total()},
         p_items:centralItems
