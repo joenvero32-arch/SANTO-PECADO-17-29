@@ -365,7 +365,7 @@ function render(){
       <div class="cardBody">
         <h3>${esc(p.name)}</h3>
         <div class="desc">${esc(p.desc)}</div>
-        <div class="bottom"><div class="price">${money(p.price)}</div><button type="button" class="add" onclick="addWithToppings(${p.id})">+ Agregar</button></div>
+        <div class="bottom"><div class="price">${money(p.price)}</div><button type="button" class="add" onclick="addWithToppings(${JSON.stringify(p.id)})">+ Agregar</button></div>
       </div>
     </article>`).join(''):`<div class="empty">No encontramos productos con esa búsqueda.</div>`;
   updateCart();
@@ -506,9 +506,20 @@ const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
   if(SP_DB_ON){
     try{
       const centralItems=cart.map(x=>({product_id:spMap('prod',x.id),product_name:(products.find(p=>p.id===x.id)?.name||'Producto'),quantity:Number(x.qty||1),unit_price:Number((x.base ?? (products.find(p=>p.id===x.id)||{}).price) || 0),notes:x.note||'',toppings:(x.toppings||[]).map(t=>({topping_id:spMap('top',t.id),topping_name:t.name,quantity:1,unit_price:Number(t.price||0)}))}));
+      const centralType=type==='Domicilio'?'delivery':type==='Recoger en el local'?'pickup':'local';
       const {data:centralOrder,error:centralError}=await SP_DB.rpc('sp_create_public_order',{
-        p_order:{order_number:no,name,phone,type:(type==='Domicilio'?'delivery':type==='Recoger en el local'?'pickup':'local'),address:addr,observations:obs,payment_method:pay,total:total(),subtotal:total()},
-        p_items:centralItems
+        p_order:{
+          order_number:no,
+          customer_name:name,
+          customer_phone:phone,
+          order_type:centralType,
+          address:addr,
+          observations:obs,
+          payment_method:pay,
+          total:total(),
+          subtotal:total(),
+          items:centralItems
+        }
       });
       if(centralError) console.warn('Pedido central pendiente:',centralError.message);
       else if(centralOrder?.length) orders[0].centralId=centralOrder[0].id;
