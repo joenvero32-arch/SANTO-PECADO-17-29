@@ -402,7 +402,7 @@ function addWithToppings(id){
     <div class="notice" style="margin:14px 0">Elige salsas, toppings o adiciones para este producto.</div>
     <div id="toppingList">${opts||'<div class="muted">No hay adicionales configurados.</div>'}</div>
     <div class="field"><label>OBSERVACIÓN</label><textarea id="lineNote" placeholder="Ej. salsa aparte, sin cebolla..."></textarea></div>
-    <div class="modalBtns"><button type="button" class="primary" onclick="window.confirmToppings(${JSON.stringify(String(p.id))})">Agregar al pedido</button><button type="button" class="secondary" onclick="window.addProductDirect(${JSON.stringify(String(p.id))})">Agregar sin adicionales</button></div>`;
+    <div class="modalBtns"><button type="button" class="primary" id="confirmAddBtn" data-product-id="${esc(String(p.id))}">Agregar al pedido</button><button type="button" class="secondary" onclick="window.addProductDirect(${JSON.stringify(String(p.id))})">Agregar sin adicionales</button></div>`;
   document.getElementById('modal').classList.add('open');
 }
 function confirmToppings(id){
@@ -438,6 +438,14 @@ window.addWithToppings=addWithToppings;
 window.confirmToppings=confirmToppings;
 window.addProductDirect=addProductDirect;
 document.addEventListener('click',function(e){
+  const confirm=e.target.closest('#confirmAddBtn');
+  if(confirm){
+    e.preventDefault();
+    e.stopPropagation();
+    window.confirmToppings(confirm.getAttribute('data-product-id'));
+    return;
+  }
+
   const btn=e.target.closest('#products button.add');
   if(!btn)return;
   e.preventDefault();
@@ -446,6 +454,14 @@ document.addEventListener('click',function(e){
   if(id) window.addWithToppings(String(id));
 },true);
 document.addEventListener('touchend',function(e){
+  const confirm=e.target.closest('#confirmAddBtn');
+  if(confirm){
+    e.preventDefault();
+    e.stopPropagation();
+    window.confirmToppings(confirm.getAttribute('data-product-id'));
+    return;
+  }
+
   const btn=e.target.closest('#products button.add');
   if(!btn)return;
   e.preventDefault();
