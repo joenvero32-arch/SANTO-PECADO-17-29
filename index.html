@@ -496,11 +496,14 @@ function checkout(){
       <div class="field full"><label>OBSERVACIONES</label><textarea id="obs" placeholder="Ej. mucha cebolla, sin piña, salsa aparte..."></textarea></div>
     </div>
     <div class="totalBox"><span>TOTAL</span><span>${money(total())}</span></div>
-    <div class="modalBtns"><button class="primary" onclick="sendOrder()">📲 Enviar por WhatsApp</button><button class="secondary" onclick="openCart()">Volver</button></div>`;
+    <div class="modalBtns"><button type="button" id="sendOrderBtn" class="primary" onclick="window.sendOrder()">📲 Enviar pedido</button><button class="secondary" onclick="openCart()">Volver</button></div>`;
 }
 function upsertCustomerFromOrder(name,phone,type,addr){const clean=phone.replace(/\D/g,'');let c=customers.find(x=>x.phone===clean);if(!c){c={id:Date.now(),name,phone:clean,created:new Date().toISOString(),orders:0,total:0,addresses:[]};customers.push(c)}c.name=name;c.lastOrder=new Date().toISOString();c.orders=Number(c.orders||0)+1;c.total=Number(c.total||0)+total();c.type=type;if(addr&&!c.addresses.includes(addr))c.addresses.unshift(addr);c.addresses=c.addresses.slice(0,10);save();}
 
 async function sendOrder(){
+  const btn=document.getElementById('sendOrderBtn');
+  if(btn){btn.disabled=true;btn.textContent='⏳ Enviando pedido...';}
+  try{
   const name=document.getElementById('cn').value.trim(),phone=document.getElementById('ct').value.trim();
   const type=document.getElementById('type').value,pay=document.getElementById('pay').value;
   const addr=document.getElementById('addr').value.trim(),obs=document.getElementById('obs').value.trim();
@@ -539,7 +542,14 @@ async function sendOrder(){
   localStorage.setItem(ORDERS,JSON.stringify(orders));save();queueKitchenOrder(no);
   const url='https://wa.me/'+(settings.whatsapp||ADMIN_WA)+'?text='+encodeURIComponent(msg);cart=[];updateCart();
   document.getElementById('panel').innerHTML='<div class="panelHead"><h2>✅ Pedido listo</h2><button class="close" onclick="closeModal()">✕</button></div><div class="notice" style="margin:16px 0">El pedido <b>'+no+'</b> fue guardado correctamente. Desde <b>📍 Estado</b> puedes consultar cómo avanza.</div><div class="modalBtns"><button class="primary" onclick="location.href=\''+url+'\'">📲 Abrir WhatsApp</button><button class="secondary" onclick="printOrder(\''+no+'\')">🖨️ Imprimir soporte</button><button class="secondary" onclick="trackOrder(\''+no+'\')">📍 Ver estado</button><button class="secondary" onclick="closeModal()">Cerrar</button></div>';
+  }catch(e){
+    console.error('Error inesperado al enviar pedido:',e);
+    alert('No se pudo enviar el pedido.\n\n'+(e?.message||e)+'\n\nRevisa los datos e inténtalo nuevamente.');
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='📲 Enviar pedido';}
+  }
 }
+window.sendOrder=sendOrder;
 function statusList(order){
   const delivery=order?.type==='Domicilio';
   return delivery?[
