@@ -82,7 +82,7 @@ button{cursor:pointer}
 .field input,.field textarea,.field select{width:100%;background:#171717;color:#fff;border:1px solid #303030;border-radius:12px;padding:12px;outline:none}
 .field textarea{min-height:90px;resize:vertical}.full{grid-column:1/-1}
 .totalBox{margin:15px 0;padding:15px;border-radius:16px;background:#171717;border:1px solid #292929;display:flex;justify-content:space-between;font-weight:950}
-.modalBtns{display:flex;gap:8px;flex-wrap:wrap}.modalBtns button{flex:1;min-width:150px}
+ .modalBtns{display:flex;gap:8px;flex-wrap:wrap}.modalBtns button{flex:1;min-width:150px}.tablePicker{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.tableBtn{border:1px solid #333;background:#171717;color:#fff;border-radius:12px;padding:11px;font-weight:900}.tableBtn.active{background:linear-gradient(135deg,#ffd66d,#efa913);color:#111;border-color:#ffd66d}
 .cartLine{display:flex;gap:10px;align-items:center;padding:12px 0;border-bottom:1px solid #242424}.cartLineInfo{flex:1}.cartLineInfo b{display:block}.cartLineInfo span{font-size:12px;color:#888}
 .qty{display:flex;align-items:center;gap:7px}.qty button{width:32px;height:32px;padding:0;border-radius:9px;border:1px solid #333;background:#171717;color:#fff}
 .qty b{min-width:18px;text-align:center}.remove{border:0;background:none;color:#ff6475;font-size:18px}
@@ -241,6 +241,8 @@ const PIN='1729';
 const KEY='sp_premium_products_v2';
 const SETTINGS='sp_premium_settings_v2';
 const ORDERS='sp_premium_orders_v2';
+const LAST_ORDER='sp_premium_last_order_v1';
+const TABLES=[1,2,3,4,5,6];
 const STATUS_NOTIFY='sp_premium_status_notifications_v1';
 const CATS='sp_premium_categories_v2';
 const TOP='sp_premium_toppings_v1';
@@ -502,13 +504,15 @@ function openCart(keep=false){
       <div class="modalBtns"><button class="primary" onclick="checkout()">Continuar pedido</button><button class="secondary" onclick="closeModal()">Seguir comprando</button></div>`:''}`;
   document.getElementById('modal').classList.add('open');
 }
+function selectTable(n){const v=Number(n);if(!TABLES.includes(v))return;const input=document.getElementById('tableNumber');if(input)input.value=String(v);document.querySelectorAll('.tableBtn').forEach(b=>b.classList.toggle('active',Number(b.dataset.table)===v));}
+function toggleOrderTypeFields(){const type=document.getElementById('type')?.value||'En el local';const field=document.getElementById('tableField');const addr=document.getElementById('addr');if(field)field.style.display=type==='En el local'?'block':'none';if(addr&&type!=='Domicilio')addr.value='';if(type==='En el local'&&!document.getElementById('tableNumber')?.value)selectTable(1);}
 function checkout(){
   document.getElementById('panel').innerHTML=`
     <div class="panelHead"><h2>📋 Datos del pedido</h2><button class="close" onclick="openCart()">✕</button></div>
     <div class="formGrid">
       <div class="field"><label>NOMBRE DEL CLIENTE</label><input id="cn" placeholder="Ej. Keira"></div>
       <div class="field"><label>TELÉFONO</label><input id="ct" inputmode="tel" placeholder="Ej. 3196985294"></div>
-      <div class="field"><label>TIPO DE PEDIDO</label><select id="type"><option>Domicilio</option><option>Recoger en el local</option></select></div>
+      <div class="field"><label>TIPO DE PEDIDO</label><select id="type" onchange="toggleOrderTypeFields()"><option>En el local</option><option>Domicilio</option><option>Recoger en el local</option></select></div><div class="field" id="tableField"><label>MESA</label><div id="tablePicker" class="tablePicker"><button type="button" class="tableBtn" data-table="1" onclick="selectTable(1)">Mesa 1</button><button type="button" class="tableBtn" data-table="2" onclick="selectTable(2)">Mesa 2</button><button type="button" class="tableBtn" data-table="3" onclick="selectTable(3)">Mesa 3</button><button type="button" class="tableBtn" data-table="4" onclick="selectTable(4)">Mesa 4</button><button type="button" class="tableBtn" data-table="5" onclick="selectTable(5)">Mesa 5</button><button type="button" class="tableBtn" data-table="6" onclick="selectTable(6)">Mesa 6</button></div><input type="hidden" id="tableNumber" value=""></div>
       <div class="field"><label>MÉTODO DE PAGO</label><select id="pay"><option>Efectivo</option><option>Nequi</option><option>Daviplata</option><option>Bancolombia</option><option>Transferencia bancaria</option><option>Tarjeta</option></select></div>
       <div class="field full"><label>DIRECCIÓN</label><input id="addr" placeholder="Dirección o lugar de entrega"></div>
       <div class="field full"><label>OBSERVACIONES</label><textarea id="obs" placeholder="Ej. mucha cebolla, sin piña, salsa aparte..."></textarea></div>
@@ -524,8 +528,11 @@ async function sendOrder(){
   try{
   const name=document.getElementById('cn').value.trim(),phone=document.getElementById('ct').value.trim();
   const type=document.getElementById('type').value,pay=document.getElementById('pay').value;
+  const tableNumber=type==='En el local'?Number(document.getElementById('tableNumber')?.value||0):null;
   const addr=document.getElementById('addr').value.trim(),obs=document.getElementById('obs').value.trim();
   if(!name||!phone){alert('Por favor escribe el nombre y el teléfono del cliente.');return}
+  if(type==='En el local'&&!TABLES.includes(tableNumber)){alert('Selecciona una mesa del 1 al 6.');return}
+  if(type==='Domicilio'&&!addr){alert('Escribe la dirección del domicilio.');return}
   if(!cart.length){alert('El carrito está vacío.');return}
   const needs=new Map();
   for(const x of cart){
@@ -541,14 +548,16 @@ async function sendOrder(){
   for(const [id,amount] of needs){const t=toppings.find(a=>String(a.id)===String(id));if(t&&Number(t.stock)<amount){alert('No hay suficiente inventario de '+t.name+'.');return}}
   const no='SP-'+Math.floor(100000+Math.random()*900000);
   const detail=cart.map(x=>{const p=products.find(a=>String(a.id)===String(x.id));const extra=(x.toppings||[]).reduce((s,t)=>s+Number(t.price||0),0);const line=(Number(x.base??p.price)+extra)*x.qty;const tops=(x.toppings||[]).map(t=>t.name+(t.price?' +'+money(t.price):'')).join(', ');return '• '+p.name+' x'+x.qty+' — '+money(line)+(tops?'\n  Extras: '+tops:'')+(x.note?'\n  Nota: '+x.note:'')}).join('\n');
-  const msg=['🍔 SANTO PECADO 17-29','','NUEVO PEDIDO '+no,'','👤 Cliente: '+name,'📞 Teléfono: '+phone,'🚚 Tipo: '+type,'📍 Dirección: '+(addr||'No aplica'),'💳 Pago: '+pay,'','PRODUCTOS:',detail,'','💰 TOTAL: '+money(total()),'📝 Observaciones: '+(obs||'Ninguna')].join('\n');
+  const msg=['🍔 SANTO PECADO 17-29','','NUEVO PEDIDO '+no,'','👤 Cliente: '+name,'📞 Teléfono: '+phone,'🚚 Tipo: '+type,(type==='En el local'?'🪑 Mesa: '+tableNumber:''),'📍 Dirección: '+(addr||'No aplica'),'💳 Pago: '+pay,'','PRODUCTOS:',detail,'','💰 TOTAL: '+money(total()),'📝 Observaciones: '+(obs||'Ninguna')].filter(Boolean).join('\n');
   if(SP_DB_ON){
     try{
       const centralItems=cart.map(x=>({product_id:spMap('prod',x.id),product_name:(products.find(p=>String(p.id)===String(x.id))?.name||'Producto'),quantity:Number(x.qty||1),notes:x.note||'',toppings:(x.toppings||[]).map(t=>({topping_id:spMap('top',t.id),topping_name:t.name,quantity:1}))}));
       const centralType=type==='Domicilio'?'delivery':type==='Recoger en el local'?'pickup':'local';
-      const {data:centralOrder,error:centralError}=await SP_DB.rpc('sp_create_public_order',{p_order:{order_number:no,customer_name:name,customer_phone:phone,order_type:centralType,address:addr,observations:obs,payment_method:pay,items:centralItems}});
+      const centralPayload={order_number:no,customer_name:name,customer_phone:phone,order_type:centralType,address:addr,observations:obs,payment_method:pay,table_number:tableNumber,items:centralItems};
+      const {data:centralOrder,error:centralError}=await SP_DB.rpc('sp_create_public_order',{p_order:centralPayload});
       if(centralError)throw centralError;
       if(!centralOrder?.length)throw new Error('Supabase no devolvió el pedido creado.');
+      window.__lastCentralOrderId=centralOrder[0]?.id||null;
     }catch(e){console.error('Error al crear pedido en Supabase:',e);alert('No se pudo guardar el pedido en Supabase. No se descontó el inventario local.\n\n'+(e.message||'Revisa tu conexión e inténtalo nuevamente.'));return}
   }
   upsertCustomerFromOrder(name,phone,type,addr);
@@ -556,8 +565,9 @@ async function sendOrder(){
   cart.forEach(x=>{const p=products.find(a=>String(a.id)===String(x.id));if(p){p.stock=Math.max(0,Number(p.stock||0)-Number(x.qty||1));movements.unshift({date:new Date().toISOString(),product:p.name,type:'Salida por venta',qty:-Number(x.qty||1),stock:p.stock})}});
   for(const [id,amount] of needs){const t=toppings.find(a=>String(a.id)===String(id));if(t){t.stock=Math.max(0,Number(t.stock)-Number(amount));movements.unshift({date:new Date().toISOString(),kind:'topping',product:t.name,type:'Salida por venta '+no,qty:-Number(amount),unit:t.unit,stock:t.stock})}}
   const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
-  orders.unshift({no,name,phone,type,pay,addr,obs,total:total(),detail,created:new Date().toISOString(),updated:new Date().toISOString(),status:'recibido',statusHistory:[{status:'recibido',date:new Date().toISOString()}]});
-  localStorage.setItem(ORDERS,JSON.stringify(orders));save();queueKitchenOrder(no);
+  orders.unshift({no,name,phone,type,pay,addr,obs,tableNumber,centralId:window.__lastCentralOrderId||null,total:total(),detail,created:new Date().toISOString(),updated:new Date().toISOString(),status:'recibido',statusHistory:[{status:'recibido',date:new Date().toISOString()}]});
+  localStorage.setItem(ORDERS,JSON.stringify(orders));
+  localStorage.setItem(LAST_ORDER,no);save();queueKitchenOrder(no);
   const url='https://wa.me/'+(settings.whatsapp||ADMIN_WA)+'?text='+encodeURIComponent(msg);cart=[];updateCart();
   document.getElementById('panel').innerHTML='<div class="panelHead"><h2>✅ Pedido enviado</h2><button class="close" onclick="closeModal()">✕</button></div><div class="notice" style="margin:16px 0">El pedido <b>'+no+'</b> fue guardado en el sistema. Abriendo WhatsApp…</div><div class="modalBtns"><button class="primary" type="button" onclick="location.href=\''+url+'\'">📲 Abrir WhatsApp</button><button class="secondary" onclick="printOrder(\''+no+'\')">🖨️ Imprimir soporte</button><button class="secondary" onclick="trackOrder(\''+no+'\')">📍 Ver estado</button></div>';
   setTimeout(function(){try{location.href=url}catch(e){}},250);
@@ -600,9 +610,10 @@ async function setOrderStatus(no,status,stayDetail=false){
   if((o.status||'recibido')===status)return;
   let reason='Cambio de estado operativo';
   if(!isAdmin()){reason=askReason('Explica por qué cambias el estado de este pedido:');if(reason===null)return;}
-  if(currentUser?.central && SP_DB_ON && o.centralId){
+  if(SP_DB_ON && o.centralId){
     const {data,error}=await SP_DB.rpc('sp_update_order_status',{p_order_id:o.centralId,p_status:status});
     if(error){alert('No se pudo actualizar el estado central: '+error.message);return;}
+    if(data?.[0]?.status)o.status=data[0].status;
   }
   o.status=status;
   o.updated=new Date().toISOString();
@@ -693,10 +704,9 @@ function openStatusWhatsAppFromOrder(no,status){
 async function trackOrder(noFromButton){
   if(spStatusPollTimer){clearInterval(spStatusPollTimer);spStatusPollTimer=null}
   const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
-  if(!noFromButton && SP_DB_ON){
-    const entered=prompt('Escribe tu número de pedido (ej. SP-123456):');
-    if(entered===null||!entered.trim())return;
-    noFromButton=entered.trim().toUpperCase();
+  if(!noFromButton){
+    noFromButton=localStorage.getItem(LAST_ORDER)||'';
+    if(!noFromButton){const entered=prompt('Escribe tu número de pedido (ej. SP-123456):');if(entered===null||!entered.trim())return;noFromButton=entered.trim().toUpperCase();}
   }
   if(noFromButton && SP_DB_ON && !can('allowOrders')){
     const load=async()=>{
