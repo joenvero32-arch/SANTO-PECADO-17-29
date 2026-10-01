@@ -476,9 +476,9 @@ const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
   orders.unshift({no,name,phone,type,pay,addr,obs,total:total(),detail,created:new Date().toISOString(),updated:new Date().toISOString(),status:'recibido',statusHistory:[{status:'recibido',date:new Date().toISOString()}]});
   if(SP_DB_ON){
     try{
-      const centralItems=cart.map(x=>({product_id:spMap('prod',x.id),product_name:(products.find(p=>p.id===x.id)?.name||'Producto'),quantity:Number(x.qty||1),notes:x.note||'',toppings:(x.toppings||[]).map(t=>({topping_id:spMap('top',t.id),topping_name:t.name,quantity:1}))}));
+      const centralItems=cart.map(x=>({product_id:spMap('prod',x.id),product_name:(products.find(p=>p.id===x.id)?.name||'Producto'),quantity:Number(x.qty||1),unit_price:Number(x.base??(products.find(p=>p.id===x.id)||{}).price||0),notes:x.note||'',toppings:(x.toppings||[]).map(t=>({topping_id:spMap('top',t.id),topping_name:t.name,quantity:1,unit_price:Number(t.price||0)}))}));
       const {data:centralOrder,error:centralError}=await SP_DB.rpc('sp_create_public_order',{
-        p_order:{order_number:no,name,phone,type,address:addr,observations:obs,payment_method:pay},
+        p_order:{order_number:no,name,phone,type,address:addr,observations:obs,payment_method:pay,total:total(),subtotal:total()},
         p_items:centralItems
       });
       if(centralError) console.warn('Pedido central pendiente:',centralError.message);
