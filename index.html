@@ -328,21 +328,34 @@ function total(){
 function cartCount(){return cart.reduce((s,x)=>s+x.qty,0)}
 function render(){
   const cats=['Todos',...categories.filter(Boolean)];
-  document.getElementById('cats').innerHTML=cats.map(c=>`<button class="cat ${currentCat===c?'active':''}" onclick="currentCat='${esc(c)}';render()">${esc(c)}</button>`).join('');
-  const q=(document.getElementById('search').value||'').toLowerCase().trim();
-  const list=products.filter(p=>p.active&&(currentCat==='Todos'||p.cat===currentCat)&&(!q||p.name.toLowerCase().includes(q)||p.desc.toLowerCase().includes(q)));
-  document.getElementById('products').innerHTML=list.length?list.map(p=>`
-    <article class="card" onclick="addWithToppings(${JSON.stringify(p.id)})" style="cursor:pointer">
-      <div class="photo">${p.img?`<img src="${p.img}" alt="${esc(p.name)}">`:`<div class="placeholder">${p.emoji||'🍔'}</div>`}<span class="badge">DESTACADO</span></div>
-      <div class="cardBody">
-        <h3>${esc(p.name)}</h3>
-        <div class="desc">${esc(p.desc)}</div>
-        <div class="bottom"><div class="price">${money(p.price)}</div><button class="add" type="button" onclick="event.stopPropagation();addWithToppings(${JSON.stringify(p.id)})">+ Agregar al pedido</button></div>
-      </div>
-    </article>`).join(''):`<div class="empty">No encontramos productos con esa búsqueda.</div>`;
+  const catsEl=document.getElementById('cats');
+  if(catsEl) catsEl.innerHTML=cats.map(c=>`<button type="button" class="cat ${currentCat===c?'active':''}" onclick="currentCat='${esc(c)}';render()">${esc(c)}</button>`).join('');
+  const searchEl=document.getElementById('search');
+  const q=(searchEl?.value||'').toLowerCase().trim();
+  const list=products.filter(p=>p.active&&(currentCat==='Todos'||p.cat===currentCat)&&(!q||String(p.name||'').toLowerCase().includes(q)||String(p.desc||'').toLowerCase().includes(q)));
+  const productsEl=document.getElementById('products');
+  if(productsEl){
+    productsEl.innerHTML=list.length?list.map(p=>`
+      <article class="card">
+        <div class="photo">${p.img?`<img src="${p.img}" alt="${esc(p.name)}">`:`<div class="placeholder">${p.emoji||'🍔'}</div>`}<span class="badge">DESTACADO</span></div>
+        <div class="cardBody">
+          <h3>${esc(p.name)}</h3>
+          <div class="desc">${esc(p.desc)}</div>
+          <div class="bottom"><div class="price">${money(p.price)}</div><button type="button" class="add addProductBtn" data-product-id="${String(p.id)}">+ Agregar</button></div>
+        </div>
+      </article>`).join(''):`<div class="empty">No encontramos productos con esa búsqueda.</div>`;
+  }
   updateCart();
   renderPromotions();
 }
+document.addEventListener('click',function(e){
+  const btn=e.target.closest?.('.addProductBtn');
+  if(!btn)return;
+  e.preventDefault();
+  e.stopPropagation();
+  const id=btn.getAttribute('data-product-id');
+  if(id!==null) addWithToppings(id);
+});
 function updateCart(){localStorage.setItem('sp_premium_cart_v2',JSON.stringify(cart));
   const n=cartCount(),t=total();
   document.getElementById('cartCount').textContent=n;
