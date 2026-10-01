@@ -373,7 +373,7 @@ function render(){
       <div class="cardBody">
         <h3>${esc(p.name)}</h3>
         <div class="desc">${esc(p.desc)}</div>
-        <div class="bottom"><div class="price">${money(p.price)}</div><button type="button" class="add" onclick="addWithToppings(${JSON.stringify(p.id)})">+ Agregar</button></div>
+        <div class="bottom"><div class="price">${money(p.price)}</div><button type="button" class="add" onclick="window.addWithToppings(${JSON.stringify(String(p.id))})">+ Agregar</button></div>
       </div>
     </article>`).join(''):`<div class="empty">No encontramos productos con esa búsqueda.</div>`;
   updateCart();
@@ -402,23 +402,43 @@ function addWithToppings(id){
     <div class="notice" style="margin:14px 0">Elige salsas, toppings o adiciones para este producto.</div>
     <div id="toppingList">${opts||'<div class="muted">No hay adicionales configurados.</div>'}</div>
     <div class="field"><label>OBSERVACIÓN</label><textarea id="lineNote" placeholder="Ej. salsa aparte, sin cebolla..."></textarea></div>
-    <div class="modalBtns"><button class="primary" onclick="confirmToppings(${JSON.stringify(p.id)})">Agregar al pedido</button></div>`;
+    <div class="modalBtns"><button type="button" class="primary" onclick="window.confirmToppings(${JSON.stringify(String(p.id))})">Agregar al pedido</button><button type="button" class="secondary" onclick="window.addProductDirect(${JSON.stringify(String(p.id))})">Agregar sin adicionales</button></div>`;
   document.getElementById('modal').classList.add('open');
 }
 function confirmToppings(id){
-  const p=products.find(x=>x.id===id);
-  const chosen=[...document.querySelectorAll('#toppingList input:checked')].map(i=>{
-    const t=toppings.find(x=>String(x.id)===String(i.value)); if(!t)return null; return {id:t.id,name:t.name,price:Number(t.price||0),usage:Number(t.usage||1)};
-  });
-  if(!p){alert('No se encontró el producto. Recarga la página e inténtalo nuevamente.');return}
-  const cleanChosen=chosen.filter(Boolean);
-  cart.push({id:p.id,qty:1,base:Number(p.price||0),toppings:cleanChosen,note:(document.getElementById('lineNote')?.value||'').trim()});
-  closeModal();updateCart();openCart();
+  try{
+    const sid=String(id);
+    const p=products.find(x=>String(x.id)===sid);
+    if(!p){alert('No se encontró el producto. Recarga la página e inténtalo nuevamente.');return}
+    const checked=[...document.querySelectorAll('#toppingList input:checked')];
+    const cleanChosen=checked.map(i=>{
+      const t=toppings.find(x=>String(x.id)===String(i.value));
+      return t?{id:t.id,name:t.name,price:Number(t.price||0),usage:Number(t.usage||1)}:null;
+    }).filter(Boolean);
+    cart.push({id:p.id,qty:1,base:Number(p.price||0),toppings:cleanChosen,note:(document.getElementById('lineNote')?.value||'').trim()});
+    localStorage.setItem('sp_premium_cart_v2',JSON.stringify(cart));
+    updateCart();
+    closeModal();
+    openCart();
+  }catch(e){
+    console.error('Error agregando producto:',e);
+    alert('No se pudo agregar el producto. Error: '+(e?.message||e));
+  }
 }
-
-window.addWithToppings=addWithToppings; window.confirmToppings=confirmToppings;
+function addProductDirect(id){
+  const p=products.find(x=>String(x.id)===String(id));
+  if(!p){alert('No se encontró el producto.');return}
+  cart.push({id:p.id,qty:1,base:Number(p.price||0),toppings:[],note:''});
+  localStorage.setItem('sp_premium_cart_v2',JSON.stringify(cart));
+  updateCart();
+  closeModal();
+  openCart();
+}
+window.addWithToppings=addWithToppings;
+window.confirmToppings=confirmToppings;
+window.addProductDirect=addProductDirect;
 function openCart(keep=false){
-  const lines=cart.map(x=>{const p=products.find(a=>a.id===x.id);if(!p)return '';return `
+  const lines=cart.map(x=>{const p=products.find(a=>String(a.id)===String(x.id));if(!p)return '';return `
     <div class="cartLine">
       <div class="cartLineInfo"><b>${esc(p.name)}</b>
       <span>${(x.toppings||[]).length?esc(x.toppings.map(t=>t.name).join(', ')):'Sin adicionales'}${x.note?' · '+esc(x.note):''}</span></div>
