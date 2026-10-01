@@ -352,7 +352,8 @@ function updateCart(){localStorage.setItem('sp_premium_cart_v2',JSON.stringify(c
 }
 function add(id){const q=cart.find(x=>x.id===id);if(q)q.qty++;else cart.push({id,qty:1});updateCart();openCart(true)}
 function changeQty(id,d){const q=cart.find(x=>x.id===id);if(!q)return;q.qty+=d;if(q.qty<=0)cart=cart.filter(x=>x.id!==id);updateCart();openCart(true)}
-function closeModal(){document.getElementById('modal').classList.remove('open')}
+let spStatusPollTimer=null;
+function closeModal(){if(spStatusPollTimer){clearInterval(spStatusPollTimer);spStatusPollTimer=null}document.getElementById('modal').classList.remove('open')}
 
 function addWithToppings(id){
   const p=products.find(x=>x.id===id);
@@ -619,6 +620,7 @@ function openStatusWhatsAppFromOrder(no,status){
   window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(statusNotificationText(o,status)),'_blank');
 }
 async function trackOrder(noFromButton){
+  if(spStatusPollTimer){clearInterval(spStatusPollTimer);spStatusPollTimer=null}
   const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
   if(!noFromButton && SP_DB_ON){
     const entered=prompt('Escribe tu número de pedido (ej. SP-123456):');
@@ -626,8 +628,10 @@ async function trackOrder(noFromButton){
     noFromButton=entered.trim().toUpperCase();
   }
   if(noFromButton && SP_DB_ON && !can('allowOrders')){
-    const {data,error}=await SP_DB.rpc('sp_get_order_status',{p_order_number:String(noFromButton).trim()});
-    if(!error && data?.length){
+    const load=async()=>{
+      const {data,error}=await SP_DB.rpc('sp_get_order_status',{p_order_number:String(noFromButton).trim()});
+      if(error){console.warn('Consulta central de estado:',error.message);return}
+      if(!data?.length)return;
       const central=data[0];
       document.getElementById('panel').innerHTML=`
         <div class="panelHead"><h2>📍 Estado del pedido</h2><button class="close" onclick="closeModal()">✕</button></div>
@@ -636,39 +640,32 @@ async function trackOrder(noFromButton){
         <div class="totalBox"><span>ESTADO ACTUAL</span><span>${statusLabel({status:central.status})}</span></div>
         <div class="muted">Última actualización: ${new Date(central.updated_at).toLocaleString('es-CO')}</div>`;
       document.getElementById('modal').classList.add('open');
-      return;
-    }
-    if(error){console.warn('Consulta central de estado:',error.message);}
+    };
+    await load();
+    spStatusPollTimer=setInterval(load,3000);
+    return;
   }
   if(!noFromButton){
     if(can('allowOrders')){
       const list=orders.slice().sort((a,b)=>new Date(b.created)-new Date(a.created));
       document.getElementById('panel').innerHTML=`
         <div class="panelHead"><h2>📍 Pedidos y estados</h2><button class="close" onclick="closeModal()">✕</button></div>
-        <div class="notice" style="margin:12px 0">Selecciona un pedido para ver su estado. Los pedidos aparecen del más reciente al más antiguo.</div>
-        ${list.length?list.map(o=>`<button class="adminItem" style="display:block;width:100%;text-align:left;border:1px solid #252525;background:#111;color:#fff;border-radius:16px;padding:14px;margin:9px 0;cursor:pointer" onclick="trackOrder('${esc(o.no)}')"><div class="adminTop"><b>${esc(o.no)}</b><b>${money(o.total)}</b></div><div class="muted">${esc(o.name)} · ${esc(o.type)} · ${new Date(o.created).toLocaleString('es-CO')}</div><div style="margin-top:7px;font-weight:800">${statusLabel(o)}</div></button>`).join(''):'<div class="empty">No hay pedidos guardados en este navegador.</div>'}`;
+        <div class="notice" style="margin:12px 0">Selecciona un pedido para ver su estado.</div>
+        ${list.length?list.map(o=>`<button class="adminItem" style="display:block;width:100%;text-align:left;border:1px solid #252525;background:#111;color:#fff;border-radius:16px;padding:14px;margin:9px 0;cursor:pointer" onclick="trackOrder('${esc(o.no)}')"><div class="adminTop"><b>${esc(o.no)}</b><b>${money(o.total)}</b></div><div class="muted">${esc(o.name)} · ${esc(o.type)} · ${new Date(o.created).toLocaleString('es-CO')}</div><div style="margin-top:8px">${statusLabel(o)}</div></button>`).join(''):'<div class="empty">No hay pedidos.</div>'}`;
       document.getElementById('modal').classList.add('open');
-      return;
     }
-    const last=orders.slice().sort((a,b)=>new Date(b.created)-new Date(a.created))[0];
-    const no=last?.no||prompt('Número de pedido (ej. SP-305239):');
-    if(no===null||!no?.trim())return;
-    noFromButton=no;
+    return;
   }
-  const no=noFromButton;
-  if(no===null||!String(no).trim())return;
-  const o=orders.find(x=>String(x.no).toUpperCase()===String(no).trim().toUpperCase());
-  if(!o){alert('No encontramos ese pedido en este dispositivo.');return;}
+  const o=orders.find(x=>String(x.no)===String(noFromButton));
+  if(!o){alert('No encontramos ese pedido en este dispositivo.');return}
   document.getElementById('panel').innerHTML=`
     <div class="panelHead"><h2>📍 Estado del pedido</h2><button class="close" onclick="closeModal()">✕</button></div>
-    <div class="notice" style="margin:14px 0">Pedido <b>${esc(o.no)}</b> · ${esc(o.name)}<br>${esc(o.type)} · ${money(o.total)}</div>
+    <div class="notice" style="margin:14px 0">Pedido <b>${esc(o.no)}</b></div>
     ${statusMarkup(o)}
     <div class="totalBox"><span>ESTADO ACTUAL</span><span>${statusLabel(o)}</span></div>
-    <div class="muted">Última actualización: ${new Date(o.updated||o.created).toLocaleString('es-CO')}</div>
-    ${can('allowOrders')&&o.phone&&o.status&&o.status!=='recibido'?`<div class="notice" style="margin-top:12px"><b>📲 Aviso preparado:</b> ${esc(statusNotificationText(o,o.status))}<div class="modalBtns" style="margin-top:10px"><button class="primary" onclick="openStatusWhatsAppFromOrder('${esc(o.no)}','${esc(o.status)}')">Abrir WhatsApp del cliente</button></div></div>`:''}`;
+    <div class="muted">Última actualización: ${new Date(o.updated||o.created).toLocaleString('es-CO')}</div>`;
   document.getElementById('modal').classList.add('open');
-}
-function openAdmin(){
+}function openAdmin(){
   document.getElementById('panel').innerHTML=`
     <div class="panelHead"><h2>🔐 Acceso al sistema</h2><button class="close" onclick="closeModal()">✕</button></div>
     <div class="notice" style="margin:12px 0">Acceso centralizado. Usa el correo y contraseña de tu cuenta de Supabase.</div>
@@ -1136,13 +1133,33 @@ function printComanda(no){
   w.document.close();
   const q=JSON.parse(localStorage.getItem('KITCHEN_QUEUE')||'[]');const item=q.find(x=>String(x.no)===String(no));if(item){item.printed=true;item.printedAt=new Date().toISOString();item.printedBy=currentUser?.username||'usuario';localStorage.setItem('KITCHEN_QUEUE',JSON.stringify(q));}
 }
-function adminOrders(){
+async function adminOrders(){
   if(!can('allowOrders')){alert('Tu usuario no tiene permiso para gestionar pedidos.');return}
-  const a=JSON.parse(localStorage.getItem(ORDERS)||'[]');
+  let a=JSON.parse(localStorage.getItem(ORDERS)||'[]');
+  if(currentUser?.central && SP_DB_ON){
+    try{
+      const {data,error}=await SP_DB.from('orders').select('*,order_items(*,order_item_toppings(*))').order('created_at',{ascending:false});
+      if(error) throw error;
+      const central=(data||[]).map(o=>({
+        no:o.order_number,centralId:o.id,name:o.customer_name,phone:o.customer_phone,
+        type:o.order_type==='delivery'?'Domicilio':o.order_type==='pickup'?'Recoger':'Local',
+        pay:o.payment_method||'',addr:o.address||'',obs:o.observations||'',total:Number(o.total||0),
+        created:o.created_at,updated:o.updated_at,status:o.status||'recibido',
+        statusHistory:[],detail:(o.order_items||[]).map(it=>{
+          const tops=(it.order_item_toppings||[]).map(t=>t.topping_name).join(', ');
+          return (it.quantity||1)+' x '+(it.product_name||'Producto')+(tops?' + '+tops:'');
+        }).join('\\n')
+      }));
+      const byNo=new Map(a.map(x=>[String(x.no),x]));
+      central.forEach(c=>{const old=byNo.get(String(c.no));byNo.set(String(c.no),{...(old||{}),...c})});
+      a=Array.from(byNo.values()).sort((x,y)=>new Date(y.created)-new Date(x.created));
+      localStorage.setItem(ORDERS,JSON.stringify(a));
+    }catch(e){console.warn('No se pudieron cargar los pedidos centrales:',e.message||e)}
+  }
   document.getElementById('panel').innerHTML=`
     <div class="panelHead"><h2>📋 Pedidos</h2><button class="close" onclick="closeModal()">✕</button></div>
-    ${navTabs('orders')}<div class="modalBtns" style="margin:10px 0"><button class="secondary" onclick="logoutUser()">Cerrar sesión</button></div>
-    ${a.length?a.map(o=>{const list=statusList(o),current=o.status||'recibido';return `<div class="order"><b>${esc(o.no)}</b> · <b>${money(o.total)}</b><br>👤 ${esc(o.name)} · 📞 ${esc(o.phone)}<br>🚚 ${esc(o.type)} · 💳 ${esc(o.pay)}${o.type==='Domicilio'?`<br>🛵 <b>Domiciliario:</b> ${esc(o.driverName||'Sin asignar')}${o.driverPhone?' · '+esc(o.driverPhone):''}`:''}<br><div class="muted">${new Date(o.created).toLocaleString('es-CO')}</div>${statusMarkup(o)}<div class="statusActions">${list.map(x=>`<button class="${current===x[0]?'active':''}" onclick="setOrderStatus('${esc(o.no)}','${x[0]}')">${x[1]} ${x[2]}</button>`).join('')}</div><div class="statusActions"><button class="mini" onclick="printOrder('${esc(o.no)}')">🧾 Soporte</button><button class="mini" onclick="printComanda('${esc(o.no)}')">🍳 Comanda cocina</button><button class="mini" onclick="registerOrderIncident('${esc(o.no)}','cambio')">📝 Registrar cambio</button><button class="mini" onclick="registerOrderIncident('${esc(o.no)}','devolucion')">↩️ Registrar devolución</button>${isAdmin()?`<button class="mini" onclick="deleteOrder('${esc(o.no)}')">🗑️ Eliminar pedido</button>`:''}</div></div>`}).join(''):'<div class="empty">No hay pedidos guardados en este navegador.</div>'}`;
+    ${navTabs('orders')}<div class="modalBtns" style="margin:10px 0"><button class="secondary" onclick="adminOrders()">🔄 Actualizar</button><button class="secondary" onclick="logoutUser()">Cerrar sesión</button></div>
+    ${a.length?a.map(o=>{const list=statusList(o),current=o.status||'recibido';return `<div class="order"><b>${esc(o.no)}</b> · <b>${money(o.total)}</b><br>👤 ${esc(o.name)} · 📞 ${esc(o.phone)}<br>🚚 ${esc(o.type)} · 💳 ${esc(o.pay)}${o.type==='Domicilio'?\`<br>🛵 <b>Domiciliario:</b> ${esc(o.driverName||'Sin asignar')}${o.driverPhone?' · '+esc(o.driverPhone):''}\`:''}<br><div class="muted">${new Date(o.created).toLocaleString('es-CO')}</div>${statusMarkup(o)}<div class="statusActions">${list.map(x=>`<button class="${current===x[0]?'active':''}" onclick="setOrderStatus('${esc(o.no)}','${x[0]}')">${x[1]} ${x[2]}</button>`).join('')}</div><div class="statusActions"><button class="mini" onclick="printOrder('${esc(o.no)}')">🧾 Soporte</button><button class="mini" onclick="printComanda('${esc(o.no)}')">🍳 Comanda cocina</button><button class="mini" onclick="registerOrderIncident('${esc(o.no)}','cambio')">📝 Registrar cambio</button><button class="mini" onclick="registerOrderIncident('${esc(o.no)}','devolucion')">↩️ Registrar devolución</button>${isAdmin()?\`<button class="mini" onclick="deleteOrder('${esc(o.no)}')">🗑️ Eliminar pedido</button>\`:''}</div></div>`}).join(''):'<div class="empty">No hay pedidos guardados en Supabase.</div>'}`;
   document.getElementById('modal').classList.add('open');
 }
 function printOrder(no){
