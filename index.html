@@ -373,7 +373,7 @@ function render(){
       <div class="cardBody">
         <h3>${esc(p.name)}</h3>
         <div class="desc">${esc(p.desc)}</div>
-        <div class="bottom"><div class="price">${money(p.price)}</div><button type="button" class="add" onclick="window.addWithToppings(${JSON.stringify(String(p.id))})">+ Agregar</button></div>
+        <div class="bottom"><div class="price">${money(p.price)}</div><button type="button" class="add" data-product-id="${esc(String(p.id))}">+ Agregar</button></div>
       </div>
     </article>`).join(''):`<div class="empty">No encontramos productos con esa búsqueda.</div>`;
   updateCart();
@@ -437,6 +437,22 @@ function addProductDirect(id){
 window.addWithToppings=addWithToppings;
 window.confirmToppings=confirmToppings;
 window.addProductDirect=addProductDirect;
+document.addEventListener('click',function(e){
+  const btn=e.target.closest('#products button.add');
+  if(!btn)return;
+  e.preventDefault();
+  e.stopPropagation();
+  const id=btn.getAttribute('data-product-id');
+  if(id) window.addWithToppings(String(id));
+},true);
+document.addEventListener('touchend',function(e){
+  const btn=e.target.closest('#products button.add');
+  if(!btn)return;
+  e.preventDefault();
+  e.stopPropagation();
+  const id=btn.getAttribute('data-product-id');
+  if(id) window.addWithToppings(String(id));
+},{passive:false,capture:true});
 function openCart(keep=false){
   const lines=cart.map(x=>{const p=products.find(a=>String(a.id)===String(x.id));if(!p)return '';return `
     <div class="cartLine">
