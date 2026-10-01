@@ -347,7 +347,7 @@ function total(){
 }
 function cartCount(){return cart.reduce((s,x)=>s+x.qty,0)}
 function setCategory(cat){
-  currentCat=cat||'Todos';
+  currentCat=String(cat||'Todos');
   render();
   const menu=document.getElementById('menu');
   if(menu) menu.scrollIntoView({behavior:'smooth',block:'start'});
@@ -394,7 +394,7 @@ function addWithToppings(id){
     <div class="notice" style="margin:14px 0">Elige salsas, toppings o adiciones para este producto.</div>
     <div id="toppingList">${opts||'<div class="muted">No hay adicionales configurados.</div>'}</div>
     <div class="field"><label>OBSERVACIÓN</label><textarea id="lineNote" placeholder="Ej. salsa aparte, sin cebolla..."></textarea></div>
-    <div class="modalBtns"><button class="primary" onclick="confirmToppings(${p.id})">Agregar al pedido</button></div>`;
+    <div class="modalBtns"><button class="primary" onclick="confirmToppings(${JSON.stringify(p.id)})">Agregar al pedido</button></div>`;
   document.getElementById('modal').classList.add('open');
 }
 function confirmToppings(id){
