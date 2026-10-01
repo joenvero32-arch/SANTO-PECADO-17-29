@@ -663,6 +663,12 @@ async function submitCentralLogin(){
   if(!profile||profile.active===false){alert('El usuario no tiene un perfil activo en Santo Pecado 17-29.');return}
   currentUser={...profile,user:profile.username||'admin',name:profile.full_name||'Administrador',allowOrders:!!profile.can_manage_orders,allowInventory:!!profile.can_manage_inventory,allowCash:!!profile.can_manage_cash,central:true};
   sessionStorage.setItem(SESSION,JSON.stringify(currentUser));
+  try{
+    await window.SantoPecadoCentral?.sync();
+    console.log('Santo Pecado 17-29: catálogo y clientes sincronizados después del acceso central.');
+  }catch(e){
+    console.warn('Santo Pecado 17-29: no se pudo sincronizar después del acceso.',e);
+  }
   auditLog('Inicio de sesión central','Acceso mediante Supabase');
   if(isAdmin()) adminProducts(); else if(currentUser.allowOrders) adminOrders(); else if(currentUser.allowInventory) adminInventory(); else {alert('Este usuario no tiene permisos asignados.');await logoutCentralUser();}
 }
@@ -1208,14 +1214,14 @@ function saveSettings(){
 render();
 renderPromotions();
 
-/* CENTRALIZACIÓN: sincronizar catálogo y clientes con Supabase al cargar */
+/* CENTRALIZACIÓN: solo sincronizar al existir una sesión autenticada */
 setTimeout(async()=>{
   try{
-    if(window.SantoPecadoCentral?.connected){
+    if(!window.SantoPecadoCentral?.connected)return;
+    const {data}=await SP_DB.auth.getSession();
+    if(data?.session){
       await window.SantoPecadoCentral.sync();
       console.log('Santo Pecado 17-29: sincronización central completada.');
-    }else{
-      console.warn('Santo Pecado 17-29: Supabase no está disponible.');
     }
   }catch(e){
     console.warn('Santo Pecado 17-29: sincronización central pendiente.',e);
