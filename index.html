@@ -373,7 +373,7 @@ function render(){
       <div class="cardBody">
         <h3>${esc(p.name)}</h3>
         <div class="desc">${esc(p.desc)}</div>
-        <div class="bottom"><div class="price">${money(p.price)}</div><button type="button" class="add" onclick="window.addWithToppings(${JSON.stringify(String(p.id))})">+ Agregar</button></div>
+        <div class="bottom"><div class="price">${money(p.price)}</div><button type="button" class="add sp-add-btn" data-product-id="${esc(String(p.id))}">+ Agregar</button></div>
       </div>
     </article>`).join(''):`<div class="empty">No encontramos productos con esa búsqueda.</div>`;
   updateCart();
@@ -437,6 +437,36 @@ function addProductDirect(id){
 }
 window.addWithToppings=addWithToppings;
 window.confirmToppings=confirmToppings;
+function spHandleAddButton(btn){
+  const id=btn?.getAttribute('data-product-id');
+  if(!id)return;
+  try{
+    if(typeof window.addWithToppings==='function'){
+      window.addWithToppings(id);
+      return;
+    }
+    if(typeof window.addProductDirect==='function'){
+      window.addProductDirect(id);
+      return;
+    }
+    alert('El módulo de pedidos todavía está cargando. Recarga la página e inténtalo nuevamente.');
+  }catch(e){
+    console.error('Error en botón Agregar:',e);
+    try{
+      const p=products.find(x=>String(x.id)===String(id));
+      if(p&&typeof window.addProductDirect==='function') window.addProductDirect(id);
+      else alert('No se pudo agregar el producto. Recarga la página e inténtalo nuevamente.');
+    }catch(_){}
+  }
+}
+document.addEventListener('click',function(ev){
+  const btn=ev.target.closest?.('.sp-add-btn');
+  if(!btn)return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  spHandleAddButton(btn);
+});
+
 window.addProductDirect=addProductDirect;
 function openCart(keep=false){
   const lines=cart.map(x=>{const p=products.find(a=>String(a.id)===String(x.id));if(!p)return '';return `
