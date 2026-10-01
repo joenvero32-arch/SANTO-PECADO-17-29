@@ -541,7 +541,8 @@ async function sendOrder(){
   orders.unshift({no,name,phone,type,pay,addr,obs,total:total(),detail,created:new Date().toISOString(),updated:new Date().toISOString(),status:'recibido',statusHistory:[{status:'recibido',date:new Date().toISOString()}]});
   localStorage.setItem(ORDERS,JSON.stringify(orders));save();queueKitchenOrder(no);
   const url='https://wa.me/'+(settings.whatsapp||ADMIN_WA)+'?text='+encodeURIComponent(msg);cart=[];updateCart();
-  document.getElementById('panel').innerHTML='<div class="panelHead"><h2>✅ Pedido listo</h2><button class="close" onclick="closeModal()">✕</button></div><div class="notice" style="margin:16px 0">El pedido <b>'+no+'</b> fue guardado correctamente. Desde <b>📍 Estado</b> puedes consultar cómo avanza.</div><div class="modalBtns"><button class="primary" onclick="location.href=\''+url+'\'">📲 Abrir WhatsApp</button><button class="secondary" onclick="printOrder(\''+no+'\')">🖨️ Imprimir soporte</button><button class="secondary" onclick="trackOrder(\''+no+'\')">📍 Ver estado</button><button class="secondary" onclick="closeModal()">Cerrar</button></div>';
+  document.getElementById('panel').innerHTML='<div class="panelHead"><h2>✅ Pedido enviado</h2><button class="close" onclick="closeModal()">✕</button></div><div class="notice" style="margin:16px 0">El pedido <b>'+no+'</b> fue guardado en el sistema. Abriendo WhatsApp…</div><div class="modalBtns"><button class="primary" type="button" onclick="location.href=\''+url+'\'">📲 Abrir WhatsApp</button><button class="secondary" onclick="printOrder(\''+no+'\')">🖨️ Imprimir soporte</button><button class="secondary" onclick="trackOrder(\''+no+'\')">📍 Ver estado</button></div>';
+  setTimeout(function(){try{location.href=url}catch(e){}},250);
   }catch(e){
     console.error('Error inesperado al enviar pedido:',e);
     alert('No se pudo enviar el pedido.\n\n'+(e?.message||e)+'\n\nRevisa los datos e inténtalo nuevamente.');
