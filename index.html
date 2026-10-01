@@ -373,7 +373,7 @@ function render(){
       <div class="cardBody">
         <h3>${esc(p.name)}</h3>
         <div class="desc">${esc(p.desc)}</div>
-        <div class="bottom"><div class="price">${money(p.price)}</div><button type="button" class="add" onclick="add(${JSON.stringify(String(p.id))})">+ Agregar</button></div>
+        <div class="bottom"><div class="price">${money(p.price)}</div><button type="button" class="add" onclick="window.addWithToppings(${JSON.stringify(String(p.id))})">+ Agregar</button></div>
       </div>
     </article>`).join(''):`<div class="empty">No encontramos productos con esa búsqueda.</div>`;
   updateCart();
@@ -386,7 +386,8 @@ function updateCart(){localStorage.setItem('sp_premium_cart_v2',JSON.stringify(c
   document.getElementById('barTotal').textContent=money(t);
   save();
 }
-function add(id){const q=cart.find(x=>x.id===id);if(q)q.qty++;else cart.push({id,qty:1});updateCart();openCart(true)}
+function add(id){const sid=String(id);const q=cart.find(x=>String(x.id)===sid);if(q){q.qty++;}else{const p=products.find(x=>String(x.id)===sid);if(!p)return;cart.push({id:p.id,qty:1,base:Number(p.price||0),toppings:[],note:''});}updateCart();openCart(true)}
+window.add=add;
 function changeQty(id,d){const q=cart.find(x=>x.id===id);if(!q)return;q.qty+=d;if(q.qty<=0)cart=cart.filter(x=>x.id!==id);updateCart();openCart(true)}
 let spStatusPollTimer=null;
 function closeModal(){if(spStatusPollTimer){clearInterval(spStatusPollTimer);spStatusPollTimer=null}document.getElementById('modal').classList.remove('open')}
