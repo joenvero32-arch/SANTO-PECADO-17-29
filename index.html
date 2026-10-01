@@ -1148,7 +1148,7 @@ async function adminOrders(){
         statusHistory:[],detail:(o.order_items||[]).map(it=>{
           const tops=(it.order_item_toppings||[]).map(t=>t.topping_name).join(', ');
           return (it.quantity||1)+' x '+(it.product_name||'Producto')+(tops?' + '+tops:'');
-        }).join('\\n')
+        }).join('\n')
       }));
       const byNo=new Map(a.map(x=>[String(x.no),x]));
       central.forEach(c=>{const old=byNo.get(String(c.no));byNo.set(String(c.no),{...(old||{}),...c})});
@@ -1158,8 +1158,14 @@ async function adminOrders(){
   }
   document.getElementById('panel').innerHTML=`
     <div class="panelHead"><h2>📋 Pedidos</h2><button class="close" onclick="closeModal()">✕</button></div>
-    ${navTabs('orders')}<div class="modalBtns" style="margin:10px 0"><button class="secondary" onclick="adminOrders()">🔄 Actualizar</button><button class="secondary" onclick="logoutUser()">Cerrar sesión</button></div>
-    ${a.length?a.map(o=>{const list=statusList(o),current=o.status||'recibido';return `<div class="order"><b>${esc(o.no)}</b> · <b>${money(o.total)}</b><br>👤 ${esc(o.name)} · 📞 ${esc(o.phone)}<br>🚚 ${esc(o.type)} · 💳 ${esc(o.pay)}${o.type==='Domicilio'?\`<br>🛵 <b>Domiciliario:</b> ${esc(o.driverName||'Sin asignar')}${o.driverPhone?' · '+esc(o.driverPhone):''}\`:''}<br><div class="muted">${new Date(o.created).toLocaleString('es-CO')}</div>${statusMarkup(o)}<div class="statusActions">${list.map(x=>`<button class="${current===x[0]?'active':''}" onclick="setOrderStatus('${esc(o.no)}','${x[0]}')">${x[1]} ${x[2]}</button>`).join('')}</div><div class="statusActions"><button class="mini" onclick="printOrder('${esc(o.no)}')">🧾 Soporte</button><button class="mini" onclick="printComanda('${esc(o.no)}')">🍳 Comanda cocina</button><button class="mini" onclick="registerOrderIncident('${esc(o.no)}','cambio')">📝 Registrar cambio</button><button class="mini" onclick="registerOrderIncident('${esc(o.no)}','devolucion')">↩️ Registrar devolución</button>${isAdmin()?\`<button class="mini" onclick="deleteOrder('${esc(o.no)}')">🗑️ Eliminar pedido</button>\`:''}</div></div>`}).join(''):'<div class="empty">No hay pedidos guardados en Supabase.</div>'}`;
+    ${navTabs('orders')}
+    <div class="modalBtns" style="margin:10px 0"><button class="secondary" onclick="adminOrders()">🔄 Actualizar</button><button class="secondary" onclick="logoutUser()">Cerrar sesión</button></div>
+    ${a.length?a.map(o=>{
+      const list=statusList(o),current=o.status||'recibido';
+      const driverInfo=o.type==='Domicilio'?'<br>🛵 <b>Domiciliario:</b> '+esc(o.driverName||'Sin asignar')+(o.driverPhone?' · '+esc(o.driverPhone):''):'';
+      const deleteBtn=isAdmin()?'<button class="mini" onclick="deleteOrder(\''+esc(o.no)+'\')">🗑️ Eliminar pedido</button>':'';
+      return `<div class="order"><b>${esc(o.no)}</b> · <b>${money(o.total)}</b><br>👤 ${esc(o.name)} · 📞 ${esc(o.phone)}<br>🚚 ${esc(o.type)} · 💳 ${esc(o.pay)}${driverInfo}<br><div class="muted">${new Date(o.created).toLocaleString('es-CO')}</div>${statusMarkup(o)}<div class="statusActions">${list.map(x=>'<button class="'+(current===x[0]?'active':'')+'" onclick="setOrderStatus(\''+esc(o.no)+'\',\''+x[0]+'\')">'+x[1]+' '+x[2]+'</button>').join('')}</div><div class="statusActions"><button class="mini" onclick="printOrder('${esc(o.no)}')">🧾 Soporte</button><button class="mini" onclick="printComanda('${esc(o.no)}')">🍳 Comanda cocina</button><button class="mini" onclick="registerOrderIncident('${esc(o.no)}','cambio')">📝 Registrar cambio</button><button class="mini" onclick="registerOrderIncident('${esc(o.no)}','devolucion')">↩️ Registrar devolución</button>${deleteBtn}</div></div>`;
+    }).join(''):'<div class="empty">No hay pedidos guardados en Supabase.</div>'}`;
   document.getElementById('modal').classList.add('open');
 }
 function printOrder(no){
