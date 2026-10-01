@@ -1313,7 +1313,7 @@ setTimeout(async()=>{
     const r=await db.from('products').select('id,name,description,price,image_url,active').eq('active',true).order('sort_order');
     if(r.error){box.innerHTML='<div class="empty">No se pudo cargar el menú.</div>';return}
     products=r.data||[];
-    box.innerHTML=products.map(p=>'<article class="card"><div class="photo">'+(p.image_url?'<img src="'+safe(p.image_url)+'" alt="'+safe(p.name)+'">':'<div class="placeholder">🍔</div>')+'</div><div class="cardBody"><h3>'+safe(p.name)+'</h3><div class="desc">'+safe(p.description)+'</div><div class="bottom"><div class="price">'+money(p.price)+'</div><button class="add" onclick="addBackup('+JSON.stringify(p.id)+')">+ Agregar</button></div></div></article>').join('');
+    box.innerHTML=products.map(p=>'<article class="card"><div class="photo">'+(p.image_url?'<img src="'+safe(p.image_url)+'" alt="'+safe(p.name)+'">':'<div class="placeholder">🍔</div>')+'</div><div class="cardBody"><h3>'+safe(p.name)+'</h3><div class="desc">'+safe(p.description)+'</div><div class="bottom"><div class="price">'+money(p.price)+'</div><button class="add" onclick="addBackup(&quot;'+p.id+'&quot;)">+ Agregar</button></div></div></article>').join('');
   };
   window.addBackup=function(id){const p=products.find(x=>x.id===id);if(!p)return;const x=cart.find(x=>x.id===id);if(x)x.qty++;else cart.push({id:p.id,name:p.name,price:Number(p.price||0),qty:1});refreshCart();showCart()};
   window.openCart=function(){showCart()};
