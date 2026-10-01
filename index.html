@@ -392,7 +392,7 @@ let spStatusPollTimer=null;
 function closeModal(){if(spStatusPollTimer){clearInterval(spStatusPollTimer);spStatusPollTimer=null}document.getElementById('modal').classList.remove('open')}
 
 function addWithToppings(id){
-  const p=products.find(x=>x.id===id);
+  const p=products.find(x=>String(x.id)===String(id));
   if(!p)return;
   const opts=toppings.filter(t=>t.active).map(t=>`<label style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #292929">
     <span><input type="checkbox" value="${t.id}" ${t.tracked&&Number(t.stock)<Number(t.usage)?'disabled':''}> ${esc(t.name)}</span><b>${t.tracked&&Number(t.stock)<Number(t.usage)?'Agotado':t.price?'+ '+money(t.price):'Gratis'}</b>
@@ -408,9 +408,9 @@ function addWithToppings(id){
 function confirmToppings(id){
   const p=products.find(x=>x.id===id);
   const chosen=[...document.querySelectorAll('#toppingList input:checked')].map(i=>{
-    const t=toppings.find(x=>x.id==i.value); return {id:t.id,name:t.name,price:t.price,usage:Number(t.usage||1)};
+    const t=toppings.find(x=>String(x.id)===String(i.value)); if(!t)return null; return {id:t.id,name:t.name,price:Number(t.price||0),usage:Number(t.usage||1)};
   });
-  cart.push({id,qty:1,base:p.price,toppings:chosen,note:document.getElementById('lineNote').value.trim()});
+  if(!p){alert('No se encontró el producto. Recarga la página e inténtalo nuevamente.');return}\n  const cleanChosen=chosen.filter(Boolean);\n  cart.push({id:p.id,qty:1,base:Number(p.price||0),toppings:cleanChosen,note:(document.getElementById('lineNote')?.value||'').trim()});
   closeModal();updateCart();openCart();
 }
 
