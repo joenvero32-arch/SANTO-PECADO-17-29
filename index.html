@@ -297,9 +297,11 @@ let products=JSON.parse(localStorage.getItem(KEY)||'null')||seed;
 products.forEach(p=>{if(typeof p.stock!=='number')p.stock=50;if(typeof p.minStock!=='number')p.minStock=5;});
 let settings=JSON.parse(localStorage.getItem(SETTINGS)||'null')||{whatsapp:ADMIN_WA};
 const defaultCats=['La Gula','La Tentación','El Pecado','Hamburguesas','Arepas','Alitas'];
-let categories=JSON.parse(localStorage.getItem(CATS)||'null')||defaultCats;
+let categories=JSON.parse(localStorage.getItem(CATS)||'null');
+if(!Array.isArray(categories)||!categories.length) categories=[...defaultCats];
 let cart=JSON.parse(localStorage.getItem('sp_premium_cart_v2')||'[]');
-let toppings=JSON.parse(localStorage.getItem(TOP)||'null')||[
+let toppings=JSON.parse(localStorage.getItem(TOP)||'null');
+if(!Array.isArray(toppings)||!toppings.length) toppings=[
  {id:1,name:'Queso extra',price:3000,active:true},
  {id:2,name:'Tocineta',price:4000,active:true},
  {id:3,name:'Huevo',price:2500,active:true},
@@ -352,7 +354,8 @@ function setCategory(cat){
 }
 window.setCategory=setCategory;
 function render(){
-  const cats=['Todos',...categories.filter(Boolean)];
+  const productCats=[...new Set(products.filter(p=>p.active&&p.cat).map(p=>String(p.cat)))];
+  const cats=[...new Set(['Todos',...categories.filter(Boolean).map(String),...productCats])];
   document.getElementById('cats').innerHTML=cats.map(c=>`<button type="button" class="cat ${currentCat===c?'active':''}" data-cat="${esc(c)}" onclick="setCategory(this.dataset.cat)">${esc(c)}</button>`).join('');
   const q=(document.getElementById('search').value||'').toLowerCase().trim();
   const list=products.filter(p=>p.active&&(currentCat==='Todos'||p.cat===currentCat)&&(!q||p.name.toLowerCase().includes(q)||p.desc.toLowerCase().includes(q)));
