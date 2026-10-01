@@ -1287,22 +1287,41 @@ setTimeout(async()=>{
 </script>
 <script>
 (function(){
-  const U='https://ghucwrrvqivmbogtcgcr.supabase.co';
-  const K='sb_publishable_chFTmgoaIVvJSdpgTTuUSQ_fBNEq4WJ';
-  const db=window.supabase.createClient(U,K);
-  const fmt=n=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(Number(n||0));
+  const db=window.supabase.createClient('https://ghucwrrvqivmbogtcgcr.supabase.co','sb_publishable_chFTmgoaIVvJSdpgTTuUSQ_fBNEq4WJ');
+  const wa='573116637215';
+  let products=[],cart=[];
+  const money=n=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(Number(n||0));
   const safe=s=>String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-  let products=[];
+  function show(html){document.getElementById('panel').innerHTML=html;document.getElementById('modal').classList.add('open')}
+  function total(){return cart.reduce((s,x)=>s+x.price*x.qty,0)}
+  function refreshCart(){const n=cart.reduce((s,x)=>s+x.qty,0);document.querySelectorAll('#cartCount2').forEach(x=>x.textContent=n);const t=document.getElementById('barTotal');if(t)t.textContent=money(total())}
   window.render=async function(){
-    const box=document.getElementById('products');
-    if(!box)return;
-    box.innerHTML='<div class="empty">Cargando menú...</div>';
+    const box=document.getElementById('products');if(!box)return;
     const r=await db.from('products').select('id,name,description,price,image_url,active').eq('active',true).order('sort_order');
-    if(r.error){box.innerHTML='<div class="empty">Error cargando menú.</div>';return}
+    if(r.error){box.innerHTML='<div class="empty">No se pudo cargar el menú.</div>';return}
     products=r.data||[];
-    box.innerHTML=products.map(p=>'<article class="card"><div class="photo">'+(p.image_url?'<img src="'+safe(p.image_url)+'" alt="'+safe(p.name)+'">':'<div class="placeholder">🍔</div>')+'</div><div class="cardBody"><h3>'+safe(p.name)+'</h3><div class="desc">'+safe(p.description)+'</div><div class="bottom"><div class="price">'+fmt(p.price)+'</div><button class="add" onclick="alert(\'Producto seleccionado: '+safe(p.name)+'\')">+ Agregar</button></div></div></article>').join('');
+    box.innerHTML=products.map(p=>'<article class="card"><div class="photo">'+(p.image_url?'<img src="'+safe(p.image_url)+'" alt="'+safe(p.name)+'">':'<div class="placeholder">🍔</div>')+'</div><div class="cardBody"><h3>'+safe(p.name)+'</h3><div class="desc">'+safe(p.description)+'</div><div class="bottom"><div class="price">'+money(p.price)+'</div><button class="add" onclick="addBackup('+JSON.stringify(p.id)+')">+ Agregar</button></div></div></article>').join('');
   };
-  document.addEventListener('DOMContentLoaded',window.render);
+  window.addBackup=function(id){const p=products.find(x=>x.id===id);if(!p)return;const x=cart.find(x=>x.id===id);if(x)x.qty++;else cart.push({id:p.id,name:p.name,price:Number(p.price||0),qty:1});refreshCart();showCart()};
+  window.openCart=function(){showCart()};
+  function showCart(){
+    const lines=cart.map((x,i)=>'<div class="cartLine"><div class="cartLineInfo"><b>'+safe(x.name)+'</b><span>'+money(x.price)+' · '+x.qty+'</span></div><button class="mini" onclick="cartBackup('+i+',-1)">−</button><button class="mini" onclick="cartBackup('+i+',1)">+</button></div>').join('');
+    show('<div class="panelHead"><h2>🛒 Mi pedido</h2><button class="close" onclick="closeModal()">✕</button></div>'+(lines||'<div class="empty">Tu pedido está vacío.</div>')+(cart.length?'<div class="totalBox"><span>TOTAL</span><span>'+money(total())+'</span></div><div class="field"><label>NOMBRE</label><input id="bn"></div><div class="field"><label>TELÉFONO</label><input id="bp"></div><div class="field"><label>TIPO</label><select id="bt"><option>Domicilio</option><option>Recoger</option><option>Local</option></select></div><div class="field"><label>PAGO</label><select id="bpay"><option>Efectivo</option><option>Transferencia</option><option>Pago en el local</option></select></div><div class="field"><label>DIRECCIÓN</label><input id="ba"></div><button class="primary" style="width:100%" onclick="sendBackup()">CONFIRMAR PEDIDO</button>':''));
+  }
+  window.cartBackup=function(i,d){cart[i].qty+=d;if(cart[i].qty<=0)cart.splice(i,1);refreshCart();showCart()};
+  window.sendBackup=async function(){
+    const name=document.getElementById('bn').value.trim(),phone=document.getElementById('bp').value.trim(),type=document.getElementById('bt').value,pay=document.getElementById('bpay').value,addr=document.getElementById('ba').value.trim();
+    if(!name||!phone){alert('Completa nombre y teléfono.');return}
+    const no='SP-'+Math.floor(100000+Math.random()*900000),tot=total();
+    const items=cart.map(x=>({product_id:x.id,product_name:x.name,quantity:x.qty,unit_price:x.price,notes:''}));
+    const r=await db.rpc('sp_create_public_order',{p_order:{order_number:no,name,phone,type,address:addr,observations:'',payment_method:pay,total:tot,subtotal:tot},p_items:items});
+    if(r.error){alert('Error registrando pedido: '+r.error.message);return}
+    const msg='🍔 SANTO PECADO 17-29\nNUEVO PEDIDO '+no+'\nCliente: '+name+'\nTeléfono: '+phone+'\nTipo: '+type+'\nTotal: '+money(tot);
+    cart=[];refreshCart();
+    show('<div class="panelHead"><h2>✅ Pedido recibido</h2><button class="close" onclick="closeModal()">✕</button></div><div class="notice">Pedido <b>'+no+'</b> registrado correctamente.</div><div class="modalBtns"><button class="primary" onclick="location.href='+JSON.stringify('https://wa.me/'+wa+'?text='+encodeURIComponent(msg))+'>📲 WhatsApp</button><button class="secondary" onclick="trackBackup('+JSON.stringify(no)+')">📍 Ver estado</button></div>');
+  };
+  window.trackBackup=async function(no){const r=await db.rpc('sp_get_order_status',{p_order_number:no});if(r.error||!r.data?.length){alert('No encontramos el pedido.');return}const x=r.data[0];show('<div class="panelHead"><h2>📍 Estado</h2><button class="close" onclick="closeModal()">✕</button></div><div class="notice">Pedido <b>'+safe(x.order_number)+'</b></div><div class="totalBox"><span>ESTADO</span><span>'+safe(x.status)+'</span></div>')};
+  document.addEventListener('DOMContentLoaded',()=>{render();refreshCart()});
 })();
 </script></body>
 </html>
