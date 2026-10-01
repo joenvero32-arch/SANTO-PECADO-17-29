@@ -1285,5 +1285,24 @@ setTimeout(async()=>{
   }
 },800);
 </script>
-</body>
+<script>
+(function(){
+  const U='https://ghucwrrvqivmbogtcgcr.supabase.co';
+  const K='sb_publishable_chFTmgoaIVvJSdpgTTuUSQ_fBNEq4WJ';
+  const db=window.supabase.createClient(U,K);
+  const fmt=n=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(Number(n||0));
+  const safe=s=>String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  let products=[];
+  window.render=async function(){
+    const box=document.getElementById('products');
+    if(!box)return;
+    box.innerHTML='<div class="empty">Cargando menú...</div>';
+    const r=await db.from('products').select('id,name,description,price,image_url,active').eq('active',true).order('sort_order');
+    if(r.error){box.innerHTML='<div class="empty">Error cargando menú.</div>';return}
+    products=r.data||[];
+    box.innerHTML=products.map(p=>'<article class="card"><div class="photo">'+(p.image_url?'<img src="'+safe(p.image_url)+'" alt="'+safe(p.name)+'">':'<div class="placeholder">🍔</div>')+'</div><div class="cardBody"><h3>'+safe(p.name)+'</h3><div class="desc">'+safe(p.description)+'</div><div class="bottom"><div class="price">'+fmt(p.price)+'</div><button class="add" onclick="alert(\'Producto seleccionado: '+safe(p.name)+'\')">+ Agregar</button></div></div></article>').join('');
+  };
+  document.addEventListener('DOMContentLoaded',window.render);
+})();
+</script></body>
 </html>
