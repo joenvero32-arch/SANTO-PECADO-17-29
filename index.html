@@ -171,10 +171,18 @@ window.loadPublicCatalog=async function(){
       SP_DB.from('toppings').select('id,name,description,price,unit,consumption_per_addition,stock,minimum_stock,active').eq('active',true).order('name')
     ]);
     if(cr.error)throw cr.error;if(pr.error)throw pr.error;if(tr.error)throw tr.error;
-    const catMap=Object.fromEntries((cr.data||[]).map(c=>[c.id,c.name]));
-    categories=(cr.data||[]).map(c=>c.name);
-    products=(pr.data||[]).map((p,i)=>({id:p.id,cat:catMap[p.category_id]||'Sin categoría',name:p.name,desc:p.description||'',price:Number(p.price||0),img:p.image_url||'',stock:Number(p.stock||0),minStock:Number(p.minimum_stock||0),active:p.active!==false,sort_order:p.sort_order??i}));
-    toppings=(tr.data||[]).map(t=>({id:t.id,name:t.name,description:t.description||'',price:Number(t.price||0),unit:t.unit||'Porción',usage:Number(t.consumption_per_addition||1),stock:Number(t.stock||0),minStock:Number(t.minimum_stock||0),tracked:true,active:t.active!==false}));
+    const centralCats=(cr.data||[]);
+    const centralProducts=(pr.data||[]);
+    const centralToppings=(tr.data||[]);
+    // Nunca borrar el catálogo local si Supabase devuelve vacío por una política/RLS o una carga temporal.
+    if(!centralCats.length || !centralProducts.length){
+      console.warn('Catálogo central vacío; se conserva el catálogo local para no dejar la página en blanco.');
+      return;
+    }
+    const catMap=Object.fromEntries(centralCats.map(c=>[c.id,c.name]));
+    categories=centralCats.map(c=>c.name);
+    products=centralProducts.map((p,i)=>({id:p.id,cat:catMap[p.category_id]||'Sin categoría',name:p.name,desc:p.description||'',price:Number(p.price||0),img:p.image_url||'',stock:Number(p.stock||0),minStock:Number(p.minimum_stock||0),active:p.active!==false,sort_order:p.sort_order??i}));
+    toppings=centralToppings.length?centralToppings.map(t=>({id:t.id,name:t.name,description:t.description||'',price:Number(t.price||0),unit:t.unit||'Porción',usage:Number(t.consumption_per_addition||1),stock:Number(t.stock||0),minStock:Number(t.minimum_stock||0),tracked:true,active:t.active!==false})):toppings;
     localStorage.setItem(KEY,JSON.stringify(products));
     localStorage.setItem(CATS,JSON.stringify(categories));
     localStorage.setItem(TOP,JSON.stringify(toppings));
