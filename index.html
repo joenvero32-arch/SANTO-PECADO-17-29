@@ -330,7 +330,9 @@ const seed=[
 /* Corrige el último producto del catálogo */
 seed[seed.length-1].price=22000;
 
-let products=JSON.parse(localStorage.getItem(KEY)||'null')||seed;
+let products=JSON.parse(localStorage.getItem(KEY)||'null');
+// Nunca permitir que un catálogo local vacío deje la vitrina pública en blanco.
+if(!Array.isArray(products)||!products.length) products=seed.map((p,i)=>({...p,id:p.id||('seed-'+i)}));
 products.forEach(p=>{if(typeof p.stock!=='number')p.stock=50;if(typeof p.minStock!=='number')p.minStock=5;});
 let settings=JSON.parse(localStorage.getItem(SETTINGS)||'null')||{whatsapp:ADMIN_WA};
 const defaultCats=['La Gula','La Tentación','El Pecado','Hamburguesas','Arepas','Alitas'];
@@ -391,6 +393,8 @@ function setCategory(cat){
 }
 window.setCategory=setCategory;
 function render(){
+  // Respaldo visual: si por cualquier motivo el catálogo central/local está vacío, mostrar el menú base.
+  if(!Array.isArray(products)||!products.length) products=seed.map((p,i)=>({...p,id:p.id||('seed-'+i),active:true}));
   const productCats=[...new Set(products.filter(p=>p.active&&p.cat).map(p=>String(p.cat)))];
   const cats=[...new Set(['Todos',...categories.filter(Boolean).map(String),...productCats])];
   document.getElementById('cats').innerHTML=cats.map(c=>`<button type="button" class="cat ${currentCat===c?'active':''}" data-cat="${esc(c)}" onclick="setCategory(this.dataset.cat)">${esc(c)}</button>`).join('');
