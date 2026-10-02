@@ -988,7 +988,7 @@ async function saveProduct(id){
   localStorage.setItem(KEY,JSON.stringify(products));render();adminProducts();
   try{await syncOneProductCentral(p)}catch(e){console.warn('Producto guardado localmente; sincronización central pendiente:',e);alert('El producto quedó guardado, pero Supabase no pudo actualizarlo: '+(e.message||e));}
 }
-function changePhoto(id){
+async function changePhoto(id){
   id=String(id);if(!isAdmin()){alert('Solo el administrador o dueño puede cambiar fotos.');return}
   const input=document.createElement('input');input.type='file';input.accept='image/*';input.style.position='fixed';input.style.left='-9999px';document.body.appendChild(input);
   input.onchange=()=>{const f=input.files&&input.files[0];if(!f){input.remove();return}
