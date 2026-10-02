@@ -228,7 +228,7 @@ window.loadPublicCatalog=async function(){
 
 <div class="floatingCart">
   <div class="cartInfo"><b>Tu pedido</b><span><span id="cartCount2">0</span> productos · <span id="barTotal">$0</span></span></div>
-  <button class="cartMain" onclick="openCart()">VER PEDIDO 🛒</button>
+  <button class="cartMain" onclick="openMyOrder()">VER PEDIDO 🛒</button>
 </div>
 
 <div id="modal" class="modal" onclick="if(event.target===this)closeModal()">
@@ -488,6 +488,22 @@ document.addEventListener('click',function(ev){
 });
 
 window.addProductDirect=addProductDirect;
+function openMyOrder(){
+  if(cart.length){openCart();return}
+  const no=localStorage.getItem(LAST_ORDER)||'';
+  if(!no){openCart();return}
+  const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
+  const o=orders.find(x=>String(x.no)===String(no));
+  if(!o){trackOrder(no);return}
+  const lines=(o.detail||'').split('\\n').map(x=>x.trim()).filter(Boolean).map(x=>'<div class="cartLine"><div class="cartLineInfo"><span>'+esc(x)+'</span></div></div>').join('');
+  document.getElementById('panel').innerHTML='<div class="panelHead"><h2>🧾 Mi pedido</h2><button class="close" onclick="closeModal()">✕</button></div>'
+    +'<div class="notice" style="margin:14px 0">Pedido <b>'+esc(o.no)+'</b> · '+new Date(o.created).toLocaleString('es-CO')+'</div>'
+    +'<div style="margin-top:14px">'+(lines||'<div class="empty">No hay detalle disponible para este pedido.</div>')+'</div>'
+    +'<div class="totalBox"><span>TOTAL</span><span>'+money(o.total||0)+'</span></div>'
+    +'<div class="notice" style="margin-top:12px"><b>Estado:</b> '+statusLabel(o)+'</div>'
+    +'<div class="modalBtns"><button class="primary" onclick="trackOrder(\''+esc(o.no)+'\')">📍 Ver estado</button><button class="secondary" onclick="closeModal()">Seguir comprando</button></div>';
+  document.getElementById('modal').classList.add('open');
+}
 function openCart(keep=false){
   const lines=cart.map(x=>{const p=products.find(a=>String(a.id)===String(x.id));if(!p)return '';return `
     <div class="cartLine">
