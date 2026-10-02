@@ -163,7 +163,7 @@ async function spSyncCustomers(){
 }
 window.SantoPecadoCentral={get connected(){return SP_DB_ON},get lastSync(){return SP_DB_LAST||localStorage.getItem('sp_central_last_sync')||''},sync:async()=>{await spSyncCatalog();await spSyncCustomers()}};
 window.loadPublicCatalog=async function(){
-  if(!SP_DB_ON)return;
+  if(!SP_DB_ON)return false;
   try{
     const [cr,pr,tr]=await Promise.all([
       SP_DB.from('categories').select('id,name,active,sort_order').eq('active',true).order('sort_order'),
@@ -171,14 +171,17 @@ window.loadPublicCatalog=async function(){
       SP_DB.from('toppings').select('id,name,description,price,unit,consumption_per_addition,stock,minimum_stock,active').eq('active',true).order('name')
     ]);
     if(cr.error)throw cr.error;if(pr.error)throw pr.error;if(tr.error)throw tr.error;
-    const catMap=Object.fromEntries((cr.data||[]).map(c=>[c.id,c.name]));
-    categories=(cr.data||[]).map(c=>c.name);
-    products=(pr.data||[]).map((p,i)=>({id:p.id,cat:catMap[p.category_id]||'Sin categoría',name:p.name,desc:p.description||'',price:Number(p.price||0),img:p.image_url||'',stock:Number(p.stock||0),minStock:Number(p.minimum_stock||0),active:p.active!==false,sort_order:p.sort_order??i}));
-    toppings=(tr.data||[]).map(t=>({id:t.id,name:t.name,description:t.description||'',price:Number(t.price||0),unit:t.unit||'Porción',usage:Number(t.consumption_per_addition||1),stock:Number(t.stock||0),minStock:Number(t.minimum_stock||0),tracked:true,active:t.active!==false}));
+    const dbCats=Array.isArray(cr.data)?cr.data:[], dbProducts=Array.isArray(pr.data)?pr.data:[], dbToppings=Array.isArray(tr.data)?tr.data:[];
+    if(!dbCats.length||!dbProducts.length){console.warn('Supabase devolvió catálogo vacío; se conserva el catálogo local.');return false;}
+    const catMap=Object.fromEntries(dbCats.map(c=>[c.id,c.name]));
+    categories=dbCats.map(c=>c.name);
+    products=dbProducts.map((p,i)=>({id:p.id,cat:catMap[p.category_id]||'Sin categoría',name:p.name,desc:p.description||'',price:Number(p.price||0),img:p.image_url||'',stock:Number(p.stock||0),minStock:Number(p.minimum_stock||0),active:p.active!==false,sort_order:p.sort_order??i}));
+    toppings=dbToppings.map(t=>({id:t.id,name:t.name,description:t.description||'',price:Number(t.price||0),unit:t.unit||'Porción',usage:Number(t.consumption_per_addition||1),stock:Number(t.stock||0),minStock:Number(t.minimum_stock||0),tracked:true,active:t.active!==false}));
     localStorage.setItem(KEY,JSON.stringify(products));
     localStorage.setItem(CATS,JSON.stringify(categories));
     localStorage.setItem(TOP,JSON.stringify(toppings));
-  }catch(e){console.warn('No se pudo cargar el catálogo central:',e.message||e)}
+    return true;
+  }catch(e){console.warn('No se pudo cargar el catálogo central; se usa respaldo local:',e.message||e);return false}
 };
 </script>
 </head>
@@ -303,7 +306,8 @@ const seed=[
 /* Corrige el último producto del catálogo */
 seed[seed.length-1].price=22000;
 
-let products=JSON.parse(localStorage.getItem(KEY)||'null')||seed;
+let products=JSON.parse(localStorage.getItem(KEY)||'null');
+if(!Array.isArray(products)||!products.length) products=seed.map(p=>({...p}));
 products.forEach(p=>{if(typeof p.stock!=='number')p.stock=50;if(typeof p.minStock!=='number')p.minStock=5;});
 let settings=JSON.parse(localStorage.getItem(SETTINGS)||'null')||{whatsapp:ADMIN_WA};
 const defaultCats=['La Gula','La Tentación','El Pecado','Hamburguesas','Arepas','Alitas'];
@@ -1416,8 +1420,9 @@ function saveSettings(){
 }
 
 (async()=>{
-  await window.loadPublicCatalog?.();
   render();
+  const loaded=await window.loadPublicCatalog?.();
+  if(loaded)render();
   renderPromotions();
   try{
     if(window.SantoPecadoCentral?.connected){
