@@ -1420,10 +1420,24 @@ function saveSettings(){
 }
 
 (async()=>{
-  render();
-  const loaded=await window.loadPublicCatalog?.();
-  if(loaded)render();
-  renderPromotions();
+  try{
+    if(!Array.isArray(products)||!products.length)products=seed.map(p=>({...p,active:true}));
+    if(!Array.isArray(categories)||!categories.length)categories=[...defaultCats];
+    currentCat='Todos';
+    render();
+    renderPromotions();
+    const loaded=await window.loadPublicCatalog?.();
+    if(loaded && Array.isArray(products) && products.length){currentCat='Todos';render();}
+    if(!document.getElementById('products')?.innerHTML.trim()){
+      products=seed.map(p=>({...p,active:true}));
+      categories=[...defaultCats];
+      currentCat='Todos';
+      render();
+    }
+  }catch(e){
+    console.error('Error al iniciar catálogo:',e);
+    try{products=seed.map(p=>({...p,active:true}));categories=[...defaultCats];currentCat='Todos';render();}catch(f){console.error('No se pudo restaurar catálogo',f)}
+  }
   try{
     if(window.SantoPecadoCentral?.connected){
       const {data}=await SP_DB.auth.getSession();
