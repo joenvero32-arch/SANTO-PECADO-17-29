@@ -393,7 +393,7 @@ function updateCart(){
 function add(id){const sid=String(id);const q=cart.find(x=>String(x.id)===sid);if(q){q.qty++;}else{const p=products.find(x=>String(x.id)===sid);if(!p)return;cart.push({id:p.id,qty:1,base:Number(p.price||0),toppings:[],note:''});}updateCart();openCart(true)}
 window.add=add;
 function changeQty(id,d){const q=cart.find(x=>x.id===id);if(!q)return;q.qty+=d;if(q.qty<=0)cart=cart.filter(x=>x.id!==id);updateCart();openCart(true)}
-let spStatusPollTimer=null;
+let spStatusPollTimer=null; let spAdminOrderPollTimer=null;
 function closeModal(){if(spStatusPollTimer){clearInterval(spStatusPollTimer);spStatusPollTimer=null}document.getElementById('modal').classList.remove('open')}
 
 function addWithToppings(id){
@@ -1257,7 +1257,8 @@ async function adminOrders(){
     }).join(''):'<div class="empty">No hay pedidos guardados en Supabase.</div>'}`;
   document.getElementById('modal').classList.add('open');
 }
-async function adminOrders(){
+async function adminOrders(silent=false){
+  if(spAdminOrderPollTimer){clearInterval(spAdminOrderPollTimer);spAdminOrderPollTimer=null}
   if(SP_DB_ON && !currentUser?.central){
     try{
       const {data:{session}}=await SP_DB.auth.getSession();
@@ -1270,13 +1271,13 @@ async function adminOrders(){
       }
     }catch(e){console.warn('Sesión central:',e)}
   }
-  if(!can('allowOrders')){alert('Tu usuario no tiene permiso para gestionar pedidos.');return}
+  if(!can('allowOrders')){if(!silent)alert('Para ver los pedidos de todos los celulares debes iniciar sesión central con la cuenta de administrador.');return}
   let a=[];
   if(SP_DB_ON && currentUser?.central){
     try{
       const {data,error}=await SP_DB.rpc('sp_get_admin_orders');
       if(error)throw error;
-      const rows=Array.isArray(data)?data:(Array.isArray(data?.value)?data.value:[]);
+      let rows=[]; if(Array.isArray(data))rows=data; else if(typeof data==='string'){try{const parsed=JSON.parse(data);rows=Array.isArray(parsed)?parsed:[]}catch(e){rows=[]}} else if(Array.isArray(data?.value))rows=data.value;
       a=rows.map(o=>({
         no:o.order_number,centralId:o.id,name:o.customer_name,phone:o.customer_phone,
         type:o.order_type==='delivery'?'Domicilio':o.order_type==='pickup'?'Recoger en el local':'En el local',
@@ -1308,6 +1309,7 @@ async function adminOrders(){
       return `<div class="order"><b>${esc(o.no)}</b> · <b>${money(o.total)}</b><br>👤 ${esc(o.name)} · 📞 ${esc(o.phone)}<br>🚚 ${esc(o.type)}${tableInfo} · 💳 ${esc(o.pay)}${driverInfo}<br><div class="muted">${new Date(o.created).toLocaleString('es-CO')}</div>${statusMarkup(o)}<div class="statusActions">${list.map(x=>'<button class="'+(current===x[0]?'active':'')+'" onclick="setOrderStatus(\\''+esc(o.no)+'\\',\\''+x[0]+'\\')">'+x[1]+' '+x[2]+'</button>').join('')}</div><div class="statusActions"><button class="mini" onclick="printOrder(\\''+esc(o.no)+'\\')">🧾 Soporte</button><button class="mini" onclick="printComanda(\\''+esc(o.no)+'\\')">🍳 Comanda cocina</button><button class="mini" onclick="openStatusWhatsAppFromOrder(\\''+esc(o.no)+'\\',\\''+current+'\\')">📲 Avisar cliente</button>${deleteBtn}</div></div>`;
     }).join(''):'<div class="empty">No hay pedidos en el sistema central.</div>'}`;
   document.getElementById('modal').classList.add('open');
+  if(SP_DB_ON&&currentUser?.central)spAdminOrderPollTimer=setInterval(()=>adminOrders(true),5000);
 }function printOrder(no){
   const o=JSON.parse(localStorage.getItem(ORDERS)||'[]').find(x=>String(x.no)===String(no));
   if(!o){alert('No encontramos el pedido en este dispositivo.');return}
