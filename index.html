@@ -1136,7 +1136,7 @@ async function adminCash(){
   document.getElementById('panel').innerHTML=`<div class="panelHead"><div><div class="dashKicker">CONTROL FINANCIERO</div><h2>💵 Caja del día</h2></div><button class="close" onclick="adminDashboard()">✕</button></div>${navTabs('cash')}
   <div class="cashHero"><span>VENTAS DE HOY</span><b>${money(salesTotal)}</b><small>${list.length} operación(es) · Base inicial: ${money(opening)}</small></div><div class="cashGrid"><div class="cashCard"><small>💸 Gastos de hoy</small><b>${money(expensesTotal)}</b></div><div class="cashCard"><small>📊 Neto del día</small><b>${money(salesTotal-expensesTotal)}</b></div></div><div class="dashSection"><div class="dashSectionHead"><h3>📋 Gastos de hoy</h3><button class="mini" onclick="adminExpenses()">Ver gastos</button></div>${sessionExpenses.map(x=>'<div class="alertRow"><span>'+esc(x.expense_type)+' · '+esc(x.category)+' · '+esc(x.description)+'</span><b>-'+money(x.amount)+'</b></div>').join('')||'<div class="empty">No hay gastos registrados en esta caja.</div>'}</div>
   <div class="cashGrid">${Object.entries(pay).map(([k,v])=>`<div class="cashCard"><small>${esc(k)}</small><b>${money(v)}</b></div>`).join('')||'<div class="empty">No hay ventas registradas en esta caja.</div>'}</div>
-  <div class="adminItem"><div class="adminTop"><b>💰 Efectivo esperado</b><b>${money(expected)}</b></div><div class="muted">Ventas en efectivo de esta caja + base inicial − gastos pagados en efectivo de esta caja.</div><div class="adminActions"><button class="mini" onclick="openCash('${today}')">🔓 Abrir caja</button><button class="primary" onclick="closeCash('${today}',${expected})">🔐 Registrar cierre de caja</button></div></div>
+  <div class="adminItem"><div class="adminTop"><b>💰 Efectivo esperado</b><b>${money(expected)}</b></div><div class="muted">Ventas en efectivo de esta caja + base inicial − gastos pagados en efectivo de esta caja.</div><div class="adminActions"><button class="mini" onclick="openCash('${today}')">🔓 Abrir caja</button>${openingRecord&&!list.length&&!sessionExpenses.length?'<button class="mini" onclick="changeOpeningCash(\''+today+'\')">✏️ Cambiar base</button>':''}<button class="primary" onclick="closeCash('${today}',${expected})">🔐 Registrar cierre de caja</button></div></div>
   ${lastClose?`<div class="notice" style="margin-top:12px">Último cierre de hoy: <b>${new Date(lastClose.date).toLocaleString('es-CO')}</b> · Efectivo contado: <b>${money(lastClose.counted)}</b> · Diferencia: <b>${money(lastClose.difference)}</b> · ${esc(lastClose.user)}</div>`:''}
   ${openingRecord?`<div class="notice" style="margin-top:12px">Caja abierta: <b>${new Date(openingRecord.date).toLocaleString('es-CO')}</b> · Base inicial: <b>${money(opening)}</b></div>`:''}
   <div class="dashSection"><div class="dashSectionHead"><h3>Historial de cierres</h3></div>${cashClosures.filter(c=>c.type!=='apertura').slice(0,30).map(c=>`<div class="alertRow"><span>${new Date(c.date).toLocaleString('es-CO')} · ${esc(c.user)}</span><b>${money(c.counted)} · ${c.difference===0?'Cuadrada':money(c.difference)}</b></div>`).join('')||'<div class="empty">No hay cierres registrados.</div>'}</div>`;
@@ -1152,6 +1152,17 @@ function openCash(day){
   const opening=Number(raw.replace(/[^0-9.-]/g,'')); if(!Number.isFinite(opening)||opening<0){alert('Valor no válido.');return}
   cashClosures.unshift({id:Date.now(),day,type:'apertura',opening,date:new Date().toISOString(),user:currentUser?.name||'Administrador'});
   auditLog('Apertura de caja','Base inicial '+money(opening)); save(); adminCash();
+}
+function changeOpeningCash(day){
+  if(!isAdmin())return;
+  const rec=cashClosures.find(c=>c.day===day&&c.type==='apertura');
+  if(!rec){alert('No hay una apertura para modificar.');return}
+  const raw=prompt('Nueva base inicial de efectivo:',String(rec.opening||0));if(raw===null)return;
+  const opening=Number(raw.replace(/[^0-9.-]/g,''));if(!Number.isFinite(opening)||opening<0){alert('Valor no válido.');return}
+  rec.opening=opening;
+  rec.updated=new Date().toISOString();
+  auditLog('Cambio de base inicial','Caja '+day+' · Nueva base '+money(opening));
+  save();adminCash();
 }
 function closeCash(day,expected){
   if(!isAdmin())return;
