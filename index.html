@@ -1389,58 +1389,68 @@ async function ensureCentralAdminSession(){
 async function adminOrders(){
   if(!can('allowOrders')){alert('Tu usuario no tiene permiso para gestionar pedidos.');return}
   let a=JSON.parse(localStorage.getItem(ORDERS)||'[]');
-  if(SP_DB_ON && (currentUser?.central || isAdmin())){
-    if(!currentUser?.central) await ensureCentralAdminSession();
+  if(SP_DB_ON){
     try{
-      const {data:centralOrders,error:ordersError}=await SP_DB.from('orders').select('*').order('created_at',{ascending:false});
-      if(ordersError)throw ordersError;
-      const rows=centralOrders||[];
-      const ids=rows.map(o=>o.id).filter(Boolean);
-      let itemRows=[],toppingRows=[];
-      if(ids.length){
-        const {data:items,error:itemsError}=await SP_DB.from('order_items').select('*').in('order_id',ids);
-        if(itemsError)throw itemsError;
-        itemRows=items||[];
-        const itemIds=itemRows.map(x=>x.id).filter(Boolean);
-        if(itemIds.length){
-          const {data:tops,error:topsError}=await SP_DB.from('order_item_toppings').select('*').in('order_item_id',itemIds);
-          if(topsError)throw topsError;
-          toppingRows=tops||[];
+      // Los pedidos administrativos se leen mediante una función segura en Supabase.
+      // Esto evita depender del localStorage de este celular y evita fallos de RLS
+      // al consultar directamente la tabla orders.
+      if(!currentUser?.central){
+        const ok=await ensureCentralAdminSession();
+        if(!ok){
+          throw new Error('Sesión central de administrador no encontrada. Cierra sesión y entra con el acceso central de Supabase.');
         }
       }
-      const topsByItem=new Map();
-      toppingRows.forEach(t=>{const k=String(t.order_item_id);if(!topsByItem.has(k))topsByItem.set(k,[]);topsByItem.get(k).push(t.topping_name)});
-      const itemsByOrder=new Map();
-      itemRows.forEach(it=>{
-        const k=String(it.order_id);
-        if(!itemsByOrder.has(k))itemsByOrder.set(k,[]);
-        const tops=(topsByItem.get(String(it.id))||[]).filter(Boolean);
-        const line=(it.quantity||1)+' x '+(it.product_name||'Producto')+(tops.length?' + '+tops.join(', '):'')+(it.notes?' · Nota: '+it.notes:'');
-        itemsByOrder.get(k).push(line);
-      });
+      const {data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders');
+      if(error)throw error;
+      const rows=Array.isArray(centralOrders)?centralOrders:[];
       const central=rows.map(o=>({
-        no:o.order_number,centralId:o.id,name:o.customer_name,phone:o.customer_phone,
+        no:o.order_number,
+        centralId:o.id,
+        name:o.customer_name||'',
+        phone:o.customer_phone||'',
         type:o.order_type==='delivery'?'Domicilio':o.order_type==='pickup'?'Recoger':'Local',
-        pay:o.payment_method||'',paymentStatus:o.payment_status||'pendiente',addr:o.address||'',obs:o.observations||'',total:Number(o.total||0),
-        created:o.created_at,updated:o.updated_at,status:o.status||'recibido',
-        statusHistory:[],detail:(itemsByOrder.get(String(o.id))||[]).join('\\n')
+        pay:o.payment_method||'',
+        paymentStatus:o.payment_status||'pendiente',
+        addr:o.address||'',
+        obs:o.observations||'',
+        total:Number(o.total||0),
+        created:o.created_at,
+        updated:o.updated_at,
+        status:o.status||'recibido',
+        driverId:o.driver_id||null,
+        driverName:o.driver_name||'',
+        driverPhone:o.driver_phone||'',
+        statusHistory:[],
+        detail:o.detail||''
       }));
-      const byNo=new Map(a.map(x=>[String(x.no),x]));
-      central.forEach(c=>{const old=byNo.get(String(c.no));byNo.set(String(c.no),{...(old||{}),...c})});
-      a=Array.from(byNo.values()).sort((x,y)=>new Date(y.created)-new Date(x.created));
+      // La fuente central es la autoridad. Conservamos únicamente los campos
+      // locales que sirven para la interfaz y para operaciones ya realizadas.
+      const oldByNo=new Map(a.map(x=>[String(x.no),x]));
+      a=central.map(c=>{
+        const old=oldByNo.get(String(c.no))||{};
+        return {...old,...c};
+      }).sort((x,y)=>new Date(y.created)-new Date(x.created));
       localStorage.setItem(ORDERS,JSON.stringify(a));
-    }catch(e){console.warn('No se pudieron cargar los pedidos centrales:',e.message||e)}
+    }catch(e){
+      console.error('Error cargando pedidos centrales:',e);
+      const msg=e?.message||'No se pudieron cargar los pedidos centrales.';
+      if(!a.length){
+        document.getElementById('panel').innerHTML='<div class="panelHead"><h2>📋 Pedidos</h2><button class="close" onclick="closeModal()">✕</button></div>'+navTabs('orders')+'<div class="notice" style="margin-top:14px;background:rgba(255,79,100,.08);border-color:rgba(255,79,100,.3);color:#ffd0d6"><b>No se pudieron cargar los pedidos de Supabase.</b><br><br>'+esc(msg)+'<br><br>Usa el acceso central de Supabase para administración y vuelve a pulsar Actualizar.</div><div class="modalBtns" style="margin-top:12px"><button class="secondary" onclick="openAdmin()">🔐 Volver al acceso</button></div>';
+        document.getElementById('modal').classList.add('open');
+        return;
+      }
+    }
   }
   document.getElementById('panel').innerHTML=`
     <div class="panelHead"><h2>📋 Pedidos</h2><button class="close" onclick="closeModal()">✕</button></div>
     ${navTabs('orders')}
-    <div class="modalBtns" style="margin:10px 0"><button class="secondary" onclick="adminOrders()">🔄 Actualizar</button><button class="secondary" onclick="logoutUser()">Cerrar sesión</button></div>
+    <div class="modalBtns" style="margin:10px 0"><button class="secondary" onclick="adminOrders()">🔄 Actualizar desde Supabase</button><button class="secondary" onclick="logoutUser()">Cerrar sesión</button></div>
     ${a.length?a.map(o=>{
       const list=statusList(o),current=o.status||'recibido';
       const driverInfo=o.type==='Domicilio'?'<br>🛵 <b>Domiciliario:</b> '+esc(o.driverName||'Sin asignar')+(o.driverPhone?' · '+esc(o.driverPhone):''):'';
-      const deleteBtn=isAdmin()?'<button class="mini" onclick="deleteOrder(\''+esc(o.no)+'\')">🗑️ Eliminar pedido</button>':'';
-      return `<div class="order"><b>${esc(o.no)}</b> · <b>${money(o.total)}</b><br>👤 ${esc(o.name)} · 📞 ${esc(o.phone)}<br>🚚 ${esc(o.type)} · 💳 ${esc(o.pay)}${driverInfo}<br><div class="muted">${new Date(o.created).toLocaleString('es-CO')}</div>${statusMarkup(o)}<div class="statusActions">${list.map(x=>'<button class="'+(current===x[0]?'active':'')+'" onclick="setOrderStatus(\''+esc(o.no)+'\',\''+x[0]+'\')">'+x[1]+' '+x[2]+'</button>').join('')}</div><div class="statusActions">${o.paymentStatus==='pagado'?'<button class="mini" disabled>✅ Venta registrada</button>':'<button class="mini" data-no="'+esc(o.no)+'" onclick="confirmOrderPayment(this.dataset.no)">💰 Confirmar pago y entregar</button>'}<button class="mini" onclick="printOrder('${esc(o.no)}')">🧾 Soporte</button><button class="mini" onclick="printComanda('${esc(o.no)}')">🍳 Comanda cocina</button><button class="mini" onclick="registerOrderIncident('${esc(o.no)}','cambio')">📝 Registrar cambio</button><button class="mini" onclick="registerOrderIncident('${esc(o.no)}','devolucion')">↩️ Registrar devolución</button>${deleteBtn}</div></div>`;
-    }).join(''):'<div class="empty">No hay pedidos guardados en Supabase.</div>'}`;
+      const deleteBtn=isAdmin()?'<button class="mini" onclick="deleteOrder(\\''+esc(o.no)+'\\')">🗑️ Eliminar pedido</button>':'';
+      return \`<div class="order"><b>${esc(o.no)}</b> · <b>${money(o.total)}</b><br>👤 ${esc(o.name)} · 📞 ${esc(o.phone)}<br>🚚 ${esc(o.type)} · 💳 ${esc(o.pay)}${driverInfo}<br><div class="muted">${new Date(o.created).toLocaleString('es-CO')}</div>${statusMarkup(o)}<div class="statusActions">${list.map(x=>'<button class="'+(current===x[0]?'active':'')+'" onclick="setOrderStatus(\\''+esc(o.no)+'\\',\\''+x[0]+'\\')">'+x[1]+' '+x[2]+'</button>').join('')}</div><div class="statusActions">${o.paymentStatus==='pagado'?'<button class="mini" disabled>✅ Venta registrada</button>':'<button class="mini" data-no="'+esc(o.no)+'" onclick="confirmOrderPayment(this.dataset.no)">💰 Confirmar pago y entregar</button>'}<button class="mini" onclick="printOrder(\\''+esc(o.no)+'\\')">🧾 Soporte</button><button class="mini" onclick="printComanda(\\''+esc(o.no)+'\\')">🍳 Comanda cocina</button><button class="mini" onclick="registerOrderIncident(\\''+esc(o.no)+'\\',\\'cambio\\')">📝 Registrar cambio</button><button class="mini" onclick="registerOrderIncident(\\''+esc(o.no)+'\\',\\'devolucion\\')">↩️ Registrar devolución</button>${deleteBtn}</div></div>\\`;
+    }).join(''):'<div class="empty">No hay pedidos registrados en Supabase.</div>'}`;
   document.getElementById('modal').classList.add('open');
 }
 function printOrder(no){
