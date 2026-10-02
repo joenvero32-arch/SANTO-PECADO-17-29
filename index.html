@@ -708,12 +708,20 @@ async function trackOrder(noFromButton){
     noFromButton=localStorage.getItem(LAST_ORDER)||'';
     if(!noFromButton){const entered=prompt('Escribe tu número de pedido (ej. SP-123456):');if(entered===null||!entered.trim())return;noFromButton=entered.trim().toUpperCase();}
   }
+  let lastNotifiedStatus=localStorage.getItem('sp_last_status_'+String(noFromButton))||'';
+  if(typeof Notification!=='undefined'&&Notification.permission==='default'){try{Notification.requestPermission()}catch(e){}}
   if(noFromButton && SP_DB_ON && !can('allowOrders')){
     const load=async()=>{
       const {data,error}=await SP_DB.rpc('sp_get_order_status',{p_order_number:String(noFromButton).trim()});
       if(error){console.warn('Consulta central de estado:',error.message);return}
       if(!data?.length)return;
       const central=data[0];
+      if(lastNotifiedStatus && lastNotifiedStatus!==central.status){
+        const label=statusLabel({status:central.status});
+        if(typeof Notification!=='undefined'&&Notification.permission==='granted'){try{new Notification('Santo Pecado 17-29',{body:'Pedido '+central.order_number+': '+label})}catch(e){}}
+      }
+      lastNotifiedStatus=central.status;
+      localStorage.setItem('sp_last_status_'+String(noFromButton),central.status);
       document.getElementById('panel').innerHTML=`
         <div class="panelHead"><h2>📍 Estado del pedido</h2><button class="close" onclick="closeModal()">✕</button></div>
         <div class="notice" style="margin:14px 0">Pedido <b>${esc(central.order_number)}</b></div>
@@ -1251,43 +1259,56 @@ async function adminOrders(){
 }
 async function adminOrders(){
   if(SP_DB_ON && !currentUser?.central){
-    try{const {data:{session}}=await SP_DB.auth.getSession(); if(session?.user?.id){const {data:profile}=await SP_DB.from('app_users').select('*').eq('id',session.user.id).maybeSingle(); if(profile?.role==='admin'&&profile.active!==false){currentUser={...profile,user:profile.username||'admin',name:profile.full_name||'Administrador',allowOrders:true,allowInventory:!!profile.can_manage_inventory,allowCash:!!profile.can_manage_cash,central:true};sessionStorage.setItem(SESSION,JSON.stringify(currentUser));}}}catch(e){console.warn('Sesión central:',e)}
+    try{
+      const {data:{session}}=await SP_DB.auth.getSession();
+      if(session?.user?.id){
+        const {data:profile}=await SP_DB.from('app_users').select('*').eq('id',session.user.id).maybeSingle();
+        if(profile?.role==='admin'&&profile.active!==false){
+          currentUser={...profile,user:profile.username||'admin',name:profile.full_name||'Administrador',allowOrders:true,allowInventory:!!profile.can_manage_inventory,allowCash:!!profile.can_manage_cash,central:true};
+          sessionStorage.setItem(SESSION,JSON.stringify(currentUser));
+        }
+      }
+    }catch(e){console.warn('Sesión central:',e)}
   }
   if(!can('allowOrders')){alert('Tu usuario no tiene permiso para gestionar pedidos.');return}
-  let a=JSON.parse(localStorage.getItem(ORDERS)||'[]');
-  if(currentUser?.central && SP_DB_ON){
+  let a=[];
+  if(SP_DB_ON && currentUser?.central){
     try{
-      const {data,error}=await SP_DB.from('orders').select('*,order_items(*,order_item_toppings(*))').order('created_at',{ascending:false});
-      if(error) throw error;
-      const central=(data||[]).map(o=>({
+      const {data,error}=await SP_DB.rpc('sp_get_admin_orders');
+      if(error)throw error;
+      const rows=Array.isArray(data)?data:[];
+      a=rows.map(o=>({
         no:o.order_number,centralId:o.id,name:o.customer_name,phone:o.customer_phone,
-        type:o.order_type==='delivery'?'Domicilio':o.order_type==='pickup'?'Recoger':'Local',tableNumber:o.table_number||null,
-        pay:o.payment_method||'',addr:o.address||'',obs:o.observations||'',total:Number(o.total||0),
-        created:o.created_at,updated:o.updated_at,status:o.status||'recibido',
-        statusHistory:[],detail:(o.order_items||[]).map(it=>{
-          const tops=(it.order_item_toppings||[]).map(t=>t.topping_name).join(', ');
-          return (it.quantity||1)+' x '+(it.product_name||'Producto')+(tops?' + '+tops:'');
+        type:o.order_type==='delivery'?'Domicilio':o.order_type==='pickup'?'Recoger en el local':'En el local',
+        tableNumber:o.table_number||null,pay:o.payment_method||'',addr:o.address||'',obs:o.observations||'',
+        total:Number(o.total||0),created:o.created_at,updated:o.updated_at,status:o.status||'recibido',
+        statusHistory:[],detail:(o.items||[]).map(it=>{
+          const tops=(it.toppings||[]).map(t=>t.name+(Number(t.price||0)?' +'+money(t.price):'')).join(', ');
+          return (it.quantity||1)+' x '+(it.product_name||'Producto')+(tops?' + '+tops:'')+(it.notes?' · Nota: '+it.notes:'');
         }).join('\n')
       }));
-      const byNo=new Map(a.map(x=>[String(x.no),x]));
-      central.forEach(c=>{const old=byNo.get(String(c.no));byNo.set(String(c.no),{...(old||{}),...c})});
-      a=Array.from(byNo.values()).sort((x,y)=>new Date(y.created)-new Date(x.created));
       localStorage.setItem(ORDERS,JSON.stringify(a));
-    }catch(e){console.warn('No se pudieron cargar los pedidos centrales:',e.message||e)}
+    }catch(e){
+      console.error('Pedidos centrales:',e);
+      alert('No se pudieron cargar los pedidos de Supabase. '+(e.message||e));
+      return;
+    }
+  }else{
+    a=JSON.parse(localStorage.getItem(ORDERS)||'[]').sort((x,y)=>new Date(y.created)-new Date(x.created));
   }
   document.getElementById('panel').innerHTML=`
-    <div class="panelHead"><h2>📋 Pedidos</h2><button class="close" onclick="closeModal()">✕</button></div>
+    <div class="panelHead"><h2>📋 Pedidos <span class="muted" style="font-size:12px">(${a.length})</span></h2><button class="close" onclick="closeModal()">✕</button></div>
     ${navTabs('orders')}
-    <div class="modalBtns" style="margin:10px 0"><button class="secondary" onclick="adminOrders()">🔄 Actualizar</button><button class="secondary" onclick="logoutUser()">Cerrar sesión</button></div>
+    <div class="modalBtns" style="margin:10px 0"><button class="secondary" onclick="adminOrders()">🔄 Actualizar pedidos</button><button class="secondary" onclick="logoutUser()">Cerrar sesión</button></div>
     ${a.length?a.map(o=>{
       const list=statusList(o),current=o.status||'recibido';
       const driverInfo=o.type==='Domicilio'?'<br>🛵 <b>Domiciliario:</b> '+esc(o.driverName||'Sin asignar')+(o.driverPhone?' · '+esc(o.driverPhone):''):'';
-      const deleteBtn=isAdmin()?'<button class="mini" onclick="deleteOrder(\''+esc(o.no)+'\')">🗑️ Eliminar pedido</button>':'';
-      return `<div class="order"><b>${esc(o.no)}</b> · <b>${money(o.total)}</b><br>👤 ${esc(o.name)} · 📞 ${esc(o.phone)}<br>🚚 ${esc(o.type)}${o.tableNumber?' · 🪑 Mesa '+esc(o.tableNumber):''} · 💳 ${esc(o.pay)}${driverInfo}<br><div class="muted">${new Date(o.created).toLocaleString('es-CO')}</div>${statusMarkup(o)}<div class="statusActions">${list.map(x=>'<button class="'+(current===x[0]?'active':'')+'" onclick="setOrderStatus(\''+esc(o.no)+'\',\''+x[0]+'\')">'+x[1]+' '+x[2]+'</button>').join('')}</div><div class="statusActions"><button class="mini" onclick="printOrder('${esc(o.no)}')">🧾 Soporte</button><button class="mini" onclick="printComanda('${esc(o.no)}')">🍳 Comanda cocina</button><button class="mini" onclick="registerOrderIncident('${esc(o.no)}','cambio')">📝 Registrar cambio</button><button class="mini" onclick="registerOrderIncident('${esc(o.no)}','devolucion')">↩️ Registrar devolución</button>${deleteBtn}</div></div>`;
-    }).join(''):'<div class="empty">No hay pedidos guardados en Supabase.</div>'}`;
+      const tableInfo=o.type==='En el local'&&o.tableNumber?' · 🪑 Mesa '+esc(o.tableNumber):'';
+      const deleteBtn=isAdmin()?'<button class="mini" onclick="deleteOrder(\\''+esc(o.no)+'\\')">🗑️ Eliminar pedido</button>':'';
+      return `<div class="order"><b>${esc(o.no)}</b> · <b>${money(o.total)}</b><br>👤 ${esc(o.name)} · 📞 ${esc(o.phone)}<br>🚚 ${esc(o.type)}${tableInfo} · 💳 ${esc(o.pay)}${driverInfo}<br><div class="muted">${new Date(o.created).toLocaleString('es-CO')}</div>${statusMarkup(o)}<div class="statusActions">${list.map(x=>'<button class="'+(current===x[0]?'active':'')+'" onclick="setOrderStatus(\\''+esc(o.no)+'\\',\\''+x[0]+'\\')">'+x[1]+' '+x[2]+'</button>').join('')}</div><div class="statusActions"><button class="mini" onclick="printOrder(\\''+esc(o.no)+'\\')">🧾 Soporte</button><button class="mini" onclick="printComanda(\\''+esc(o.no)+'\\')">🍳 Comanda cocina</button><button class="mini" onclick="openStatusWhatsAppFromOrder(\\''+esc(o.no)+'\\',\\''+current+'\\')">📲 Avisar cliente</button>${deleteBtn}</div></div>`;
+    }).join(''):'<div class="empty">No hay pedidos en el sistema central.</div>'}`;
   document.getElementById('modal').classList.add('open');
-}
-function printOrder(no){
+}function printOrder(no){
   const o=JSON.parse(localStorage.getItem(ORDERS)||'[]').find(x=>String(x.no)===String(no));
   if(!o){alert('No encontramos el pedido en este dispositivo.');return}
   const logo=document.querySelector('.brandLogo')?.src||'';
