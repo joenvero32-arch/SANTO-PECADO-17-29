@@ -1177,7 +1177,7 @@ function adminToppings(){
     <div class="panelHead"><h2>🧀 Toppings y adiciones</h2><button class="close" onclick="adminProducts()">✕</button></div>
     <div class="notice" style="margin:12px 0">Crea salsas, quesos, tocineta, carnes y cualquier adicional. Los productos los mostrarán al cliente al pulsar “Agregar”.</div>
     <button class="primary" onclick="newTopping()">＋ Nuevo topping</button>
-    <div style="margin-top:12px">${toppings.map(t=>`<div class="adminItem"><div class="adminTop"><b>${esc(t.name)}</b><b>${t.price?money(t.price):'Gratis'}</b></div><span class="muted">${t.active?'Activo':'Oculto'} · ${t.tracked?'Stock: '+Number(t.stock)+' '+esc(t.unit)+' · Consumo: '+Number(t.usage):'Stock sin configurar'}</span><div class="adminActions"><button class="mini" onclick="editTopping('${t.id}')">✏️ Editar</button><button class="mini" onclick="configureTopping(${t.id})">📦 Inventario</button><button class="mini" onclick="toggleTopping('${t.id}')">${t.active?'Ocultar':'Activar'}</button></div></div>`).join('')}</div>`;
+    <div style="margin-top:12px">${toppings.map(t=>`<div class="adminItem"><div class="adminTop"><b>${esc(t.name)}</b><b>${t.price?money(t.price):'Gratis'}</b></div><span class="muted">${t.active?'Activo':'Oculto'} · ${t.tracked?'Stock: '+Number(t.stock)+' '+esc(t.unit)+' · Consumo: '+Number(t.usage):'Stock sin configurar'}</span><div class="adminActions"><button class="mini" onclick="editTopping('${t.id}')">✏️ Editar</button><button class="mini" onclick="configureTopping('${t.id}')">📦 Inventario</button><button class="mini" onclick="toggleTopping('${t.id}')">${t.active?'Ocultar':'Activar'}</button></div></div>`).join('')}</div>`;
   document.getElementById('modal').classList.add('open');
 }
 function newTopping(){
