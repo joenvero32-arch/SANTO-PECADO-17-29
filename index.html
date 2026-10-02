@@ -372,7 +372,7 @@ function render(){
   const cats=[...new Set(['Todos',...categories.filter(Boolean).map(String),...productCats])];
   document.getElementById('cats').innerHTML=cats.map(c=>`<button type="button" class="cat ${currentCat===c?'active':''}" data-cat="${esc(c)}" onclick="setCategory(this.dataset.cat)">${esc(c)}</button>`).join('');
   const q=(document.getElementById('search').value||'').toLowerCase().trim();
-  const list=products.filter(p=>p.active&&(currentCat==='Todos'||p.cat===currentCat)&&(!q||p.name.toLowerCase().includes(q)||p.desc.toLowerCase().includes(q)));
+  const list=products.filter(p=>p&&p.active!==false&&(currentCat==='Todos'||String(p.cat||'')===String(currentCat))&&(!q||String(p.name||'').toLowerCase().includes(q)||String(p.desc||'').toLowerCase().includes(q)));
   document.getElementById('products').innerHTML=list.length?list.map(p=>`
     <article class="card">
       <div class="photo">${p.img?`<img src="${p.img}" alt="${esc(p.name)}">`:`<div class="placeholder">${p.emoji||'🍔'}</div>`}<span class="badge">DESTACADO</span></div>
