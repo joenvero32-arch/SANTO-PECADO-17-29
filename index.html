@@ -298,7 +298,7 @@ function requirePermission(permission){if(!can(permission)){alert('Tu usuario no
 function navTabs(active){
   if(!currentUser)return '';
   if(!isAdmin()) return `<div class="adminTabs"><button class="tab ${active==='orders'?'active':''}" onclick="adminOrders()">📋 Pedidos</button><button class="tab ${active==='kitchen'?'active':''}" onclick="adminKitchen()">🍳 Cocina</button><button class="tab ${active==='inventory'?'active':''}" onclick="adminInventory()">📦 Inventario</button><button class="tab" onclick="logoutUser()">🚪 Cerrar sesión</button></div>`;
-  return `<div class="adminTabs"><button class="tab ${active==='dashboard'?'active':''}" onclick="adminDashboard()">📊 Inicio</button><button class="tab ${active==='products'?'active':''}" onclick="adminProducts()">Productos</button><button class="tab ${active==='categories'?'active':''}" onclick="adminCategories()">Categorías</button><button class="tab ${active==='orders'?'active':''}" onclick="adminOrders()">Pedidos</button><button class="tab ${active==='kitchen'?'active':''}" onclick="adminKitchen()">🍳 Cocina</button><button class="tab ${active==='sales'?'active':''}" onclick="adminSales()">Ventas</button><button class="tab ${active==='cash'?'active':''}" onclick="adminCash()">💵 Caja</button><button class="tab ${active==='reports'?'active':''}" onclick="adminReports()">📈 Reportes</button><button class="tab ${active==='delivery'?'active':''}" onclick="adminDomicilios()">🛵 Domicilios</button><button class="tab ${active==='inventory'?'active':''}" onclick="adminInventory()">Inventario</button><button class="tab ${active==='toppings'?'active':''}" onclick="adminToppings()">Toppings</button><button class="tab ${active==='users'?'active':''}" onclick="adminUsers()">Usuarios</button><button class="tab ${active==='customers'?'active':''}" onclick="adminCustomers()">👥 Clientes</button><button class="tab ${active==='promotions'?'active':''}" onclick="adminPromotions()">🎁 Promociones</button><button class="tab ${active==='audit'?'active':''}" onclick="adminAudit()">🛡️ Auditoría</button><button class="tab ${active==='settings'?'active':''}" onclick="adminSettings()">Configuración</button></div>`;
+  return `<div class="adminTabs"><button class="tab ${active==='dashboard'?'active':''}" onclick="adminDashboard()">📊 Inicio</button><button class="tab ${active==='products'?'active':''}" onclick="adminProducts()">Productos</button><button class="tab ${active==='categories'?'active':''}" onclick="adminCategories()">Categorías</button><button class="tab ${active==='orders'?'active':''}" onclick="adminOrders()">Pedidos</button><button class="tab ${active==='kitchen'?'active':''}" onclick="adminKitchen()">🍳 Cocina</button><button class="tab ${active==='sales'?'active':''}" onclick="adminSales()">Ventas</button><button class="tab ${active==='cash'?'active':''}" onclick="adminCash()">💵 Caja</button><button class="tab ${active==='expenses'?'active':''}" onclick="adminExpenses()">💸 Gastos</button><button class="tab ${active==='reports'?'active':''}" onclick="adminReports()">📈 Reportes</button><button class="tab ${active==='delivery'?'active':''}" onclick="adminDomicilios()">🛵 Domicilios</button><button class="tab ${active==='inventory'?'active':''}" onclick="adminInventory()">Inventario</button><button class="tab ${active==='toppings'?'active':''}" onclick="adminToppings()">Toppings</button><button class="tab ${active==='users'?'active':''}" onclick="adminUsers()">Usuarios</button><button class="tab ${active==='customers'?'active':''}" onclick="adminCustomers()">👥 Clientes</button><button class="tab ${active==='promotions'?'active':''}" onclick="adminPromotions()">🎁 Promociones</button><button class="tab ${active==='audit'?'active':''}" onclick="adminAudit()">🛡️ Auditoría</button><button class="tab ${active==='settings'?'active':''}" onclick="adminSettings()">Configuración</button></div>`;
 }
 function logoutUser(){currentUser=null;sessionStorage.removeItem(SESSION);closeModal();}
 
@@ -1075,13 +1075,56 @@ function adminDashboard(){
   <div class="dashSection"><div class="dashSectionHead"><h3>⚠️ Atención</h3><button class="mini" onclick="adminInventory()">Inventario</button></div>${low.length?low.slice(0,8).map(p=>`<div class="alertRow"><span>${esc(p.name)}</span><b>${Number(p.stock||0)} / mín. ${Number(p.minStock||0)}</b></div>`).join(''):'<div class="successBox">✓ No hay productos terminados bajo el mínimo.</div>'}</div>`;
   document.getElementById('modal').classList.add('open');
 }
-function adminCash(){
+async function getBusinessExpenses(from,to){
+  if(!SP_DB_ON||!SP_DB?.rpc)return [];
+  const r=await SP_DB.rpc('sp_get_business_expenses',{p_from:from||null,p_to:to||null});
+  if(r.error)throw r.error;
+  return r.data||[];
+}
+async function addBusinessExpense(){
+  if(!isAdmin())return;
+  const t=prompt('Tipo: 1 Nómina | 2 Gasto','2'); if(t===null)return;
+  const type=String(t).trim()==='1'?'Nómina':'Gasto';
+  const category=prompt('Categoría:',type==='Nómina'?'Salarios':''); if(category===null||!category.trim())return;
+  const description=prompt('Descripción:'); if(description===null||!description.trim())return;
+  const employee=type==='Nómina'?(prompt('Trabajador (opcional):')||''):'';
+  const method=prompt('Medio: 1 Efectivo | 2 Nequi | 3 Bancolombia | 4 Tarjeta | 5 Otro','1'); if(method===null)return;
+  const mm={1:'Efectivo',2:'Nequi',3:'Bancolombia',4:'Tarjeta',5:'Otro'}; const payment=mm[String(method).trim()]||String(method).trim();
+  const raw=prompt('Valor:','0'); if(raw===null)return;
+  const amount=Number(String(raw).replace(/[^0-9.-]/g,'')); if(!Number.isFinite(amount)||amount<=0){alert('Valor no válido.');return}
+  const notes=prompt('Observación (opcional):','')||'';
+  const r=await SP_DB.rpc('sp_add_business_expense',{p_expense_date:dayKey(new Date()),p_expense_type:type,p_category:category.trim(),p_description:description.trim(),p_employee_name:employee.trim()||null,p_payment_method:payment,p_amount:amount,p_notes:notes.trim()||null});
+  if(r.error){alert('No se pudo registrar: '+r.error.message);return}
+  auditLog('Registro de '+type,category.trim()+' · '+description.trim()+' · '+money(amount));
+  alert('REGISTRO GUARDADO\n'+type+' · '+money(amount)+' · '+payment);
+  adminExpenses();
+}
+async function adminExpenses(){
+  if(!isAdmin()){alert('Solo el administrador o dueño.');return}
+  let list=[];
+  try{list=await getBusinessExpenses(dayKey(new Date(Date.now()-29*86400000)),dayKey(new Date()))}catch(e){alert('No se pudieron cargar los gastos: '+e.message);return}
+  const total=list.reduce((a,x)=>a+Number(x.amount||0),0);
+  const payroll=list.filter(x=>x.expense_type==='Nómina').reduce((a,x)=>a+Number(x.amount||0),0);
+  const other=list.filter(x=>x.expense_type==='Gasto').reduce((a,x)=>a+Number(x.amount||0),0);
+  let html='<div class="panelHead"><h2>💸 Nómina y gastos</h2><button class="close" onclick="adminDashboard()">✕</button></div>';
+  html+=navTabs('expenses');
+  html+='<div class="statgrid dashGrid"><div class="stat"><small>Últimos 30 días</small><b>'+money(total)+'</b></div><div class="stat"><small>Nómina</small><b>'+money(payroll)+'</b></div><div class="stat"><small>Otros gastos</small><b>'+money(other)+'</b></div></div>';
+  html+='<div class="notice">Los registros de nómina y gastos se descuentan en el resumen del cierre.</div><div class="adminActions"><button class="primary" onclick="addBusinessExpense()">➕ Registrar nómina/gasto</button></div>';
+  html+='<div class="dashSection"><h3>Registros recientes</h3>';
+  html+=list.map(x=>'<div class="adminItem"><b>'+esc(x.expense_type)+' · '+money(x.amount)+'</b><br>'+esc(x.category)+' · '+esc(x.description)+'<br><span class="muted">'+(x.employee_name?esc(x.employee_name)+' · ':'')+esc(x.payment_method)+'</span></div>').join('');
+  if(!list.length)html+='<div class="empty">No hay registros en los últimos 30 días.</div>';
+  html+='</div>';
+  document.getElementById('panel').innerHTML=html; document.getElementById('modal').classList.add('open');
+}
+async function adminCash(){
   if(!isAdmin()){alert('Solo el administrador o dueño puede cerrar caja.');return}
-  const today=dayKey(new Date()), list=salesForDay(today), pay=paymentTotals(list), expected=Number(pay['Efectivo']||0);
+  const today=dayKey(new Date()), list=salesForDay(today), pay=paymentTotals(list), salesTotal=list.reduce((a,o)=>a+Number(o.total||0),0);
+  let expenses=[]; try{expenses=await getBusinessExpenses(today,today)}catch(e){console.warn('Gastos del día no disponibles:',e.message||e)}
+  const expensesTotal=expenses.reduce((a,x)=>a+Number(x.amount||0),0), cashExpenses=expenses.filter(x=>x.payment_method==='Efectivo').reduce((a,x)=>a+Number(x.amount||0),0), expected=Number(pay['Efectivo']||0)-cashExpenses;
   const closed=cashClosures.find(c=>c.day===today);
   const opening=closed&&closed.opening!=null?Number(closed.opening):0;
   document.getElementById('panel').innerHTML=`<div class="panelHead"><div><div class="dashKicker">CONTROL FINANCIERO</div><h2>💵 Caja del día</h2></div><button class="close" onclick="adminDashboard()">✕</button></div>${navTabs('cash')}
-  <div class="cashHero"><span>VENTAS DE HOY</span><b>${money(list.reduce((a,o)=>a+Number(o.total||0),0))}</b><small>${list.length} operación(es) · Base inicial: ${money(opening)}</small></div>
+  <div class="cashHero"><span>VENTAS DE HOY</span><b>${money(salesTotal)}</b><small>${list.length} operación(es) · Base inicial: ${money(opening)}</small></div><div class="cashGrid"><div class="cashCard"><small>💸 Gastos de hoy</small><b>${money(expensesTotal)}</b></div><div class="cashCard"><small>📊 Neto del día</small><b>${money(salesTotal-expensesTotal)}</b></div></div><div class="dashSection"><div class="dashSectionHead"><h3>📋 Gastos de hoy</h3><button class="mini" onclick="adminExpenses()">Ver gastos</button></div>${expenses.map(x=>'<div class="alertRow"><span>'+esc(x.expense_type)+' · '+esc(x.category)+' · '+esc(x.description)+'</span><b>-'+money(x.amount)+'</b></div>').join('')||'<div class="empty">No hay gastos registrados hoy.</div>'}</div>
   <div class="cashGrid">${Object.entries(pay).map(([k,v])=>`<div class="cashCard"><small>${esc(k)}</small><b>${money(v)}</b></div>`).join('')||'<div class="empty">No hay ventas registradas hoy.</div>'}</div>
   <div class="adminItem"><div class="adminTop"><b>💰 Efectivo esperado</b><b>${money(expected)}</b></div><div class="muted">Corresponde únicamente a las ventas registradas como Efectivo.</div><div class="adminActions"><button class="mini" onclick="openCash('${today}')">🔓 Abrir caja</button><button class="primary" onclick="closeCash('${today}',${expected})">🔐 Registrar cierre de caja</button></div></div>
   ${closed?`<div class="notice" style="margin-top:12px">Último cierre de hoy: <b>${new Date(closed.date).toLocaleString('es-CO')}</b> · Efectivo contado: <b>${money(closed.counted)}</b> · Diferencia: <b>${money(closed.difference)}</b> · ${esc(closed.user)}</div>`:''}
