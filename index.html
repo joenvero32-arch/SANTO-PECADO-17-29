@@ -163,14 +163,28 @@ async function spSyncCustomers(){
 }
 window.SantoPecadoCentral={get connected(){return SP_DB_ON},get lastSync(){return SP_DB_LAST||localStorage.getItem('sp_central_last_sync')||''},sync:async()=>{await spSyncCatalog();await spSyncCustomers()}};
 window.loadPublicCatalog=async function(){
-  if(!SP_DB_ON)return;
   try{
-    const {data,error}=await SP_DB.rpc('sp_get_public_catalog');
-    if(error)throw error;
-    const payload=data||{};
-    const centralCats=Array.isArray(payload.categories)?payload.categories:[];
-    const centralProducts=Array.isArray(payload.products)?payload.products:[];
-    const centralToppings=Array.isArray(payload.toppings)?payload.toppings:[];
+    let payload=null, error=null;
+    if(SP_DB_ON && SP_DB?.rpc){
+      const r=await SP_DB.rpc('sp_get_public_catalog');
+      payload=r.data; error=r.error;
+    }
+    if(error || !payload){
+      const r=await fetch(SP_SUPABASE_URL+'/rest/v1/rpc/sp_get_public_catalog',{
+        method:'POST',
+        headers:{
+          'apikey':SP_SUPABASE_PUBLISHABLE_KEY,
+          'Authorization':'Bearer '+SP_SUPABASE_PUBLISHABLE_KEY,
+          'Content-Type':'application/json'
+        },
+        body:'{}'
+      });
+      if(!r.ok)throw new Error('RPC catálogo HTTP '+r.status);
+      payload=await r.json();
+    }
+    const centralCats=Array.isArray(payload?.categories)?payload.categories:[];
+    const centralProducts=Array.isArray(payload?.products)?payload.products:[];
+    const centralToppings=Array.isArray(payload?.toppings)?payload.toppings:[];
     if(!centralCats.length || !centralProducts.length){
       console.warn('Catálogo central vacío; se conserva el catálogo local.');
       return;
@@ -190,7 +204,8 @@ window.loadPublicCatalog=async function(){
     localStorage.setItem(KEY,JSON.stringify(products));
     localStorage.setItem(CATS,JSON.stringify(categories));
     localStorage.setItem(TOP,JSON.stringify(toppings));
-  }catch(e){console.warn('No se pudo cargar el catálogo central:',e.message||e)}
+    console.log('Catálogo público cargado:',categories.length,'categorías,',products.length,'productos');
+  }catch(e){console.error('No se pudo cargar el catálogo central:',e.message||e)}
 };
 </script>
 </head>
