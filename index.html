@@ -895,8 +895,10 @@ async function syncOneProductCentral(p){
   const categoryName=String(p.cat||'').trim();
   let categoryId=null;
   if(categoryName){const {data:cat,error:catError}=await SP_DB.from('categories').select('id').eq('name',categoryName).limit(1).maybeSingle();if(catError)throw catError;categoryId=cat?.id||null;}
-  const row={id:spMap('prod',p.id),category_id:categoryId,name:String(p.name||''),description:String(p.desc||''),price:Number(p.price||0),image_url:String(p.img||''),stock:Number(p.stock||0),minimum_stock:Number(p.minStock||0),active:p.active!==false,sort_order:Number(p.sort_order||0)};
-  const {error}=await SP_DB.from('products').upsert(row,{onConflict:'id'});if(error)throw error;
+  const productId=spMap('prod',p.id);
+  const {data,error}=await SP_DB.rpc('admin_update_product',{p_product_id:productId,p_name:String(p.name||''),p_category_id:categoryId,p_description:String(p.desc||''),p_price:Number(p.price||0),p_stock:Number(p.stock||0),p_minimum_stock:Number(p.minStock||0),p_sort_order:Number(p.sort_order||0),p_active:p.active!==false,p_image_url:null});
+  if(error)throw error;
+  if(!data||String(data.id)!==String(productId))throw new Error('Supabase no confirmó la actualización del producto');
 }
 
 async function syncProductStockCentral(p){
