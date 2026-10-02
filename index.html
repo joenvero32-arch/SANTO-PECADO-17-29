@@ -904,8 +904,13 @@ async function syncOneProductCentral(p){
 async function syncProductStockCentral(p){
   if(!SP_DB_ON||!p)return;
   const id=spMap('prod',p.id);
-  const {error}=await SP_DB.from('products').update({stock:Number(p.stock||0),minimum_stock:Number(p.minStock||0),updated_at:new Date().toISOString()}).eq('id',id);
+  const {data,error}=await SP_DB.rpc('admin_update_product_stock',{
+    p_product_id:id,
+    p_stock:Number(p.stock||0),
+    p_minimum_stock:Number(p.minStock||0)
+  });
   if(error)throw error;
+  if(!data||String(data.id)!==String(id))throw new Error('Supabase no confirmó la actualización del inventario');
 }
 async function syncToppingCentral(t){
   if(!SP_DB_ON||!t)return;
