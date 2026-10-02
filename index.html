@@ -898,6 +898,19 @@ async function syncOneProductCentral(p){
   const row={id:spMap('prod',p.id),category_id:categoryId,name:String(p.name||''),description:String(p.desc||''),price:Number(p.price||0),image_url:String(p.img||''),stock:Number(p.stock||0),minimum_stock:Number(p.minStock||0),active:p.active!==false,sort_order:Number(p.sort_order||0)};
   const {error}=await SP_DB.from('products').upsert(row,{onConflict:'id'});if(error)throw error;
 }
+
+async function syncProductStockCentral(p){
+  if(!SP_DB_ON||!p)return;
+  const id=spMap('prod',p.id);
+  const {error}=await SP_DB.from('products').update({stock:Number(p.stock||0),minimum_stock:Number(p.minStock||0),updated_at:new Date().toISOString()}).eq('id',id);
+  if(error)throw error;
+}
+async function syncToppingCentral(t){
+  if(!SP_DB_ON||!t)return;
+  const id=spMap('top',t.id);
+  const {error}=await SP_DB.from('toppings').upsert({id,name:String(t.name||''),description:String(t.desc||''),price:Number(t.price||0),unit:String(t.unit||'porciones'),consumption_per_addition:Number(t.usage||1),stock:Number(t.stock||0),minimum_stock:Number(t.minStock||0),active:t.active!==false},{onConflict:'id'});
+  if(error)throw error;
+}
 async function saveProduct(id){
   if(!isAdmin()){alert('Solo el administrador o dueño puede modificar productos.');return}
   const key=id==null||id===''?null:String(id);
@@ -1090,7 +1103,7 @@ function adminInventory(){
     <div class="notice" style="margin:12px 0">Cada venta descuenta 1 unidad del producto terminado. Los extras descuentan solamente el inventario del topping agregado. Los ingredientes incluidos en la receta NO se descuentan por separado.</div>
     ${navTabs('inventory')}
     ${products.map(p=>`<div class="adminItem"><div class="adminTop"><b>${esc(p.name)}</b><b class="${p.stock<=p.minStock?'low':''}">${Number(p.stock||0)} und.</b></div><span class="muted">Mínimo: ${Number(p.minStock||0)} · ${esc(p.cat)}</span>
-      <div class="adminActions"><button class="mini" onclick="stockMove(${p.id},1)">＋ Entrada</button>${isAdmin()?`<button class="mini" onclick="stockMove(${p.id},-1)">− Salida</button><button class="mini" onclick="stockSet(${p.id})">✏️ Ajustar</button>`:''}</div></div>`).join('')}`;
+      <div class="adminActions"><button class="mini" onclick="stockMove('${p.id}',1)">＋ Entrada</button>${isAdmin()?`<button class="mini" onclick="stockMove('${p.id}',-1)">− Salida</button><button class="mini" onclick="stockSet('${p.id}')">✏️ Ajustar</button>`:''}</div></div>`).join('')}`;
   document.getElementById('modal').classList.add('open');
 }
 function adminToppingInventory(){
@@ -1101,7 +1114,7 @@ function adminToppingInventory(){
     ${navTabs('inventory')}
     ${toppings.map(t=>`<div class="adminItem"><div class="adminTop"><b>${esc(t.name)}</b><b class="${t.tracked&&Number(t.stock)<=Number(t.minStock)?'low':''}">${t.tracked?Number(t.stock)+' '+esc(t.unit):'Sin control'}</b></div>
       <span class="muted">${t.tracked?'Consumo por adición: '+Number(t.usage)+' '+esc(t.unit)+' · Mínimo: '+Number(t.minStock):'Configura sus existencias para empezar a descontarlas automáticamente.'}</span>
-      <div class="adminActions">${isAdmin()?`<button class="mini" onclick="configureTopping(${t.id})">⚙️ Configurar</button>`:''}<button class="mini" onclick="toppingMove(${t.id},1)">＋ Entrada</button>${isAdmin()?`<button class="mini" onclick="toppingMove(${t.id},-1)">− Salida</button><button class="mini" onclick="toppingSet(${t.id})">✏️ Ajustar</button>`:''}</div></div>`).join('')}`;
+      <div class="adminActions">${isAdmin()?`<button class="mini" onclick="configureTopping('${t.id}')">⚙️ Configurar</button>`:''}<button class="mini" onclick="toppingMove('${t.id}',1)">＋ Entrada</button>${isAdmin()?`<button class="mini" onclick="toppingMove('${t.id}',-1)">− Salida</button><button class="mini" onclick="toppingSet('${t.id}')">✏️ Ajustar</button>`:''}</div></div>`).join('')}`;
   document.getElementById('modal').classList.add('open');
 }
 function numberAsk(message,defaultValue,allowZero=true){
@@ -1119,7 +1132,7 @@ function configureTopping(id){
   const wasTracked=t.tracked,previous=Number(t.stock);
   Object.assign(t,{unit:unit.trim(),usage,stock,minStock,tracked:true});
   movements.unshift({date:new Date().toISOString(),kind:'topping',product:t.name,type:wasTracked?'Configuración de topping':'Inicio de control de topping',qty:stock-previous,unit:t.unit,stock});
-  save();adminToppingInventory();
+  save();syncToppingCentral(t).catch(e=>alert('Topping guardado localmente, pero no se pudo sincronizar con Supabase: '+(e.message||e)));adminToppingInventory();
 }
 function toppingMove(id,dir){
   if(!requirePermission('allowInventory'))return;
@@ -1128,13 +1141,13 @@ function toppingMove(id,dir){
   const q=numberAsk('Cantidad en '+t.unit,1,false);if(q===null)return;
   if(dir<0&&q>Number(t.stock)){alert('No puedes retirar más de lo disponible.');return;}
   t.stock=Number(t.stock)+dir*q;
-  movements.unshift({date:new Date().toISOString(),kind:'topping',product:t.name,type:dir>0?'Entrada':'Salida manual',qty:dir*q,unit:t.unit,stock:t.stock});save();adminToppingInventory();
+  movements.unshift({date:new Date().toISOString(),kind:'topping',product:t.name,type:dir>0?'Entrada':'Salida manual',qty:dir*q,unit:t.unit,stock:t.stock});save();syncToppingCentral(t).catch(e=>alert('Inventario del topping actualizado localmente, pero no se pudo sincronizar: '+(e.message||e)));adminToppingInventory();
 }
 function toppingSet(id){
   if(!isAdmin()){alert('Solo el administrador o dueño puede ajustar inventario.');return}
   const t=toppings.find(x=>x.id===id);if(!t.tracked){alert('Primero pulsa Configurar para activar el inventario.');return;}
   const q=numberAsk('Nuevo inventario de '+t.name+' ('+t.unit+')',t.stock);if(q===null)return;
-  movements.unshift({date:new Date().toISOString(),kind:'topping',product:t.name,type:'Ajuste',qty:q-Number(t.stock),unit:t.unit,stock:q});t.stock=q;save();adminToppingInventory();
+  movements.unshift({date:new Date().toISOString(),kind:'topping',product:t.name,type:'Ajuste',qty:q-Number(t.stock),unit:t.unit,stock:q});t.stock=q;save();syncToppingCentral(t).catch(e=>alert('Inventario del topping actualizado localmente, pero no se pudo sincronizar: '+(e.message||e)));adminToppingInventory();
 }
 function adminInventoryHistory(){
   document.getElementById('panel').innerHTML=`<div class="panelHead"><h2>📋 Movimientos de inventario</h2><button class="close" onclick="adminProducts()">✕</button></div>
@@ -1145,18 +1158,18 @@ function adminInventoryHistory(){
 function stockMove(id,dir){
   if(!requirePermission('allowInventory'))return;
   if(!isAdmin() && dir<0){alert('El empleado solo puede registrar entradas de inventario.');return}
-  const p=products.find(x=>x.id===id),q=Number(prompt('Cantidad','1'));
+  const p=products.find(x=>String(x.id)===String(id)),q=Number(prompt('Cantidad','1'));
   if(!q||q<0)return;
   p.stock=Math.max(0,Number(p.stock||0)+dir*q);
   movements.unshift({date:new Date().toISOString(),product:p.name,type:dir>0?'Entrada':'Salida',qty:dir*q,stock:p.stock});
-  save();adminInventory();
+  save();syncProductStockCentral(p).catch(e=>alert('Inventario local actualizado, pero no se pudo sincronizar con Supabase: '+(e.message||e)));adminInventory();
 }
 function stockSet(id){
   if(!isAdmin()){alert('Solo el administrador o dueño puede ajustar inventario.');return}
-  const p=products.find(x=>x.id===id),q=Number(prompt('Nuevo stock',p.stock));
+  const p=products.find(x=>String(x.id)===String(id)),q=Number(prompt('Nuevo stock',p.stock));
   if(isNaN(q)||q<0)return;
   movements.unshift({date:new Date().toISOString(),product:p.name,type:'Ajuste',qty:q-p.stock,stock:q});
-  p.stock=q;save();adminInventory();
+  p.stock=q;save();syncProductStockCentral(p).catch(e=>alert('Inventario local actualizado, pero no se pudo sincronizar con Supabase: '+(e.message||e)));adminInventory();
 }
 function adminToppings(){
   if(!isAdmin()){alert('Solo el administrador o dueño tiene acceso a esta sección.');return}
@@ -1164,7 +1177,7 @@ function adminToppings(){
     <div class="panelHead"><h2>🧀 Toppings y adiciones</h2><button class="close" onclick="adminProducts()">✕</button></div>
     <div class="notice" style="margin:12px 0">Crea salsas, quesos, tocineta, carnes y cualquier adicional. Los productos los mostrarán al cliente al pulsar “Agregar”.</div>
     <button class="primary" onclick="newTopping()">＋ Nuevo topping</button>
-    <div style="margin-top:12px">${toppings.map(t=>`<div class="adminItem"><div class="adminTop"><b>${esc(t.name)}</b><b>${t.price?money(t.price):'Gratis'}</b></div><span class="muted">${t.active?'Activo':'Oculto'} · ${t.tracked?'Stock: '+Number(t.stock)+' '+esc(t.unit)+' · Consumo: '+Number(t.usage):'Stock sin configurar'}</span><div class="adminActions"><button class="mini" onclick="editTopping(${t.id})">✏️ Editar</button><button class="mini" onclick="configureTopping(${t.id})">📦 Inventario</button><button class="mini" onclick="toggleTopping(${t.id})">${t.active?'Ocultar':'Activar'}</button></div></div>`).join('')}</div>`;
+    <div style="margin-top:12px">${toppings.map(t=>`<div class="adminItem"><div class="adminTop"><b>${esc(t.name)}</b><b>${t.price?money(t.price):'Gratis'}</b></div><span class="muted">${t.active?'Activo':'Oculto'} · ${t.tracked?'Stock: '+Number(t.stock)+' '+esc(t.unit)+' · Consumo: '+Number(t.usage):'Stock sin configurar'}</span><div class="adminActions"><button class="mini" onclick="editTopping('${t.id}')">✏️ Editar</button><button class="mini" onclick="configureTopping(${t.id})">📦 Inventario</button><button class="mini" onclick="toggleTopping('${t.id}')">${t.active?'Ocultar':'Activar'}</button></div></div>`).join('')}</div>`;
   document.getElementById('modal').classList.add('open');
 }
 function newTopping(){
@@ -1174,11 +1187,11 @@ function newTopping(){
 }
 function editTopping(id){
   if(!isAdmin()){alert('Solo el administrador o dueño puede modificar toppings.');return}
-  const t=toppings.find(x=>x.id===id),name=prompt('Nombre',t.name);if(name===null)return;
+  const t=toppings.find(x=>String(x.id)===String(id));if(!t){alert('No se encontró el topping.');return}const name=prompt('Nombre',t.name);if(name===null)return;
   const price=Number(prompt('Precio',t.price));t.name=name.trim();t.price=isNaN(price)?0:price;save();adminToppings();
 }
 function toggleTopping(id){
-  if(!isAdmin()){alert('Solo el administrador o dueño puede modificar toppings.');return}const t=toppings.find(x=>x.id===id);t.active=!t.active;save();adminToppings();}
+  if(!isAdmin()){alert('Solo el administrador o dueño puede modificar toppings.');return}const t=toppings.find(x=>String(x.id)===String(id));if(!t)return;t.active=!t.active;save();adminToppings();}
 
 function queueKitchenOrder(no){
   const q=JSON.parse(localStorage.getItem('KITCHEN_QUEUE')||'[]');
