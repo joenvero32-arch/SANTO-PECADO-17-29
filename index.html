@@ -706,6 +706,7 @@ function openStatusWhatsAppFromOrder(no,status){
 async function trackOrder(noFromButton){
   if(spStatusPollTimer){clearInterval(spStatusPollTimer);spStatusPollTimer=null}
   const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
+  if('Notification' in window && Notification.permission==='default'){try{Notification.requestPermission()}catch(e){}}
   if(!noFromButton){
     noFromButton=localStorage.getItem(LAST_ORDER)||'';
     if(!noFromButton){const entered=prompt('Escribe tu número de pedido (ej. SP-123456):');if(entered===null||!entered.trim())return;noFromButton=entered.trim().toUpperCase();}
