@@ -1230,7 +1230,7 @@ function printComanda(no){
   w.document.close();
   const q=JSON.parse(localStorage.getItem('KITCHEN_QUEUE')||'[]');const item=q.find(x=>String(x.no)===String(no));if(item){item.printed=true;item.printedAt=new Date().toISOString();item.printedBy=currentUser?.username||'usuario';localStorage.setItem('KITCHEN_QUEUE',JSON.stringify(q));}
 }
-async function adminOrders(){
+async async function adminOrders(){
   if(!can('allowOrders')){alert('Tu usuario no tiene permiso para gestionar pedidos.');return}
   let a=JSON.parse(localStorage.getItem(ORDERS)||'[]');
   if(currentUser?.central && SP_DB_ON){
@@ -1265,61 +1265,7 @@ async function adminOrders(){
     }).join(''):'<div class="empty">No hay pedidos guardados en Supabase.</div>'}`;
   document.getElementById('modal').classList.add('open');
 }
-async function adminOrders(silent=false){
-  if(spAdminOrderPollTimer){clearInterval(spAdminOrderPollTimer);spAdminOrderPollTimer=null}
-  if(SP_DB_ON && !currentUser?.central){
-    try{
-      const {data:{session}}=await SP_DB.auth.getSession();
-      if(session?.user?.id){
-        const {data:profile}=await SP_DB.from('app_users').select('*').eq('id',session.user.id).maybeSingle();
-        if(profile?.role==='admin'&&profile.active!==false){
-          currentUser={...profile,user:profile.username||'admin',name:profile.full_name||'Administrador',allowOrders:true,allowInventory:!!profile.can_manage_inventory,allowCash:!!profile.can_manage_cash,central:true};
-          sessionStorage.setItem(SESSION,JSON.stringify(currentUser));
-        }
-      }
-    }catch(e){console.warn('Sesión central:',e)}
-  }
-  if(SP_DB_ON && !currentUser?.central){if(!silent)openAdmin();return}
-  if(!can('allowOrders')){if(!silent)alert('Tu cuenta no tiene permiso para gestionar pedidos.');return}
-  let a=[];
-  if(SP_DB_ON && currentUser?.central){
-    try{
-      const {data,error}=await SP_DB.rpc('sp_get_admin_orders');
-      if(error)throw error;
-      let rows=[]; if(Array.isArray(data))rows=data; else if(typeof data==='string'){try{const parsed=JSON.parse(data);rows=Array.isArray(parsed)?parsed:[]}catch(e){rows=[]}} else if(data&&typeof data==='object'){rows=Array.isArray(data.value)?data.value:Array.isArray(data.orders)?data.orders:[data];}
-      a=rows.map(o=>({
-        no:o.order_number,centralId:o.id,name:o.customer_name,phone:o.customer_phone,
-        type:o.order_type==='delivery'?'Domicilio':o.order_type==='pickup'?'Recoger en el local':'En el local',
-        tableNumber:o.table_number||null,pay:o.payment_method||'',addr:o.address||'',obs:o.observations||'',
-        total:Number(o.total||0),created:o.created_at,updated:o.updated_at,status:o.status||'recibido',
-        statusHistory:[],detail:(o.items||[]).map(it=>{
-          const tops=(it.toppings||[]).map(t=>t.name+(Number(t.price||0)?' +'+money(t.price):'')).join(', ');
-          return (it.quantity||1)+' x '+(it.product_name||'Producto')+(tops?' + '+tops:'')+(it.notes?' · Nota: '+it.notes:'');
-        }).join('\n')
-      }));
-      localStorage.setItem(ORDERS,JSON.stringify(a));
-    }catch(e){
-      console.error('Pedidos centrales:',e);
-      alert('No se pudieron cargar los pedidos de Supabase. '+(e.message||e));
-      return;
-    }
-  }else{
-    a=JSON.parse(localStorage.getItem(ORDERS)||'[]').sort((x,y)=>new Date(y.created)-new Date(x.created));
-  }
-  document.getElementById('panel').innerHTML=`
-    <div class="panelHead"><h2>📋 Pedidos <span class="muted" style="font-size:12px">(${a.length})</span></h2><button class="close" onclick="closeModal()">✕</button></div>
-    ${navTabs('orders')}
-    <div class="modalBtns" style="margin:10px 0"><button class="secondary" onclick="adminOrders()">🔄 Actualizar pedidos</button><button class="secondary" onclick="logoutUser()">Cerrar sesión</button></div>
-    ${a.length?a.map(o=>{
-      const list=statusList(o),current=o.status||'recibido';
-      const driverInfo=o.type==='Domicilio'?'<br>🛵 <b>Domiciliario:</b> '+esc(o.driverName||'Sin asignar')+(o.driverPhone?' · '+esc(o.driverPhone):''):'';
-      const tableInfo=o.type==='En el local'&&o.tableNumber?' · 🪑 Mesa '+esc(o.tableNumber):'';
-      const deleteBtn=isAdmin()?'<button class="mini" onclick="deleteOrder(\\''+esc(o.no)+'\\')">🗑️ Eliminar pedido</button>':'';
-      return `<div class="order"><b>${esc(o.no)}</b> · <b>${money(o.total)}</b><br>👤 ${esc(o.name)} · 📞 ${esc(o.phone)}<br>🚚 ${esc(o.type)}${tableInfo} · 💳 ${esc(o.pay)}${driverInfo}<br><div class="muted">${new Date(o.created).toLocaleString('es-CO')}</div>${statusMarkup(o)}<div class="statusActions">${list.map(x=>'<button class="'+(current===x[0]?'active':'')+'" onclick="setOrderStatus(\\''+esc(o.no)+'\\',\\''+x[0]+'\\')">'+x[1]+' '+x[2]+'</button>').join('')}</div><div class="statusActions"><button class="mini" onclick="printOrder(\\''+esc(o.no)+'\\')">🧾 Soporte</button><button class="mini" onclick="printComanda(\\''+esc(o.no)+'\\')">🍳 Comanda cocina</button><button class="mini" onclick="openStatusWhatsAppFromOrder(\\''+esc(o.no)+'\\',\\''+current+'\\')">📲 Avisar cliente</button>${deleteBtn}</div></div>`;
-    }).join(''):'<div class="empty">No hay pedidos en el sistema central.</div>'}`;
-  document.getElementById('modal').classList.add('open');
-  if(SP_DB_ON&&currentUser?.central)spAdminOrderPollTimer=setInterval(()=>adminOrders(true),5000);
-}function printOrder(no){
+function printOrder(no){
   const o=JSON.parse(localStorage.getItem(ORDERS)||'[]').find(x=>String(x.no)===String(no));
   if(!o){alert('No encontramos el pedido en este dispositivo.');return}
   const logo=document.querySelector('.brandLogo')?.src||'';
