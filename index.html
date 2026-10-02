@@ -1286,7 +1286,7 @@ async function adminOrders(silent=false){
     try{
       const {data,error}=await SP_DB.rpc('sp_get_admin_orders');
       if(error)throw error;
-      let rows=[]; if(Array.isArray(data))rows=data; else if(typeof data==='string'){try{const parsed=JSON.parse(data);rows=Array.isArray(parsed)?parsed:[]}catch(e){rows=[]}} else if(Array.isArray(data?.value))rows=data.value;
+      let rows=[]; if(Array.isArray(data))rows=data; else if(typeof data==='string'){try{const parsed=JSON.parse(data);rows=Array.isArray(parsed)?parsed:[]}catch(e){rows=[]}} else if(data&&typeof data==='object'){rows=Array.isArray(data.value)?data.value:Array.isArray(data.orders)?data.orders:[data];}
       a=rows.map(o=>({
         no:o.order_number,centralId:o.id,name:o.customer_name,phone:o.customer_phone,
         type:o.order_type==='delivery'?'Domicilio':o.order_type==='pickup'?'Recoger en el local':'En el local',
