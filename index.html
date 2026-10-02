@@ -1230,7 +1230,7 @@ function printComanda(no){
   w.document.close();
   const q=JSON.parse(localStorage.getItem('KITCHEN_QUEUE')||'[]');const item=q.find(x=>String(x.no)===String(no));if(item){item.printed=true;item.printedAt=new Date().toISOString();item.printedBy=currentUser?.username||'usuario';localStorage.setItem('KITCHEN_QUEUE',JSON.stringify(q));}
 }
-async async function adminOrders(){
+async function adminOrders(){
   if(!can('allowOrders')){alert('Tu usuario no tiene permiso para gestionar pedidos.');return}
   let a=JSON.parse(localStorage.getItem(ORDERS)||'[]');
   if(currentUser?.central && SP_DB_ON){
