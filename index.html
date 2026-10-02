@@ -915,8 +915,19 @@ async function syncProductStockCentral(p){
 async function syncToppingCentral(t){
   if(!SP_DB_ON||!t)return;
   const id=spMap('top',t.id);
-  const {error}=await SP_DB.from('toppings').upsert({id,name:String(t.name||''),description:String(t.desc||''),price:Number(t.price||0),unit:String(t.unit||'porciones'),consumption_per_addition:Number(t.usage||1),stock:Number(t.stock||0),minimum_stock:Number(t.minStock||0),active:t.active!==false},{onConflict:'id'});
+  const {data,error}=await SP_DB.rpc('admin_update_topping',{
+    p_topping_id:id,
+    p_name:String(t.name||''),
+    p_description:String(t.desc||''),
+    p_price:Number(t.price||0),
+    p_unit:String(t.unit||'porciones'),
+    p_consumption_per_addition:Number(t.usage||1),
+    p_stock:Number(t.stock||0),
+    p_minimum_stock:Number(t.minStock||0),
+    p_active:t.active!==false
+  });
   if(error)throw error;
+  if(!data||String(data.id)!==String(id))throw new Error('Supabase no confirmó la actualización del topping');
 }
 async function saveProduct(id){
   if(!isAdmin()){alert('Solo el administrador o dueño puede modificar productos.');return}
