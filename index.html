@@ -726,7 +726,7 @@ async function trackOrder(noFromButton){
   }
   if(noFromButton && SP_DB_ON && !can('allowOrders')){
     const load=async()=>{
-      const {data,error}=await SP_DB.rpc('sp_get_order_status',{p_order_number:String(noFromButton).trim()});
+      const {data,error}=await SP_DB.rpc('sp_get_order_receipt',{p_order_number:String(noFromButton).trim()});
       if(error){console.warn('Consulta central de estado:',error.message);return}
       if(!data?.length)return;
       const central=data[0];
@@ -734,7 +734,8 @@ async function trackOrder(noFromButton){
         <div class="panelHead"><h2>📍 Estado del pedido</h2><button class="close" onclick="closeModal()">✕</button></div>
         <div class="notice" style="margin:14px 0">Pedido <b>${esc(central.order_number)}</b></div>
         ${statusMarkup({no:central.order_number,status:central.status,updated:central.updated_at})}
-        <div class="totalBox"><span>ESTADO ACTUAL</span><span>${statusLabel({status:central.status})}</span></div>
+        <div class="totalBox"><span>TOTAL</span><span>${money(Number(central.total||0))}</span></div>
+        <div class="notice" style="margin-top:12px"><b>${central.payment_status==='pagado'?'✅ COMPRA COMPLETADA':'⏳ PAGO PENDIENTE'}</b><br>${central.payment_status==='pagado'?'Pago confirmado · '+esc(central.payment_method||''):'El pago se confirma al momento de la entrega.'}</div>
         <div class="muted">Última actualización: ${new Date(central.updated_at).toLocaleString('es-CO')}</div>`;
       document.getElementById('modal').classList.add('open');
     };
@@ -1259,7 +1260,21 @@ function printComanda(no){
   w.document.close();
   const q=JSON.parse(localStorage.getItem('KITCHEN_QUEUE')||'[]');const item=q.find(x=>String(x.no)===String(no));if(item){item.printed=true;item.printedAt=new Date().toISOString();item.printedBy=currentUser?.username||'usuario';localStorage.setItem('KITCHEN_QUEUE',JSON.stringify(q));}
 }
-async function adminOrders(){
+async 
+async function confirmOrderPayment(no){
+  if(!can('allowOrders')){alert('Tu usuario no tiene permiso para confirmar pagos.');return}
+  const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]'); const o=orders.find(x=>String(x.no)===String(no));
+  if(!o||!o.centralId){alert('Este pedido no tiene una referencia central válida.');return}
+  if(o.paymentStatus==='pagado'){alert('Este pedido ya aparece como pagado.');return}
+  const method=prompt('Confirma el medio de pago recibido:\n\n1. Efectivo\n2. Nequi\n3. Bancolombia\n4. Tarjeta\n5. Otro',o.pay||'Efectivo');
+  if(method===null||!method.trim())return; const note=prompt('Nota de pago (opcional):','Pago recibido y pedido entregado')||'';
+  if(!confirm('¿Confirmas que el pago fue recibido por '+method.trim()+' y que el pedido '+o.no+' será cerrado como VENTA?'))return;
+  const {data,error}=await SP_DB.rpc('sp_confirm_order_payment',{p_order_id:o.centralId,p_payment_method:method.trim(),p_notes:note.trim()});
+  if(error){alert('No se pudo registrar la venta: '+error.message);return}
+  const row=data?.[0]; o.pay=row?.payment_method||method.trim(); o.paymentStatus=row?.payment_status||'pagado'; o.status=row?.status||'entregado'; o.updated=new Date().toISOString();
+  localStorage.setItem(ORDERS,JSON.stringify(orders)); alert('✅ VENTA REGISTRADA\n\nPedido: '+o.no+'\nTotal: '+money(Number(row?.total||o.total||0))+'\nPago: '+o.pay+'\nEstado: ENTREGADO'); adminOrders();
+}
+function adminOrders(){
   if(!can('allowOrders')){alert('Tu usuario no tiene permiso para gestionar pedidos.');return}
   let a=JSON.parse(localStorage.getItem(ORDERS)||'[]');
   if(currentUser?.central && SP_DB_ON){
@@ -1269,7 +1284,7 @@ async function adminOrders(){
       const central=(data||[]).map(o=>({
         no:o.order_number,centralId:o.id,name:o.customer_name,phone:o.customer_phone,
         type:o.order_type==='delivery'?'Domicilio':o.order_type==='pickup'?'Recoger':'Local',
-        pay:o.payment_method||'',addr:o.address||'',obs:o.observations||'',total:Number(o.total||0),
+        pay:o.payment_method||'',paymentStatus:o.payment_status||'pendiente',addr:o.address||'',obs:o.observations||'',total:Number(o.total||0),
         created:o.created_at,updated:o.updated_at,status:o.status||'recibido',
         statusHistory:[],detail:(o.order_items||[]).map(it=>{
           const tops=(it.order_item_toppings||[]).map(t=>t.topping_name).join(', ');
@@ -1290,7 +1305,7 @@ async function adminOrders(){
       const list=statusList(o),current=o.status||'recibido';
       const driverInfo=o.type==='Domicilio'?'<br>🛵 <b>Domiciliario:</b> '+esc(o.driverName||'Sin asignar')+(o.driverPhone?' · '+esc(o.driverPhone):''):'';
       const deleteBtn=isAdmin()?'<button class="mini" onclick="deleteOrder(\''+esc(o.no)+'\')">🗑️ Eliminar pedido</button>':'';
-      return `<div class="order"><b>${esc(o.no)}</b> · <b>${money(o.total)}</b><br>👤 ${esc(o.name)} · 📞 ${esc(o.phone)}<br>🚚 ${esc(o.type)} · 💳 ${esc(o.pay)}${driverInfo}<br><div class="muted">${new Date(o.created).toLocaleString('es-CO')}</div>${statusMarkup(o)}<div class="statusActions">${list.map(x=>'<button class="'+(current===x[0]?'active':'')+'" onclick="setOrderStatus(\''+esc(o.no)+'\',\''+x[0]+'\')">'+x[1]+' '+x[2]+'</button>').join('')}</div><div class="statusActions"><button class="mini" onclick="printOrder('${esc(o.no)}')">🧾 Soporte</button><button class="mini" onclick="printComanda('${esc(o.no)}')">🍳 Comanda cocina</button><button class="mini" onclick="registerOrderIncident('${esc(o.no)}','cambio')">📝 Registrar cambio</button><button class="mini" onclick="registerOrderIncident('${esc(o.no)}','devolucion')">↩️ Registrar devolución</button>${deleteBtn}</div></div>`;
+      return `<div class="order"><b>${esc(o.no)}</b> · <b>${money(o.total)}</b><br>👤 ${esc(o.name)} · 📞 ${esc(o.phone)}<br>🚚 ${esc(o.type)} · 💳 ${esc(o.pay)}${driverInfo}<br><div class="muted">${new Date(o.created).toLocaleString('es-CO')}</div>${statusMarkup(o)}<div class="statusActions">${list.map(x=>'<button class="'+(current===x[0]?'active':'')+'" onclick="setOrderStatus(\''+esc(o.no)+'\',\''+x[0]+'\')">'+x[1]+' '+x[2]+'</button>').join('')}</div><div class="statusActions">${o.paymentStatus==='pagado'?'<button class="mini" disabled>✅ Venta registrada</button>':'<button class="mini" onclick="confirmOrderPayment(\\''+esc(o.no)+'\\')">💰 Confirmar pago y entregar</button>'}<button class="mini" onclick="printOrder('${esc(o.no)}')">🧾 Soporte</button><button class="mini" onclick="printComanda('${esc(o.no)}')">🍳 Comanda cocina</button><button class="mini" onclick="registerOrderIncident('${esc(o.no)}','cambio')">📝 Registrar cambio</button><button class="mini" onclick="registerOrderIncident('${esc(o.no)}','devolucion')">↩️ Registrar devolución</button>${deleteBtn}</div></div>`;
     }).join(''):'<div class="empty">No hay pedidos guardados en Supabase.</div>'}`;
   document.getElementById('modal').classList.add('open');
 }
