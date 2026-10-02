@@ -33,14 +33,15 @@ jobs:
           from pathlib import Path
           p=Path("index.html")
           s=p.read_text(encoding="utf-8")
-          marker='<script src="admin-finish.js"></script>'
-          if marker not in s:
-              tag='<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>'+marker
-              if '</body>' in s:
-                  s=s.replace('</body>',tag+'\n</body>',1)
-              else:
-                  s += '\n'+tag+'\n'
-              p.write_text(s,encoding="utf-8")
+          import os
+          tag='<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="admin-finish.js?v='+os.environ.get("GITHUB_SHA","latest")+'"></script>'
+          import re
+          s=re.sub(r'<script[^>]+admin-finish\.js(?:\?[^>]*)?</script>', '', s)
+          if '</body>' in s:
+              s=s.replace('</body>',tag+'\n</body>',1)
+          else:
+              s += '\n'+tag+'\n'
+          p.write_text(s,encoding="utf-8")
           PY
 
       - name: Subir sitio
