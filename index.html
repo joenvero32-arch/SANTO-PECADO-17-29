@@ -393,7 +393,7 @@ function updateCart(){
 function add(id){const sid=String(id);const q=cart.find(x=>String(x.id)===sid);if(q){q.qty++;}else{const p=products.find(x=>String(x.id)===sid);if(!p)return;cart.push({id:p.id,qty:1,base:Number(p.price||0),toppings:[],note:''});}updateCart();openCart(true)}
 window.add=add;
 function changeQty(id,d){const q=cart.find(x=>x.id===id);if(!q)return;q.qty+=d;if(q.qty<=0)cart=cart.filter(x=>x.id!==id);updateCart();openCart(true)}
-let spStatusPollTimer=null; let spAdminOrderPollTimer=null;
+let spStatusPollTimer=null; let spAdminOrderPollTimer=null; let spLastClientStatus='';
 function closeModal(){if(spStatusPollTimer){clearInterval(spStatusPollTimer);spStatusPollTimer=null}document.getElementById('modal').classList.remove('open')}
 
 function addWithToppings(id){
@@ -652,6 +652,8 @@ function normalizeWhatsAppPhone(phone){
   if(v.length===10 && v.startsWith('3')) v='57'+v;
   return v;
 }
+async function enableClientStatusNotifications(){try{if(!('Notification' in window)){alert('Este navegador no admite notificaciones del sistema.');return}const p=await Notification.requestPermission();if(p==='granted')new Notification('Santo Pecado 17-29',{body:'Notificaciones de estado activadas.'})}catch(e){console.warn('Notificaciones:',e)}}
+function notifyClientStatus(order,status){if(!status||status===spLastClientStatus)return;spLastClientStatus=status;if('Notification' in window&&Notification.permission==='granted'){try{new Notification('Santo Pecado 17-29',{body:'Pedido '+(order?.order_number||order?.no||'')+': '+statusLabel({status})})}catch(e){}}}
 function statusNotificationText(order,status){
   const name=order?.name?String(order.name).split(' ')[0]:'';
   const no=order?.no||'';
@@ -716,6 +718,7 @@ async function trackOrder(noFromButton){
       if(error){console.warn('Consulta central de estado:',error.message);return}
       if(!data?.length)return;
       const central=data[0];
+      notifyClientStatus(central,central.status);
       if(lastNotifiedStatus && lastNotifiedStatus!==central.status){
         const label=statusLabel({status:central.status});
         if(typeof Notification!=='undefined'&&Notification.permission==='granted'){try{new Notification('Santo Pecado 17-29',{body:'Pedido '+central.order_number+': '+label})}catch(e){}}
@@ -1271,7 +1274,8 @@ async function adminOrders(silent=false){
       }
     }catch(e){console.warn('Sesión central:',e)}
   }
-  if(!can('allowOrders')){if(!silent)alert('Para ver los pedidos de todos los celulares debes iniciar sesión central con la cuenta de administrador.');return}
+  if(SP_DB_ON && !currentUser?.central){if(!silent)openAdmin();return}
+  if(!can('allowOrders')){if(!silent)alert('Tu cuenta no tiene permiso para gestionar pedidos.');return}
   let a=[];
   if(SP_DB_ON && currentUser?.central){
     try{
