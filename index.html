@@ -350,7 +350,7 @@ function save(){
   localStorage.setItem(PROMO_NOTIFY,JSON.stringify(promoNotifications));
   localStorage.setItem(CASH,JSON.stringify(cashClosures));
   localStorage.setItem('sp_premium_cart_v2',JSON.stringify(cart));
-  if(window.SantoPecadoCentral?.connected) { spSyncCatalog(); spSyncCustomers(); }
+  /* La sincronización central se realiza explícitamente; guardar local no debe sobrescribir Supabase. */
 }
 function total(){
   return cart.reduce((s,x)=>{
@@ -1213,7 +1213,7 @@ function adminKitchen(){
     <div class="panelHead"><div><div class="dashKicker">PRODUCCIÓN</div><h2>🍳 Comandas de cocina</h2></div><button class="close" onclick="closeModal()">✕</button></div>
     ${navTabs('kitchen')}
     <div class="adminItem" style="margin-top:12px"><div class="adminTop"><b>Pedidos pendientes</b><b>${a.length}</b></div><div class="muted">Las comandas muestran productos, cantidades, extras y observaciones. No muestran precios.</div></div>
-    ${a.length?a.map(o=>{const queued=q.find(x=>String(x.no)===String(o.no));return `<div class="order" style="margin-top:12px"><div class="adminTop"><div><b>${esc(o.no)}</b> · ${esc(new Date(o.created).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}))}</div><span>${statusLabel(o)}</span></div><div>👤 ${esc(o.name||'Cliente')} · 📞 ${esc(o.phone||'-')}</div><div>🚚 ${esc(o.type||'-')}${o.addr?' · 📍 '+esc(o.addr):''}</div>${o.type==='Domicilio'&&o.driverName?`<div>🛵 Domiciliario: <b>${esc(o.driverName)}</b>${o.driverPhone?' · '+esc(o.driverPhone):''}</div>`:''}<div class="adminActions"><button class="mini" onclick="printComanda('${esc(o.no)}')">🖨️ ${queued?.printed?'Reimprimir':'Imprimir'} comanda</button>${o.status==='recibido'?`<button class="mini" onclick="setOrderStatus('${esc(o.no)}','preparacion',true)">👨‍🍳 En preparación</button>`:''}${o.status==='preparacion'?`<button class="mini" onclick="setOrderStatus('${esc(o.no)}','listo',true)">📦 Pedido listo</button>`:''}<button class="mini" onclick="adminKitchen()">🔄 Actualizar</button></div></div>`}).join(''):'<div class="empty">No hay pedidos pendientes para cocina.</div>'}`;
+    ${a.length?a.map(o=>{const queued=q.find(x=>String(x.no)===String(o.no));return `<div class="order" style="margin-top:12px"><div class="adminTop"><div><b>${esc(o.no)}</b> · ${esc(new Date(o.created).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}))}</div><span>${statusLabel(o)}</span></div><div>👤 ${esc(o.name||'Cliente')} · 📞 ${esc(o.phone||'-')}</div><div>🚚 ${esc(o.type||'-')}${o.tableNumber?' · 🪑 Mesa '+esc(o.tableNumber):''}${o.addr?' · 📍 '+esc(o.addr):''}</div>${o.type==='Domicilio'&&o.driverName?`<div>🛵 Domiciliario: <b>${esc(o.driverName)}</b>${o.driverPhone?' · '+esc(o.driverPhone):''}</div>`:''}<div class="adminActions"><button class="mini" onclick="printComanda('${esc(o.no)}')">🖨️ ${queued?.printed?'Reimprimir':'Imprimir'} comanda</button>${o.status==='recibido'?`<button class="mini" onclick="setOrderStatus('${esc(o.no)}','preparacion',true)">👨‍🍳 En preparación</button>`:''}${o.status==='preparacion'?`<button class="mini" onclick="setOrderStatus('${esc(o.no)}','listo',true)">📦 Pedido listo</button>`:''}<button class="mini" onclick="adminKitchen()">🔄 Actualizar</button></div></div>`}).join(''):'<div class="empty">No hay pedidos pendientes para cocina.</div>'}`;
   document.getElementById('modal').classList.add('open');
 }
 function printComanda(no){
@@ -1233,13 +1233,14 @@ function printComanda(no){
 async function adminOrders(){
   if(!can('allowOrders')){alert('Tu usuario no tiene permiso para gestionar pedidos.');return}
   let a=JSON.parse(localStorage.getItem(ORDERS)||'[]');
-  if(currentUser?.central && SP_DB_ON){
+  if(SP_DB_ON){
     try{
       const {data,error}=await SP_DB.from('orders').select('*,order_items(*,order_item_toppings(*))').order('created_at',{ascending:false});
       if(error) throw error;
       const central=(data||[]).map(o=>({
         no:o.order_number,centralId:o.id,name:o.customer_name,phone:o.customer_phone,
-        type:o.order_type==='delivery'?'Domicilio':o.order_type==='pickup'?'Recoger':'Local',
+        type:o.order_type==='delivery'?'Domicilio':o.order_type==='pickup'?'Recoger en el local':'En el local',
+        tableNumber:o.table_number||null,
         pay:o.payment_method||'',addr:o.address||'',obs:o.observations||'',total:Number(o.total||0),
         created:o.created_at,updated:o.updated_at,status:o.status||'recibido',
         statusHistory:[],detail:(o.order_items||[]).map(it=>{
