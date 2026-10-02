@@ -1291,7 +1291,6 @@ function printComanda(no){
   w.document.close();
   const q=JSON.parse(localStorage.getItem('KITCHEN_QUEUE')||'[]');const item=q.find(x=>String(x.no)===String(no));if(item){item.printed=true;item.printedAt=new Date().toISOString();item.printedBy=currentUser?.username||'usuario';localStorage.setItem('KITCHEN_QUEUE',JSON.stringify(q));}
 }
-async 
 async function confirmOrderPayment(no){
   if(!can('allowOrders')){alert('Tu usuario no tiene permiso para confirmar pagos.');return}
   const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]'); const o=orders.find(x=>String(x.no)===String(no));
