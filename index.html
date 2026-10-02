@@ -164,48 +164,27 @@ async function spSyncCustomers(){
 window.SantoPecadoCentral={get connected(){return SP_DB_ON},get lastSync(){return SP_DB_LAST||localStorage.getItem('sp_central_last_sync')||''},sync:async()=>{await spSyncCatalog();await spSyncCustomers()}};
 window.loadPublicCatalog=async function(){
   try{
-    let payload=null, error=null;
-    if(SP_DB_ON && SP_DB?.rpc){
-      const r=await SP_DB.rpc('sp_get_public_catalog');
-      payload=r.data; error=r.error;
+    let centralCats=[],centralProducts=[],centralToppings=[];
+    if(SP_DB_ON&&SP_DB){
+      const [cr,pr,tr]=await Promise.all([
+        SP_DB.from('categories').select('id,name,sort_order,active').eq('active',true).order('sort_order',{ascending:true}),
+        SP_DB.from('products').select('id,category_id,name,description,price,image_url,stock,minimum_stock,active,sort_order').eq('active',true).order('sort_order',{ascending:true}),
+        SP_DB.from('toppings').select('id,name,description,price,unit,consumption_per_addition,stock,minimum_stock,active').eq('active',true).order('name',{ascending:true})
+      ]);
+      if(cr.error)throw cr.error;if(pr.error)throw pr.error;if(tr.error)throw tr.error;
+      centralCats=cr.data||[];centralProducts=pr.data||[];centralToppings=tr.data||[];
     }
-    if(error || !payload){
-      const r=await fetch(SP_SUPABASE_URL+'/rest/v1/rpc/sp_get_public_catalog',{
-        method:'POST',
-        headers:{
-          'apikey':SP_SUPABASE_PUBLISHABLE_KEY,
-          'Authorization':'Bearer '+SP_SUPABASE_PUBLISHABLE_KEY,
-          'Content-Type':'application/json'
-        },
-        body:'{}'
-      });
-      if(!r.ok)throw new Error('RPC catálogo HTTP '+r.status);
-      payload=await r.json();
+    if(!centralCats.length||!centralProducts.length){
+      const r=await SP_DB.rpc('sp_get_public_catalog');if(r.error)throw r.error;
+      const p=r.data||{};centralCats=Array.isArray(p.categories)?p.categories:[];centralProducts=Array.isArray(p.products)?p.products:[];centralToppings=Array.isArray(p.toppings)?p.toppings:[];
     }
-    const centralCats=Array.isArray(payload?.categories)?payload.categories:[];
-    const centralProducts=Array.isArray(payload?.products)?payload.products:[];
-    const centralToppings=Array.isArray(payload?.toppings)?payload.toppings:[];
-    if(!centralCats.length || !centralProducts.length){
-      console.warn('Catálogo central vacío; se conserva el catálogo local.');
-      return;
-    }
-    const catMap=Object.fromEntries(centralCats.map(x=>[x.id,x.name]));
-    categories=centralCats.map(x=>x.name);
-    products=centralProducts.map((p,i)=>({
-      id:p.id,cat:catMap[p.category_id]||'Sin categoría',name:p.name,desc:p.description||'',
-      price:Number(p.price||0),img:p.image_url||'',stock:Number(p.stock||0),
-      minStock:Number(p.minimum_stock||0),active:p.active!==false,sort_order:p.sort_order??i
-    }));
-    toppings=centralToppings.length?centralToppings.map(t=>({
-      id:t.id,name:t.name,description:t.description||'',price:Number(t.price||0),
-      unit:t.unit||'Porción',usage:Number(t.consumption_per_addition||1),
-      stock:Number(t.stock||0),minStock:Number(t.minimum_stock||0),tracked:true,active:t.active!==false
-    })):toppings;
-    localStorage.setItem(KEY,JSON.stringify(products));
-    localStorage.setItem(CATS,JSON.stringify(categories));
-    localStorage.setItem(TOP,JSON.stringify(toppings));
-    console.log('Catálogo público cargado:',categories.length,'categorías,',products.length,'productos');
-  }catch(e){console.error('No se pudo cargar el catálogo central:',e.message||e)}
+    if(!centralCats.length||!centralProducts.length)return;
+    const catMap=Object.fromEntries(centralCats.map(x=>[String(x.id),x.name]));
+    categories=centralCats.map(x=>x.name).filter(Boolean);
+    products=centralProducts.map((p,i)=>({id:p.id,cat:catMap[String(p.category_id)]||'Sin categoría',name:p.name,desc:p.description||'',price:Number(p.price||0),img:p.image_url||'',stock:Number(p.stock||0),minStock:Number(p.minimum_stock||0),active:p.active!==false,sort_order:p.sort_order??i}));
+    toppings=centralToppings.length?centralToppings.map(t=>({id:t.id,name:t.name,description:t.description||'',price:Number(t.price||0),unit:t.unit||'Porción',usage:Number(t.consumption_per_addition||1),stock:Number(t.stock||0),minStock:Number(t.minimum_stock||0),tracked:true,active:t.active!==false})):toppings;
+    try{localStorage.setItem(KEY,JSON.stringify(products));localStorage.setItem(CATS,JSON.stringify(categories));localStorage.setItem(TOP,JSON.stringify(toppings))}catch(e){console.warn('Catálogo central cargado en memoria:',e)}
+  }catch(e){console.error('No se pudo cargar el catálogo central:',e?.message||e)}
 };
 </script>
 </head>
