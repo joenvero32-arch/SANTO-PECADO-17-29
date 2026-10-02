@@ -1437,9 +1437,15 @@ function saveSettings(){
 }
 
 (async()=>{
-  await window.loadPublicCatalog?.();
+  // Mostrar inmediatamente el catálogo local/semilla para que la página nunca quede en blanco.
   render();
   renderPromotions();
+  try{
+    await window.loadPublicCatalog?.();
+    // Re-renderizar con el catálogo central cuando termine la carga.
+    render();
+    renderPromotions();
+  }catch(e){console.warn('Catálogo central pendiente; se mantiene el catálogo local.',e)}
   try{
     if(window.SantoPecadoCentral?.connected){
       const {data}=await SP_DB.auth.getSession();
