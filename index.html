@@ -164,12 +164,12 @@ async function spSyncCustomers(){
 window.SantoPecadoCentral={get connected(){return SP_DB_ON},get lastSync(){return SP_DB_LAST||localStorage.getItem('sp_central_last_sync')||''},sync:async()=>{await spSyncCatalog();await spSyncCustomers()}};
 window.loadPublicCatalog=async function(){
   try{
-    let payload=null,error=null;
+    let payload=null, error=null;
     if(SP_DB_ON && SP_DB?.rpc){
       const r=await SP_DB.rpc('sp_get_public_catalog');
       payload=r.data; error=r.error;
     }
-    if(error || payload==null){
+    if(error || !payload){
       const r=await fetch(SP_SUPABASE_URL+'/rest/v1/rpc/sp_get_public_catalog',{
         method:'POST',
         headers:{
@@ -182,56 +182,30 @@ window.loadPublicCatalog=async function(){
       if(!r.ok)throw new Error('RPC catálogo HTTP '+r.status);
       payload=await r.json();
     }
-
-    // Normaliza respuestas JSONB para que cambios de cliente/API no dejen la vitrina vacía.
-    if(typeof payload==='string'){
-      try{payload=JSON.parse(payload)}catch(_){payload=null}
-    }
-    if(Array.isArray(payload) && payload.length===1 && payload[0] && typeof payload[0]==='object'){
-      payload=payload[0];
-    }
-
     const centralCats=Array.isArray(payload?.categories)?payload.categories:[];
     const centralProducts=Array.isArray(payload?.products)?payload.products:[];
     const centralToppings=Array.isArray(payload?.toppings)?payload.toppings:[];
-
-    // Nunca reemplazar un catálogo válido por una respuesta incompleta.
     if(!centralCats.length || !centralProducts.length){
-      console.warn('Catálogo central incompleto; se conserva el catálogo local/semilla.');
-      return false;
+      console.warn('Catálogo central vacío; se conserva el catálogo local.');
+      return;
     }
-
-    const catMap=Object.fromEntries(centralCats.map(x=>[x.id,String(x.name||'').trim()]).filter(x=>x[1]));
-    const nextCategories=centralCats.map(x=>String(x.name||'').trim()).filter(Boolean);
-    const nextProducts=centralProducts.map((p,i)=>({
-      id:p.id,cat:catMap[p.category_id]||'Sin categoría',name:String(p.name||'Producto'),
-      desc:String(p.description||''),price:Number(p.price||0),img:String(p.image_url||''),
-      stock:Number(p.stock||0),minStock:Number(p.minimum_stock||0),
-      active:p.active!==false,sort_order:p.sort_order??i
-    })).filter(p=>p.id && p.active);
-
-    if(!nextProducts.length){
-      console.warn('Catálogo central sin productos utilizables; se conserva el catálogo local/semilla.');
-      return false;
-    }
-
-    categories=nextCategories;
-    products=nextProducts;
-    if(centralToppings.length) toppings=centralToppings.map(t=>({
-      id:t.id,name:String(t.name||''),description:String(t.description||''),price:Number(t.price||0),
+    const catMap=Object.fromEntries(centralCats.map(x=>[x.id,x.name]));
+    categories=centralCats.map(x=>x.name);
+    products=centralProducts.map((p,i)=>({
+      id:p.id,cat:catMap[p.category_id]||'Sin categoría',name:p.name,desc:p.description||'',
+      price:Number(p.price||0),img:p.image_url||'',stock:Number(p.stock||0),
+      minStock:Number(p.minimum_stock||0),active:p.active!==false,sort_order:p.sort_order??i
+    }));
+    toppings=centralToppings.length?centralToppings.map(t=>({
+      id:t.id,name:t.name,description:t.description||'',price:Number(t.price||0),
       unit:t.unit||'Porción',usage:Number(t.consumption_per_addition||1),
       stock:Number(t.stock||0),minStock:Number(t.minimum_stock||0),tracked:true,active:t.active!==false
-    }));
-
+    })):toppings;
     localStorage.setItem(KEY,JSON.stringify(products));
     localStorage.setItem(CATS,JSON.stringify(categories));
     localStorage.setItem(TOP,JSON.stringify(toppings));
     console.log('Catálogo público cargado:',categories.length,'categorías,',products.length,'productos');
-    return true;
-  }catch(e){
-    console.error('No se pudo cargar el catálogo central:',e.message||e);
-    return false;
-  }
+  }catch(e){console.error('No se pudo cargar el catálogo central:',e.message||e)}
 };
 </script>
 </head>
