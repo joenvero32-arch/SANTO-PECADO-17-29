@@ -1371,10 +1371,26 @@ async function confirmOrderPayment(no){
   const row=data?.[0]; o.pay=row?.payment_method||method.trim(); o.paymentStatus=row?.payment_status||'pagado'; o.status=row?.status||'entregado'; o.updated=new Date().toISOString();
   localStorage.setItem(ORDERS,JSON.stringify(orders)); alert('✅ VENTA REGISTRADA\n\nPedido: '+o.no+'\nTotal: '+money(Number(row?.total||o.total||0))+'\nPago: '+o.pay+'\nEstado: ENTREGADO'); adminOrders();
 }
+async function ensureCentralAdminSession(){
+  if(!SP_DB_ON)return false;
+  try{
+    const {data:{session}}=await SP_DB.auth.getSession();
+    if(!session?.user?.id)return false;
+    const {data:profile,error}=await SP_DB.from('app_users').select('*').eq('id',session.user.id).maybeSingle();
+    if(error||!profile||profile.active===false||profile.role!=='admin')return false;
+    currentUser={...(currentUser||{}),...profile,user:profile.username||'admin',name:profile.full_name||'Administrador',allowOrders:true,allowInventory:true,allowCash:true,central:true};
+    sessionStorage.setItem(SESSION,JSON.stringify(currentUser));
+    return true;
+  }catch(e){
+    console.warn('No se pudo recuperar la sesión central:',e);
+    return false;
+  }
+}
 async function adminOrders(){
   if(!can('allowOrders')){alert('Tu usuario no tiene permiso para gestionar pedidos.');return}
   let a=JSON.parse(localStorage.getItem(ORDERS)||'[]');
-  if(currentUser?.central && SP_DB_ON){
+  if(SP_DB_ON && (currentUser?.central || isAdmin())){
+    if(!currentUser?.central) await ensureCentralAdminSession();
     try{
       const {data:centralOrders,error:ordersError}=await SP_DB.from('orders').select('*').order('created_at',{ascending:false});
       if(ordersError)throw ordersError;
