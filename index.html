@@ -890,40 +890,35 @@ function editProduct(id){
     </div>
     <div class="modalBtns"><button class="primary" onclick="saveProduct('${key||''}')">Guardar producto</button><button class="secondary" onclick="adminProducts()">Cancelar</button></div>`;
 }
-function saveProduct(id){
+async function syncOneProductCentral(p){
+  if(!SP_DB_ON||!p)return;
+  const categoryName=String(p.cat||'').trim();
+  let categoryId=null;
+  if(categoryName){const {data:cat,error:catError}=await SP_DB.from('categories').select('id').eq('name',categoryName).limit(1).maybeSingle();if(catError)throw catError;categoryId=cat?.id||null;}
+  const row={id:spMap('prod',p.id),category_id:categoryId,name:String(p.name||''),description:String(p.desc||''),price:Number(p.price||0),image_url:String(p.img||''),stock:Number(p.stock||0),minimum_stock:Number(p.minStock||0),active:p.active!==false,sort_order:Number(p.sort_order||0)};
+  const {error}=await SP_DB.from('products').upsert(row,{onConflict:'id'});if(error)throw error;
+}
+async function saveProduct(id){
   if(!isAdmin()){alert('Solo el administrador o dueño puede modificar productos.');return}
   const key=id==null||id===''?null:String(id);
-  const p=key?products.find(x=>String(x.id)===key):{id:(crypto.randomUUID?crypto.randomUUID():Date.now()),img:'',active:true};
+  const p=key?products.find(x=>String(x.id)===key):{id:(crypto.randomUUID?crypto.randomUUID():Date.now()),img:'',active:true,stock:50,minStock:5};
   if(!p){alert('No se encontró el producto.');return}
-  p.cat=document.getElementById('pc').value.trim()||'Otros';
-  p.name=document.getElementById('pn').value.trim();
-  p.desc=document.getElementById('pd').value.trim();
-  p.price=Number(document.getElementById('pp').value)||0;
-  p.emoji=document.getElementById('pe').value.trim()||'🍔';
+  p.cat=document.getElementById('pc').value.trim()||'Otros';p.name=document.getElementById('pn').value.trim();p.desc=document.getElementById('pd').value.trim();p.price=Number(document.getElementById('pp').value)||0;p.emoji=document.getElementById('pe').value.trim()||'🍔';
   if(!p.name){alert('Escribe el nombre del producto.');return}
   if(!id)products.push(p);
-  save();render();adminProducts();
+  localStorage.setItem(KEY,JSON.stringify(products));render();adminProducts();
+  try{await syncOneProductCentral(p)}catch(e){console.warn('Producto guardado localmente; sincronización central pendiente:',e);alert('El producto quedó guardado, pero Supabase no pudo actualizarlo: '+(e.message||e));}
 }
 function changePhoto(id){
-  id=String(id);
-  if(!isAdmin()){alert('Solo el administrador o dueño puede cambiar fotos.');return}
-  const input=document.createElement('input');input.type='file';input.accept='image/*';
-  input.onchange=()=>{
-    const f=input.files&&input.files[0];if(!f)return;
-    const r=new FileReader();
-    r.onload=()=>{
-      const im=new Image();
-      im.onload=()=>{
-        const max=1000,s=Math.min(1,max/im.width);
-        const c=document.createElement('canvas');c.width=Math.max(1,Math.round(im.width*s));c.height=Math.max(1,Math.round(im.height*s));
-        const ctx=c.getContext('2d');ctx.drawImage(im,0,0,c.width,c.height);
-        const target=products.find(x=>String(x.id)===id);if(!target){alert('No se encontró el producto.');return}target.img=c.toDataURL('image/jpeg',.80);
-        save();render();adminProducts();
-      };
-      im.src=r.result;
-    };
-    r.readAsDataURL(f);
-  };
+  id=String(id);if(!isAdmin()){alert('Solo el administrador o dueño puede cambiar fotos.');return}
+  const input=document.createElement('input');input.type='file';input.accept='image/*';input.style.position='fixed';input.style.left='-9999px';document.body.appendChild(input);
+  input.onchange=()=>{const f=input.files&&input.files[0];if(!f){input.remove();return}
+    const reader=new FileReader();reader.onload=()=>{const im=new Image();im.onload=async()=>{try{
+      const target=products.find(x=>String(x.id)===id);if(!target){alert('No se encontró el producto.');return}
+      const max=1000,scale=Math.min(1,max/Math.max(1,im.width));const c=document.createElement('canvas');c.width=Math.max(1,Math.round(im.width*scale));c.height=Math.max(1,Math.round(im.height*scale));c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+      target.img=c.toDataURL('image/jpeg',.82);localStorage.setItem(KEY,JSON.stringify(products));render();adminProducts();
+      try{await syncOneProductCentral(target)}catch(e){console.warn('Foto local guardada; sincronización central pendiente:',e);alert('La foto quedó guardada en este dispositivo, pero no pudo sincronizarse con Supabase: '+(e.message||e));}
+    }catch(e){alert('No se pudo procesar la foto: '+(e.message||e))}finally{input.remove()}};im.onerror=()=>{alert('No se pudo leer la imagen.');input.remove()};im.src=reader.result};reader.onerror=()=>{alert('No se pudo leer el archivo.');input.remove()};reader.readAsDataURL(f)};
   input.click();
 }
 function toggleProduct(id){
