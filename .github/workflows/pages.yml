@@ -27,6 +27,22 @@ jobs:
       - name: Configurar Pages
         uses: actions/configure-pages@v5
 
+      - name: Integrar módulo de administración
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path("index.html")
+          s=p.read_text(encoding="utf-8")
+          marker='<script src="admin-finish.js"></script>'
+          if marker not in s:
+              tag='<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>'+marker
+              if '</body>' in s:
+                  s=s.replace('</body>',tag+'\n</body>',1)
+              else:
+                  s += '\n'+tag+'\n'
+              p.write_text(s,encoding="utf-8")
+          PY
+
       - name: Subir sitio
         uses: actions/upload-pages-artifact@v3
         with:
