@@ -310,8 +310,20 @@ const CUSTOMERS='sp_premium_customers_v1';
 const PROMOS='sp_premium_promotions_v1';
 const PROMO_NOTIFY='sp_premium_promo_notifications_v1';
 const CASH='sp_premium_cash_closures_v1';
-const SESSION='sp_premium_session_v1'; const AUDIT='sp_premium_audit_v1'; let audit=JSON.parse(localStorage.getItem(AUDIT)||'[]');
-let users=JSON.parse(localStorage.getItem(USERS)||'null');
+const SESSION='sp_premium_session_v1';
+function spSafeJSON(key,fallback){
+  try{
+    const raw=localStorage.getItem(key);
+    if(!raw)return fallback;
+    return JSON.parse(raw);
+  }catch(e){
+    console.warn('Dato local inválido, se reconstruye:',key,e?.message||e);
+    try{localStorage.removeItem(key)}catch(_){}
+    return fallback;
+  }
+}
+ const AUDIT='sp_premium_audit_v1'; let audit=JSON.parse(localStorage.getItem(AUDIT)||'[]');
+let users=spSafeJSON(USERS,null);
 if(!Array.isArray(users)||!users.length){ users=[{id:'owner',user:'admin',name:'Administrador / Dueño',pin:'',role:'admin',allowOrders:true,allowInventory:true}]; }
 // Seguridad: nunca precargar usuario ni PIN en los campos de acceso.
 // El PIN local se valida solo desde el registro guardado por el administrador.
@@ -360,16 +372,16 @@ const seed=[
 /* Corrige el último producto del catálogo */
 seed[seed.length-1].price=22000;
 
-let products=JSON.parse(localStorage.getItem(KEY)||'null');
+let products=spSafeJSON(KEY,null);
 // Nunca permitir que un catálogo local vacío deje la vitrina pública en blanco.
 if(!Array.isArray(products)||!products.length) products=seed.map((p,i)=>({...p,id:p.id||('seed-'+i)}));
 products.forEach(p=>{if(typeof p.stock!=='number')p.stock=50;if(typeof p.minStock!=='number')p.minStock=5;});
-let settings=JSON.parse(localStorage.getItem(SETTINGS)||'null')||{whatsapp:ADMIN_WA};
+let settings=spSafeJSON(SETTINGS,null)||{whatsapp:ADMIN_WA};
 const defaultCats=['La Gula','La Tentación','El Pecado','Hamburguesas','Arepas','Alitas'];
-let categories=JSON.parse(localStorage.getItem(CATS)||'null');
+let categories=spSafeJSON(CATS,null);
 if(!Array.isArray(categories)||!categories.length) categories=[...defaultCats];
 let cart=JSON.parse(localStorage.getItem('sp_premium_cart_v2')||'[]');
-let toppings=JSON.parse(localStorage.getItem(TOP)||'null');
+let toppings=spSafeJSON(TOP,null);
 if(!Array.isArray(toppings)||!toppings.length) toppings=[
  {id:1,name:'Queso extra',price:3000,active:true},
  {id:2,name:'Tocineta',price:4000,active:true},
@@ -423,24 +435,53 @@ function setCategory(cat){
 }
 window.setCategory=setCategory;
 function render(){
-  // Respaldo visual: si por cualquier motivo el catálogo central/local está vacío, mostrar el menú base.
-  if(!Array.isArray(products)||!products.length) products=seed.map((p,i)=>({...p,id:p.id||('seed-'+i),active:true}));
-  const productCats=[...new Set(products.filter(p=>p.active&&p.cat).map(p=>String(p.cat)))];
-  const cats=[...new Set(['Todos',...categories.filter(Boolean).map(String),...productCats])];
-  document.getElementById('cats').innerHTML=cats.map(c=>`<button type="button" class="cat ${currentCat===c?'active':''}" data-cat="${esc(c)}" onclick="setCategory(this.dataset.cat)">${esc(c)}</button>`).join('');
-  const q=(document.getElementById('search').value||'').toLowerCase().trim();
-  const list=products.filter(p=>p.active&&(currentCat==='Todos'||p.cat===currentCat)&&(!q||p.name.toLowerCase().includes(q)||p.desc.toLowerCase().includes(q)));
-  document.getElementById('products').innerHTML=list.length?list.map(p=>`
-    <article class="card">
-      <div class="photo">${p.img?`<img src="${p.img}" alt="${esc(p.name)}">`:`<div class="placeholder">${p.emoji||'🍔'}</div>`}<span class="badge">DESTACADO</span></div>
-      <div class="cardBody">
-        <h3>${esc(p.name)}</h3>
-        <div class="desc">${esc(p.desc)}</div>
-        <div class="bottom"><div class="price">${money(p.price)}</div><button type="button" class="add sp-add-btn" data-product-id="${esc(String(p.id))}">+ Agregar</button></div>
-      </div>
-    </article>`).join(''):`<div class="empty">No encontramos productos con esa búsqueda.</div>`;
-  updateCart();
-  renderPromotions();
+  try{
+    // Blindaje del catálogo: ningún dato local incompleto puede dejar la vitrina en blanco.
+    if(!Array.isArray(categories)||!categories.length) categories=[...defaultCats];
+    if(!Array.isArray(products)||!products.length) products=seed.map((p,i)=>({...p,id:p.id||('seed-'+i),active:true}));
+    products=products.map((p,i)=>({
+      ...p,
+      id:p?.id??('product-'+i),
+      cat:String(p?.cat||'Sin categoría'),
+      name:String(p?.name||'Producto'),
+      desc:String(p?.desc||''),
+      price:Number(p?.price||0),
+      active:p?.active!==false
+    }));
+    const catsEl=document.getElementById('cats');
+    const searchEl=document.getElementById('search');
+    const productsEl=document.getElementById('products');
+    if(!catsEl||!searchEl||!productsEl) return;
+
+    const productCats=[...new Set(products.filter(p=>p.active&&p.cat).map(p=>String(p.cat)))];
+    const cats=[...new Set(['Todos',...categories.filter(Boolean).map(String),...productCats])];
+    catsEl.innerHTML=cats.map(c=>`<button type="button" class="cat ${currentCat===c?'active':''}" data-cat="${esc(c)}" onclick="setCategory(this.dataset.cat)">${esc(c)}</button>`).join('');
+
+    const q=String(searchEl.value||'').toLowerCase().trim();
+    const list=products.filter(p=>p.active&&(currentCat==='Todos'||p.cat===currentCat)&&(!q||p.name.toLowerCase().includes(q)||p.desc.toLowerCase().includes(q)));
+    productsEl.innerHTML=list.length?list.map(p=>`
+      <article class="card">
+        <div class="photo">${p.img?`<img src="${p.img}" alt="${esc(p.name)}">`:`<div class="placeholder">${p.emoji||'🍔'}</div>`}<span class="badge">DESTACADO</span></div>
+        <div class="cardBody">
+          <h3>${esc(p.name)}</h3>
+          <div class="desc">${esc(p.desc)}</div>
+          <div class="bottom"><div class="price">${money(p.price)}</div><button type="button" class="add sp-add-btn" data-product-id="${esc(String(p.id))}">+ Agregar</button></div>
+        </div>
+      </article>`).join(''):`<div class="empty">No encontramos productos con esa búsqueda.</div>`;
+    updateCart();
+    renderPromotions();
+  }catch(e){
+    console.error('Error renderizando catálogo:',e);
+    // Último respaldo: mostrar siempre el menú base.
+    products=seed.map((p,i)=>({...p,id:p.id||('seed-'+i),active:true}));
+    categories=[...defaultCats];
+    try{
+      const catsEl=document.getElementById('cats');
+      const productsEl=document.getElementById('products');
+      if(catsEl)catsEl.innerHTML=defaultCats.map(c=>`<button type="button" class="cat ${currentCat===c?'active':''}" onclick="setCategory('${esc(c)}')">${esc(c)}</button>`).join('');
+      if(productsEl)productsEl.innerHTML=products.map(p=>`<article class="card"><div class="photo"><div class="placeholder">${p.emoji||'🍔'}</div><span class="badge">DESTACADO</span></div><div class="cardBody"><h3>${esc(p.name)}</h3><div class="desc">${esc(p.desc)}</div><div class="bottom"><div class="price">${money(p.price)}</div><button type="button" class="add sp-add-btn" data-product-id="${esc(String(p.id))}">+ Agregar</button></div></div></article>`).join('');
+    }catch(_){}
+  }
 }
 function updateCart(){
   try{
