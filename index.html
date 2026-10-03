@@ -1118,7 +1118,18 @@ async function saveProduct(id){
   if(!p.name){alert('Escribe el nombre del producto.');return}
   if(!id)products.push(p);
   localStorage.setItem(KEY,JSON.stringify(products));render();adminProducts();
-  try{await syncOneProductCentral(p)}catch(e){console.warn('Producto guardado localmente; sincronización central pendiente:',e);alert('El producto quedó guardado, pero Supabase no pudo actualizarlo: '+(e.message||e));}
+  try{
+    // Primero sincronizamos categorías + productos para evitar una condición de carrera:
+    // el producto nuevo no debe enviarse antes de que exista su categoría en Supabase.
+    if(window.SantoPecadoCentral?.connected) await spSyncCatalog();
+    await syncOneProductCentral(p);
+    // Refrescamos desde la fuente central para que el catálogo público use el ID/categoría reales.
+    if(typeof window.loadPublicCatalog==='function') await window.loadPublicCatalog();
+    render();
+  }catch(e){
+    console.warn('Producto guardado localmente; sincronización central pendiente:',e);
+    alert('El producto quedó guardado, pero Supabase no pudo actualizarlo: '+(e.message||e));
+  }
 }
 async function changePhoto(id){
   id=String(id);if(!isAdmin()){alert('Solo el administrador o dueño puede cambiar fotos.');return}
