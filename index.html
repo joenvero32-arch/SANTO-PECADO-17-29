@@ -322,17 +322,31 @@ function spSafeJSON(key,fallback){
     return fallback;
   }
 }
- const AUDIT='sp_premium_audit_v1'; let audit=JSON.parse(localStorage.getItem(AUDIT)||'[]');
+const AUDIT='sp_premium_audit_v1';
+let audit=spSafeJSON(AUDIT,[]);
+if(!Array.isArray(audit)) audit=[];
+
 let users=spSafeJSON(USERS,null);
 if(!Array.isArray(users)||!users.length){ users=[{id:'owner',user:'admin',name:'Administrador / Dueño',pin:'',role:'admin',allowOrders:true,allowInventory:true}]; }
 // Seguridad: nunca precargar usuario ni PIN en los campos de acceso.
 // El PIN local se valida solo desde el registro guardado por el administrador.
 
-let currentUser=JSON.parse(sessionStorage.getItem(SESSION)||'null');
-let customers=JSON.parse(localStorage.getItem(CUSTOMERS)||'[]');
-let promotions=JSON.parse(localStorage.getItem(PROMOS)||'[]');
-let promoNotifications=JSON.parse(localStorage.getItem(PROMO_NOTIFY)||'[]');
-let cashClosures=JSON.parse(localStorage.getItem(CASH)||'[]');
+let currentUser=null;
+try{
+  const rawSession=sessionStorage.getItem(SESSION);
+  currentUser=rawSession?JSON.parse(rawSession):null;
+}catch(e){
+  try{sessionStorage.removeItem(SESSION)}catch(_){}
+  currentUser=null;
+}
+let customers=spSafeJSON(CUSTOMERS,[]);
+let promotions=spSafeJSON(PROMOS,[]);
+let promoNotifications=spSafeJSON(PROMO_NOTIFY,[]);
+let cashClosures=spSafeJSON(CASH,[]);
+if(!Array.isArray(customers))customers=[];
+if(!Array.isArray(promotions))promotions=[];
+if(!Array.isArray(promoNotifications))promoNotifications=[];
+if(!Array.isArray(cashClosures))cashClosures=[];
 localStorage.setItem(USERS,JSON.stringify(users));
 function isAdmin(){return currentUser&&currentUser.role==='admin'}
 function can(permission){return isAdmin() || !!(currentUser&&currentUser[permission])}
@@ -380,7 +394,8 @@ let settings=spSafeJSON(SETTINGS,null)||{whatsapp:ADMIN_WA};
 const defaultCats=['La Gula','La Tentación','El Pecado','Hamburguesas','Arepas','Alitas'];
 let categories=spSafeJSON(CATS,null);
 if(!Array.isArray(categories)||!categories.length) categories=[...defaultCats];
-let cart=JSON.parse(localStorage.getItem('sp_premium_cart_v2')||'[]');
+let cart=spSafeJSON('sp_premium_cart_v2',[]);
+if(!Array.isArray(cart))cart=[];
 let toppings=spSafeJSON(TOP,null);
 if(!Array.isArray(toppings)||!toppings.length) toppings=[
  {id:1,name:'Queso extra',price:3000,active:true},
@@ -394,8 +409,10 @@ if(!Array.isArray(toppings)||!toppings.length) toppings=[
 ];
 // Compatibilidad: los toppings existentes conservan su configuración anterior hasta que se active su control de stock.
 toppings.forEach(t=>{if(t.tracked===undefined)t.tracked=false;if(!Number.isFinite(Number(t.stock)))t.stock=0;if(!Number.isFinite(Number(t.minStock)))t.minStock=0;if(!Number.isFinite(Number(t.usage))||Number(t.usage)<=0)t.usage=1;if(!t.unit)t.unit='porciones';});
-let sales=JSON.parse(localStorage.getItem(SALES)||'[]');
-let movements=JSON.parse(localStorage.getItem(INV)||'[]');
+let sales=spSafeJSON(SALES,[]);
+let movements=spSafeJSON(INV,[]);
+if(!Array.isArray(sales))sales=[];
+if(!Array.isArray(movements))movements=[];
 let currentCat='Todos';
 
 function money(n){return new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(Number(n)||0)}
