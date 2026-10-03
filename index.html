@@ -1052,6 +1052,7 @@ function adminProducts(){
           <button class="mini" type="button" onclick="editProduct('${p.id}')">✏️ Editar</button>
           <button class="mini" type="button" onclick="changePhoto('${p.id}')">📷 Cambiar foto</button>
           <button class="mini" type="button" onclick="toggleProduct('${p.id}')">${p.active?'Ocultar':'Activar'}</button>
+          <button class="mini" type="button" onclick="deleteProduct('${p.id}')">🗑️ Eliminar</button>
         </div>
       </div>`).join('')}</div>`;
   document.getElementById('modal').classList.add('open');
@@ -1143,8 +1144,47 @@ async function changePhoto(id){
     }catch(e){alert('No se pudo procesar la foto: '+(e.message||e))}finally{input.remove()}};im.onerror=()=>{alert('No se pudo leer la imagen.');input.remove()};im.src=reader.result};reader.onerror=()=>{alert('No se pudo leer el archivo.');input.remove()};reader.readAsDataURL(f)};
   input.click();
 }
-function toggleProduct(id){
-  id=String(id);if(!isAdmin()){alert('Solo el administrador o dueño puede activar u ocultar productos.');return}const p=products.find(x=>String(x.id)===id);if(!p){alert('No se encontró el producto.');return}p.active=!p.active;save();render();adminProducts()}
+async function toggleProduct(id){
+  id=String(id);
+  if(!isAdmin()){alert('Solo el administrador o dueño puede activar u ocultar productos.');return}
+  const p=products.find(x=>String(x.id)===id);
+  if(!p){alert('No se encontró el producto.');return}
+  const previous=p.active!==false;
+  p.active=!previous;
+  localStorage.setItem(KEY,JSON.stringify(products));
+  render();adminProducts();
+  try{
+    await syncOneProductCentral(p);
+    if(typeof window.loadPublicCatalog==='function') await window.loadPublicCatalog();
+    render();adminProducts();
+  }catch(e){
+    p.active=previous;
+    localStorage.setItem(KEY,JSON.stringify(products));
+    render();adminProducts();
+    alert('No se pudo cambiar el estado en Supabase: '+(e.message||e));
+  }
+}
+async function deleteProduct(id){
+  id=String(id);
+  if(!isAdmin()){alert('Solo el administrador o dueño puede eliminar productos.');return}
+  const p=products.find(x=>String(x.id)===id);
+  if(!p){alert('No se encontró el producto.');return}
+  if(!confirm('¿Eliminar "'+p.name+'"? Esta acción lo ocultará del catálogo.'))return;
+  const previous=p.active!==false;
+  p.active=false;
+  localStorage.setItem(KEY,JSON.stringify(products));
+  render();adminProducts();
+  try{
+    await syncOneProductCentral(p);
+    if(typeof window.loadPublicCatalog==='function') await window.loadPublicCatalog();
+    render();adminProducts();
+  }catch(e){
+    p.active=previous;
+    localStorage.setItem(KEY,JSON.stringify(products));
+    render();adminProducts();
+    alert('No se pudo eliminar/ocultar el producto en Supabase: '+(e.message||e));
+  }
+}
 
 function adminCategories(){
   if(!isAdmin()){alert('Solo el administrador o dueño tiene acceso a esta sección.');return}
