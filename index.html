@@ -661,13 +661,47 @@ document.addEventListener('click',function(ev){
 });
 
 window.addProductDirect=addProductDirect;
-function openMyOrder(){
+async function openMyOrder(){
   if(cart.length){openCart();return}
-  const no=localStorage.getItem(LAST_ORDER)||'';
-  if(!no){openCart();return}
-  const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
-  const o=orders.find(x=>String(x.no)===String(no));
-  if(!o){trackOrder(no);return}
+  let orders=spSafeJSON(ORDERS,[]);
+  if(!Array.isArray(orders))orders=[];
+  orders.sort((a,b)=>new Date(b.created)-new Date(a.created));
+
+  // Solo mostramos pedidos que aún no han sido finalizados.
+  // Si otro dispositivo ya confirmó el pago, lo detectamos en Supabase.
+  let pending=[];
+  for(const o of orders){
+    if(String(o.paymentStatus||'').toLowerCase()==='pagado' || String(o.status||'').toLowerCase()==='entregado')continue;
+    if(SP_DB_ON && o.no){
+      try{
+        const {data,error}=await SP_DB.rpc('sp_get_order_receipt',{p_order_number:String(o.no).trim()});
+        if(!error&&data?.[0]){
+          const central=data[0];
+          if(String(central.payment_status||'').toLowerCase()==='pagado'){
+            o.paymentStatus='pagado';
+            o.status=central.status||'entregado';
+            o.pay=central.payment_method||o.pay||'';
+            o.updated=central.updated_at||o.updated;
+            continue;
+          }
+        }
+      }catch(e){console.warn('No se pudo verificar el estado del pedido:',e)}
+    }
+    pending.push(o);
+  }
+
+  localStorage.setItem(ORDERS,JSON.stringify(orders));
+  const lastNo=localStorage.getItem(LAST_ORDER)||'';
+  const o=pending.find(x=>String(x.no)===String(lastNo))||pending[0];
+
+  if(!o){
+    localStorage.removeItem(LAST_ORDER);
+    document.getElementById('panel').innerHTML='<div class="panelHead"><h2>🧾 Mi pedido</h2><button class="close" onclick="closeModal()">✕</button></div><div class="empty" style="margin-top:14px">No tienes pedidos pendientes.</div><div class="modalBtns" style="margin-top:14px"><button class="primary" onclick="closeModal();document.getElementById(\'menu\').scrollIntoView({behavior:\'smooth\'})">🍔 Hacer un nuevo pedido</button></div>';
+    document.getElementById('modal').classList.add('open');
+    return;
+  }
+
+  localStorage.setItem(LAST_ORDER,String(o.no));
   const lines=(o.detail||'').split('\\n').map(x=>x.trim()).filter(Boolean).map(x=>'<div class="cartLine"><div class="cartLineInfo"><span>'+esc(x)+'</span></div></div>').join('');
   document.getElementById('panel').innerHTML='<div class="panelHead"><h2>🧾 Mi pedido</h2><button class="close" onclick="closeModal()">✕</button></div>'
     +'<div class="notice" style="margin:14px 0">Pedido <b>'+esc(o.no)+'</b> · '+new Date(o.created).toLocaleString('es-CO')+'</div>'
