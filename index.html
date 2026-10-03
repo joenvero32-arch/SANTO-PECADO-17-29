@@ -519,7 +519,17 @@ function render(){
     catsEl.innerHTML=cats.map(c=>`<button type="button" class="cat ${currentCat===c?'active':''}" data-cat="${esc(c)}" onclick="setCategory(this.dataset.cat)">${esc(c)}</button>`).join('');
 
     const q=String(searchEl.value||'').toLowerCase().trim();
-    const list=products.filter(p=>p.active&&(currentCat==='Todos'||p.cat===currentCat)&&(!q||p.name.toLowerCase().includes(q)||p.desc.toLowerCase().includes(q)));
+    const categoryOrder=Object.fromEntries(categories.map((name,i)=>[String(name),i]));
+    const list=products
+      .filter(p=>p.active&&(currentCat==='Todos'||p.cat===currentCat)&&(!q||p.name.toLowerCase().includes(q)||p.desc.toLowerCase().includes(q)))
+      .slice()
+      .sort((a,b)=>{
+        const ca=categoryOrder[String(a.cat)]??9999, cb=categoryOrder[String(b.cat)]??9999;
+        if(ca!==cb)return ca-cb;
+        const sa=Number(a.sort_order??999999), sb=Number(b.sort_order??999999);
+        if(sa!==sb)return sa-sb;
+        return String(a.name||'').localeCompare(String(b.name||''),'es');
+      });
     productsEl.innerHTML=list.length?list.map(p=>`
       <article class="card">
         <div class="photo">${p.img?`<img src="${p.img}" alt="${esc(p.name)}">`:`<div class="placeholder">${p.emoji||'🍔'}</div>`}<span class="badge">DESTACADO</span></div>
@@ -1117,7 +1127,13 @@ async function saveProduct(id){
   if(!p){alert('No se encontró el producto.');return}
   p.cat=document.getElementById('pc').value.trim()||'Otros';p.name=document.getElementById('pn').value.trim();p.desc=document.getElementById('pd').value.trim();p.price=Number(document.getElementById('pp').value)||0;p.emoji=document.getElementById('pe').value.trim()||'🍔';
   if(!p.name){alert('Escribe el nombre del producto.');return}
-  if(!id)products.push(p);
+  if(!id){
+    // Los productos nuevos quedan al final de su categoría.
+    const sameCat=products.filter(x=>x.active!==false&&String(x.cat||'')===String(p.cat||''));
+    const maxOrder=sameCat.reduce((m,x)=>Math.max(m,Number(x.sort_order)||0),-1);
+    p.sort_order=maxOrder+1;
+    products.push(p);
+  }
   localStorage.setItem(KEY,JSON.stringify(products));render();adminProducts();
   try{
     // Primero sincronizamos categorías + productos para evitar una condición de carrera:
