@@ -1168,14 +1168,27 @@ function adminCategories(){
   document.getElementById('modal').classList.add('open');
 }
 function categoryHidden(c){return !categories.includes(c)}
-function newCategory(){
+async function newCategory(){
   if(!isAdmin()){alert('Solo el administrador o dueño puede modificar categorías.');return}
   const name=prompt('Nombre de la nueva categoría:');
   if(name===null)return;
   const v=name.trim();
   if(!v)return;
   if(categories.some(c=>c.toLowerCase()===v.toLowerCase())){alert('Esa categoría ya existe.');return}
-  categories.push(v);save();render();adminCategories();
+  try{
+    if(SP_DB_ON && SP_DB?.rpc){
+      const {data,error}=await SP_DB.rpc('admin_upsert_category',{p_name:v,p_sort_order:categories.length});
+      if(error)throw error;
+      if(!data?.id)throw new Error('Supabase no confirmó la categoría');
+    }
+    categories.push(v);
+    localStorage.setItem(CATS,JSON.stringify(categories));
+    if(typeof window.loadPublicCatalog==='function') await window.loadPublicCatalog();
+    render();adminCategories();
+  }catch(e){
+    console.warn('No se pudo guardar la categoría:',e);
+    alert('No se pudo guardar la categoría en Supabase: '+(e.message||e));
+  }
 }
 function editCategory(i){
   if(!isAdmin()){alert('Solo el administrador o dueño puede modificar categorías.');return}
