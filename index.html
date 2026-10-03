@@ -736,7 +736,7 @@ async function sendOrder(){
   }
   for(const [id,amount] of needs){const t=toppings.find(a=>String(a.id)===String(id));if(t&&Number(t.stock)<amount){alert('No hay suficiente inventario de '+t.name+'.');return}}
   const no='SP-'+Math.floor(100000+Math.random()*900000);
-  const detail=cart.map(x=>{const p=products.find(a=>String(a.id)===String(x.id));const baseLine=Number(x.base??p.price)*Number(x.qty||1);const tops=(x.toppings||[]).map(t=>t.name+': '+(t.price?'+':'')+money(t.price||0)).join('\\n  ');return '• '+p.name+' x'+x.qty+' — '+money(baseLine)+(tops?'\\n  '+tops:'')+(x.note?'\\n  Nota: '+x.note:'')}).join('\\n');
+  const detail=cart.map(x=>{const p=products.find(a=>String(a.id)===String(x.id));const qty=Number(x.qty||1);const baseLine=Number(x.base??p.price)*qty;const tops=(x.toppings||[]).map(t=>t.name+': '+(t.price?'+':'')+money(t.price||0)).join('\\n  ');return p.name+(qty>1?' x'+qty:'')+': '+money(baseLine)+(tops?'\\n  '+tops:'')+(x.note?'\\n  Nota: '+x.note:'')}).join('\\n');
   const msg=['🍔 SANTO PECADO 17-29','','NUEVO PEDIDO '+no,'','👤 Cliente: '+name,'📞 Teléfono: '+phone,'🚚 Tipo: '+type,(type==='En el local'?'🪑 Mesa: '+tableNumber:''),'📍 Dirección: '+(addr||'No aplica'),'💳 Pago: '+pay,'','PRODUCTOS:',detail,'','💰 TOTAL: '+money(total()),'📝 Observaciones: '+(obs||'Ninguna')].filter(Boolean).join('\n');
   if(SP_DB_ON){
     try{
