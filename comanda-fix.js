@@ -92,12 +92,38 @@
     }
   }
 
+  async function getCentralOrder(no){
+    try{
+      if(typeof SP_DB!=='undefined' && SP_DB && typeof SP_DB.rpc==='function'){
+        const {data,error}=await SP_DB.rpc('sp_get_admin_orders');
+        if(!error){
+          const row=(Array.isArray(data)?data:[]).find(x=>String(x.order_number)===String(no));
+          if(row) return row;
+        }
+      }
+      return null;
+    }catch(e){
+      console.warn('No se pudo recuperar encabezado central:',e);
+      return null;
+    }
+  }
+
   async function printComanda(no){
     try{
       const orders=JSON.parse(localStorage.getItem('ORDERS')||'[]');
       const queue=JSON.parse(localStorage.getItem('KITCHEN_QUEUE')||'[]');
       const o=orders.find(x=>String(x.no)===String(no)) || queue.find(x=>String(x.no)===String(no));
       if(!o){alert('No encontramos el pedido en este dispositivo.');return;}
+
+      const central=await getCentralOrder(o.no);
+      if(central){
+        o.name=central.customer_name||o.name||'No registrado';
+        o.type=central.order_type==='delivery'?'Domicilio':central.order_type==='pickup'?'Recoger':'Local';
+        o.addr=central.address||o.addr||'';
+        o.obs=central.observations||o.obs||'';
+        o.driverName=central.driver_name||o.driverName||'';
+        o.created=central.created_at||o.created;
+      }
 
       const detail=await getDetail(o);
       const logo=document.querySelector('.brandLogo')?.src||'';
