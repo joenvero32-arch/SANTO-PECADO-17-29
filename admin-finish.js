@@ -136,11 +136,17 @@ window.printComanda = async function(no){
   try{
     const list=JSON.parse(localStorage.getItem('ORDERS')||'[]');
     const queue=JSON.parse(localStorage.getItem('KITCHEN_QUEUE')||'[]');
-    const o=list.find(x=>String(x.no)===String(no))||queue.find(x=>String(x.no)===String(no));
-    if(!o){alert('No encontramos el pedido en este dispositivo.');return}
+    let o=list.find(x=>String(x.no)===String(no))||queue.find(x=>String(x.no)===String(no))||{no:String(no),detail:''};
 
-    const central=await spKitchenCentralOrder(o.no);
-    if(central){
+    // La comanda debe funcionar aunque este dispositivo no tenga el pedido en localStorage.
+    // Primero recuperamos el pedido central desde Supabase y luego completamos la información.
+    const central=await spKitchenCentralOrder(no);
+    if(!central){
+      if(!o.created){
+        alert('No pudimos recuperar el pedido desde Supabase. Actualiza la página y vuelve a intentarlo.');
+        return;
+      }
+    }else{
       o.name=central.customer_name||o.name||'No registrado';
       o.type=central.order_type==='delivery'?'Domicilio':central.order_type==='pickup'?'Recoger':'Local';
       o.addr=central.address||o.addr||'';
@@ -148,6 +154,7 @@ window.printComanda = async function(no){
       o.tableNumber=central.table_number||o.tableNumber||'';
       o.driverName=central.driver_name||o.driverName||'';
       o.created=central.created_at||o.created;
+      o.centralId=central.order_id||o.centralId||'';
     }
 
     const detail=await spKitchenDetail(o.no,o);
