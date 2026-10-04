@@ -53,20 +53,112 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
 
-window.printComanda = function(no){
+async function spKitchenCentralOrder(no){
+  try{
+    if(window.SP_DB&&typeof SP_DB.rpc==='function'){
+      const {data,error}=await SP_DB.rpc('sp_get_kitchen_order',{p_order_number:String(no)});
+      if(!error&&Array.isArray(data)&&data[0])return data[0];
+    }
+    if(!window.supabase){
+      await new Promise((resolve,reject)=>{
+        const sc=document.createElement('script');
+        sc.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+        sc.onload=resolve;
+        sc.onerror=reject;
+        document.head.appendChild(sc);
+      });
+    }
+    const db=window.supabase.createClient(
+      'https://ghucwrrvqivmbogtcgcr.supabase.co',
+      'sb_publishable_chFTmgoaIVvJSdpgTTuUSQ_fBNEq4WJ',
+      {auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}
+    );
+    const {data,error}=await db.rpc('sp_get_kitchen_order',{p_order_number:String(no)});
+    if(!error&&Array.isArray(data)&&data[0])return data[0];
+    return null;
+  }catch(e){
+    console.warn('Encabezado comanda cocina:',e);
+    return null;
+  }
+}
+
+async function spKitchenDetail(no,localOrder){
+  try{
+    let centralId='';
+    const central=await spKitchenCentralOrder(no);
+    if(central)centralId=central.order_id||'';
+    if(!centralId&&localOrder.centralId)centralId=localOrder.centralId;
+    if(!centralId)return String(localOrder.detail||'');
+
+    if(!window.supabase){
+      await new Promise((resolve,reject)=>{
+        const sc=document.createElement('script');
+        sc.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+        sc.onload=resolve;
+        sc.onerror=reject;
+        document.head.appendChild(sc);
+      });
+    }
+    const db=window.supabase.createClient(
+      'https://ghucwrrvqivmbogtcgcr.supabase.co',
+      'sb_publishable_chFTmgoaIVvJSdpgTTuUSQ_fBNEq4WJ',
+      {auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}
+    );
+    const {data:items,error}=await db.from('order_items')
+      .select('id,product_name,quantity,notes')
+      .eq('order_id',centralId)
+      .order('created_at');
+    if(error)throw error;
+
+    const result=[];
+    for(const item of (items||[])){
+      const qty=Number(item.quantity||1);
+      let line=String(item.product_name||'Producto')+(qty>1?' x'+qty:'');
+      if(item.notes)line+='\\n  Nota: '+item.notes;
+      const {data:tops}=await db.from('order_item_toppings')
+        .select('topping_name,quantity')
+        .eq('order_item_id',item.id)
+        .order('created_at');
+      for(const t of (tops||[])){
+        const tq=Number(t.quantity||1);
+        line+='\\n  '+String(t.topping_name||'Adicional')+(tq>1?' x'+tq:'');
+      }
+      result.push(line);
+    }
+    return result.join('\\n');
+  }catch(e){
+    console.warn('Detalle comanda cocina:',e);
+    return String(localOrder.detail||'');
+  }
+}
+
+window.printComanda = async function(no){
   try{
     const list=JSON.parse(localStorage.getItem('ORDERS')||'[]');
-    const o=list.find(x=>String(x.no)===String(no));
+    const queue=JSON.parse(localStorage.getItem('KITCHEN_QUEUE')||'[]');
+    const o=list.find(x=>String(x.no)===String(no))||queue.find(x=>String(x.no)===String(no));
     if(!o){alert('No encontramos el pedido en este dispositivo.');return}
 
+    const central=await spKitchenCentralOrder(o.no);
+    if(central){
+      o.name=central.customer_name||o.name||'No registrado';
+      o.type=central.order_type==='delivery'?'Domicilio':central.order_type==='pickup'?'Recoger':'Local';
+      o.addr=central.address||o.addr||'';
+      o.obs=central.observations||o.obs||'';
+      o.tableNumber=central.table_number||o.tableNumber||'';
+      o.driverName=central.driver_name||o.driverName||'';
+      o.created=central.created_at||o.created;
+    }
+
+    const detail=await spKitchenDetail(o.no,o);
     const safe=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
     const logo=document.querySelector('.brandLogo')?.src||'';
     const cleanLine=x=>String(x||'').replace(/\s+—\s+\$[\d.,]+/g,'').replace(/\s+\+\$[\d.,]+/g,'');
-    const lines=String(o.detail||'').split('\n').map(x=>x.trim()).filter(Boolean).map(x=>'<div class="line">'+safe(cleanLine(x))+'</div>').join('');
-    const date=new Date(o.created).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'});
+    const lines=String(detail||'').split('\\n').map(x=>x.trim()).filter(Boolean).map(x=>'<div class="line">'+safe(cleanLine(x))+'</div>').join('');
+    const date=o.created?new Date(o.created).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'}):'';
     const driver=o.type==='Domicilio'&&o.driverName?'<div><b>Domiciliario:</b> '+safe(o.driverName)+'</div>':'';
 
-    const html='<!doctype html><html><head><meta charset="utf-8"><title>Comanda '+safe(o.no)+'</title><style>@page{size:80mm auto;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif}body{width:80mm}.ticket{width:80mm;padding:4mm 4mm 5mm}.head{text-align:center;border-bottom:1px dashed #111;padding-bottom:3mm}.logo{display:block;width:30mm;height:auto;max-height:24mm;object-fit:contain;margin:0 auto 2mm}.brand{font-size:16px;font-weight:900}.title{text-align:center;font-size:14px;font-weight:900;margin:3mm 0}.info{font-size:10px;line-height:1.45;border-bottom:1px dashed #111;padding-bottom:3mm}.info div{margin-bottom:1mm;overflow-wrap:anywhere}.items{padding:3mm 0;border-bottom:1px dashed #111}.itemsTitle{font-size:12px;font-weight:900;margin-bottom:2mm}.line{font-size:11px;line-height:1.45;margin:1.5mm 0;white-space:pre-wrap;overflow-wrap:anywhere}.obs{font-size:10px;line-height:1.45;margin-top:3mm}.foot{text-align:center;font-size:9px;font-weight:900;margin-top:4mm}</style></head><body><div class="ticket"><div class="head">'+(logo?'<img class="logo" src="'+safe(logo)+'" alt="Santo Pecado">':'')+'<div class="brand">SANTO PECADO 17-29</div></div><div class="title">🍳 COMANDA DE COCINA<br>'+safe(o.no)+'</div><div class="info"><div><b>Hora:</b> '+safe(date)+'</div><div><b>Cliente:</b> '+safe(o.name||'No registrado')+'</div><div><b>Tipo:</b> '+safe(o.type||'')+'</div>'+(o.type==='Domicilio'&&o.addr?'<div><b>Dirección:</b> '+safe(o.addr)+'</div>':'')+driver+'</div><div class="items"><div class="itemsTitle">PREPARAR</div>'+(lines||'<div class="line">Sin productos</div>')+'</div>'+(o.obs?'<div class="obs"><b>OBSERVACIONES:</b><br>'+safe(o.obs)+'</div>':'')+'<div class="foot">PEDIDO RECIBIDO · PREPARAR</div></div></body></html>';
+    const html='<!doctype html><html><head><meta charset="utf-8"><title>Comanda '+safe(o.no)+'</title><style>@page{size:80mm auto;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif}body{width:80mm}.ticket{width:80mm;padding:4mm 4mm 5mm}.head{text-align:center;border-bottom:1px dashed #111;padding-bottom:3mm}.logo{display:block;width:30mm;height:auto;max-height:24mm;object-fit:contain;margin:0 auto 2mm}.brand{font-size:16px;font-weight:900}.title{text-align:center;font-size:14px;font-weight:900;margin:3mm 0}.info{font-size:10px;line-height:1.45;border-bottom:1px dashed #111;padding-bottom:3mm}.info div{margin-bottom:1mm;overflow-wrap:anywhere}.items{padding:3mm 0;border-bottom:1px dashed #111}.itemsTitle{font-size:12px;font-weight:900;margin-bottom:2mm}.line{font-size:11px;line-height:1.45;margin:1.5mm 0;white-space:pre-wrap;overflow-wrap:anywhere}.obs{font-size:10px;line-height:1.45;margin-top:3mm}.foot{text-align:center;font-size:9px;font-weight:900;margin-top:4mm}</style></head><body><div class="ticket"><div class="head">'+(logo?'<img class="logo" src="'+safe(logo)+'" alt="Santo Pecado">':'')+'<div class="brand">SANTO PECADO 17-29</div></div><div class="title">🍳 COMANDA DE COCINA<br>'+safe(o.no)+'</div><div class="info"><div><b>Hora:</b> '+safe(date)+'</div><div><b>Cliente:</b> '+safe(o.name||'No registrado')+'</div><div><b>Tipo:</b> '+safe(o.type||'')+'</div>'+(o.tableNumber?'<div><b>Mesa:</b> '+safe(o.tableNumber)+'</div>':'')+(o.type==='Domicilio'&&o.addr?'<div><b>Dirección:</b> '+safe(o.addr)+'</div>':'')+driver+'</div><div class="items"><div class="itemsTitle">PREPARAR</div>'+(lines||'<div class="line">Sin productos</div>')+'</div>'+(o.obs?'<div class="obs"><b>OBSERVACIONES:</b><br>'+safe(o.obs)+'</div>':'')+'<div class="foot">PEDIDO RECIBIDO · PREPARAR</div></div></body></html>';
 
     const w=window.open('','_blank','width=420,height=800');
     if(!w){
@@ -78,13 +170,12 @@ window.printComanda = function(no){
     w.document.close();
     setTimeout(()=>{try{w.focus();w.print();}catch(e){console.warn('Impresión no disponible:',e)}},500);
 
-    const q=JSON.parse(localStorage.getItem('KITCHEN_QUEUE')||'[]');
-    const item=q.find(x=>String(x.no)===String(no));
+    const item=queue.find(x=>String(x.no)===String(no));
     if(item){
       item.printed=true;
       item.printedAt=new Date().toISOString();
       item.printedBy='administrador';
-      localStorage.setItem('KITCHEN_QUEUE',JSON.stringify(q));
+      localStorage.setItem('KITCHEN_QUEUE',JSON.stringify(queue));
     }
   }catch(e){
     console.error('Comanda cocina:',e);
