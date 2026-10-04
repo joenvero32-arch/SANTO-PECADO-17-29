@@ -695,6 +695,18 @@ async function openMyOrder(){
         }
       }catch(e){console.warn('No se pudo verificar el estado del pedido:',e)}
     }
+    if(SP_DB_ON && o.no && !String(o.detail||'').trim()){
+      try{
+        const {data,error}=await SP_DB.rpc('sp_get_public_order_detail',{p_order_number:String(o.no).trim()});
+        if(!error && data?.[0]){
+          o.detail=String(data[0].detail||'');
+          o.name=data[0].customer_name||o.name;
+          o.status=data[0].status||o.status;
+          o.total=Number(data[0].total??o.total??0);
+          o.created=data[0].created_at||o.created;
+        }
+      }catch(e){console.warn('No se pudo cargar el detalle del pedido:',e)}
+    }
     pending.push(o);
   }
 
@@ -731,7 +743,7 @@ function openCart(keep=false){
       <div class="cartLineInfo"><b>${esc(p.name)}</b>
       <span>${(x.toppings||[]).length?esc(x.toppings.map(t=>t.name+(Number(t.quantity||1)>1?' x'+Number(t.quantity):'')).join(', ')):'Sin adicionales'}${x.note?' · '+esc(x.note):''}</span></div>
       <div class="qty"><button onclick="cart[${cart.indexOf(x)}].qty--;if(cart[${cart.indexOf(x)}].qty<=0)cart.splice(${cart.indexOf(x)},1);updateCart();openCart()">−</button><b>${x.qty}</b><button onclick="cart[${cart.indexOf(x)}].qty++;updateCart();openCart()">+</button></div>
-      <b>${money(((x.base??p.price)+(x.toppings||[]).reduce((a,t)=>a+t.price,0))*x.qty)}</b>
+      <b>${money(((x.base??p.price)+(x.toppings||[]).reduce((a,t)=>a+Number(t.price||0)*Number(t.quantity||1),0))*x.qty)}</b>
       <button class="remove" onclick="cart.splice(${cart.indexOf(x)},1);updateCart();openCart()">×</button>
     </div>`}).join('');
   document.getElementById('panel').innerHTML=`
