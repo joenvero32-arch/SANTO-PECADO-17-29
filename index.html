@@ -1405,9 +1405,39 @@ async function adminCash(){
   const apertures=cashClosures.filter(c=>c.day===today&&c.type==='apertura'&&(!lastCloseAt||new Date(c.date).getTime()>lastCloseAt)).sort((a,b)=>new Date(b.date)-new Date(a.date));
   const openingRecord=apertures[0]||null;
   const opening=openingRecord?Number(openingRecord.opening||0):0;
-  const list=salesForDay(today).filter(o=>!lastCloseAt||new Date(o.date||o.created||0).getTime()>lastCloseAt);
-  const pay=paymentTotals(list);
-  const salesTotal=list.reduce((a,o)=>a+Number(o.total||0),0);
+  let list=salesForDay(today).filter(o=>!lastCloseAt||new Date(o.date||o.created||0).getTime()>lastCloseAt);
+  // Fuente central de Caja: ventas confirmadas en Supabase.
+  // No depender del localStorage de este computador.
+  if(SP_DB_ON && SP_DB?.rpc){
+    try{
+      if(!currentUser?.central) await ensureCentralAdminSession();
+      const {data:centralOrders,error:centralError}=await SP_DB.rpc('sp_get_admin_orders');
+      if(!centralError && Array.isArray(centralOrders)){
+        list=centralOrders
+          .filter(o=>String(o.payment_status||'').toLowerCase()==='pagado')
+          .map(o=>({
+            no:o.order_number,
+            date:o.updated_at||o.created_at,
+            created:o.created_at,
+            name:o.customer_name||'',
+            phone:o.customer_phone||'',
+            type:o.order_type||'',
+            pay:o.payment_method||'Sin especificar',
+            addr:o.address||'',
+            obs:o.observations||'',
+            total:Number(o.total||0),
+            paymentStatus:'pagado',
+            status:o.status||'entregado'
+          }))
+          .filter(o=>dayKey(o.date||o.created)===today)
+          .filter(o=>!lastCloseAt||new Date(o.date||o.created||0).getTime()>lastCloseAt);
+      }else if(centralError){
+        console.warn('No se pudieron cargar las ventas centrales para Caja:',centralError);
+      }
+    }catch(e){
+      console.warn('No se pudieron cargar las ventas centrales para Caja:',e);
+    }
+  }
   let expenses=[]; try{expenses=await getBusinessExpenses(today,today)}catch(e){console.warn('Gastos del día no disponibles:',e.message||e)}
   const sessionExpenses=expenses.filter(x=>!lastCloseAt||new Date(x.created_at||x.createdAt||x.date||0).getTime()>lastCloseAt);
   const expensesTotal=sessionExpenses.reduce((a,x)=>a+Number(x.amount||0),0);
