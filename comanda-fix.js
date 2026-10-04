@@ -18,18 +18,35 @@
     try{
       // Usamos la misma función segura que ya alimenta la pantalla Pedidos.
       // Así Comanda cocina recibe exactamente el mismo pedido central.
+      let centralId=o.centralId||'';
+
+      // Primero intentamos obtener el pedido central por su número.
+      // No dependemos de que localStorage haya guardado centralId.
       if(typeof SP_DB!=='undefined' && SP_DB && typeof SP_DB.rpc==='function'){
         const {data,error}=await SP_DB.rpc('sp_get_admin_orders');
         if(!error){
           const row=(Array.isArray(data)?data:[]).find(x=>String(x.order_number)===String(o.no));
-          if(row && String(row.detail||'').trim()) return String(row.detail);
+          if(row){
+            if(String(row.detail||'').trim()) return String(row.detail);
+            centralId=row.id||centralId;
+          }
         }else{
           console.warn('sp_get_admin_orders para comanda:',error);
         }
       }
 
-      // Respaldo directo si el pedido tiene referencia central.
-      const centralId=o.centralId;
+      // Si el RPC no encontró el pedido, lo buscamos directamente por número.
+      // Esta consulta respeta la sesión administrativa de Supabase.
+      if(!centralId && typeof SP_DB!=='undefined' && SP_DB && typeof SP_DB.from==='function'){
+        const {data:order,error:orderError}=await SP_DB
+          .from('orders')
+          .select('id')
+          .eq('order_number',String(o.no))
+          .maybeSingle();
+        if(!orderError && order?.id) centralId=order.id;
+        else if(orderError) console.warn('Búsqueda de pedido central:',orderError);
+      }
+
       if(!centralId) return '';
 
       if(!window.supabase){
