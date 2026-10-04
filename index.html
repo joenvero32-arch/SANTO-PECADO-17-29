@@ -964,9 +964,16 @@ async function trackOrder(noFromButton){
       if(error){console.warn('Consulta central de estado:',error.message);return}
       if(!data?.length)return;
       const central=data[0];
+      let detail='';
+      try{
+        const {data:detailData,error:detailError}=await SP_DB.rpc('sp_get_public_order_detail',{p_order_number:String(central.order_number).trim()});
+        if(!detailError&&detailData?.[0]) detail=String(detailData[0].detail||'');
+      }catch(e){console.warn('Detalle público del pedido:',e)}
+      const detailHtml=detail ? '<div style="margin:14px 0"><div style="font-weight:900;margin-bottom:8px">🛒 LO QUE PEDISTE</div><div style="white-space:pre-wrap;line-height:1.65">'+esc(detail)+'</div></div>' : '<div class="empty" style="margin:14px 0">No hay detalle disponible.</div>';
       document.getElementById('panel').innerHTML=`
         <div class="panelHead"><h2>📍 Estado del pedido</h2><button class="close" onclick="closeModal()">✕</button></div>
         <div class="notice" style="margin:14px 0">Pedido <b>${esc(central.order_number)}</b></div>
+        ${detailHtml}
         ${statusMarkup({no:central.order_number,status:central.status,updated:central.updated_at})}
         <div class="totalBox"><span>TOTAL</span><span>${money(Number(central.total||0))}</span></div>
         <div class="notice" style="margin-top:12px"><b>${central.payment_status==='pagado'?'✅ COMPRA COMPLETADA':'⏳ PAGO PENDIENTE'}</b><br>${central.payment_status==='pagado'?'Pago confirmado · '+esc(central.payment_method||''):'El pago se confirma al momento de la entrega.'}</div>
