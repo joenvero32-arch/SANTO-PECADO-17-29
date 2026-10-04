@@ -1405,7 +1405,37 @@ async function adminCash(){
   const apertures=cashClosures.filter(c=>c.day===today&&c.type==='apertura'&&(!lastCloseAt||new Date(c.date).getTime()>lastCloseAt)).sort((a,b)=>new Date(b.date)-new Date(a.date));
   const openingRecord=apertures[0]||null;
   const opening=openingRecord?Number(openingRecord.opening||0):0;
-  const list=salesForDay(today).filter(o=>!lastCloseAt||new Date(o.date||o.created||0).getTime()>lastCloseAt);
+  let list=salesForDay(today).filter(o=>!lastCloseAt||new Date(o.date||o.created||0).getTime()>lastCloseAt);
+  if(SP_DB_ON){
+    try{
+      if(!currentUser?.central){
+        const ok=await ensureCentralAdminSession();
+        if(!ok) throw new Error('Sesión central de administrador no disponible.');
+      }
+      const {data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders');
+      if(error) throw error;
+      if(Array.isArray(centralOrders)){
+        list=centralOrders
+          .filter(o=>String(o.payment_status||'').toLowerCase()==='pagado')
+          .map(o=>({
+            no:o.order_number,
+            date:o.updated_at||o.created_at,
+            created:o.created_at,
+            name:o.customer_name||'',
+            phone:o.customer_phone||'',
+            type:o.order_type==='delivery'?'Domicilio':o.order_type==='pickup'?'Recoger':'Local',
+            pay:o.payment_method||'',
+            paymentStatus:o.payment_status||'pagado',
+            total:Number(o.total||0),
+            status:o.status||'entregado'
+          }))
+          .filter(o=>dayKey(o.date||o.created)===today)
+          .filter(o=>!lastCloseAt||new Date(o.date||o.created||0).getTime()>lastCloseAt);
+      }
+    }catch(e){
+      console.warn('Caja: no se pudieron cargar ventas centrales:',e);
+    }
+  }
   const pay=paymentTotals(list);
   const salesTotal=list.reduce((a,o)=>a+Number(o.total||0),0);
   let expenses=[]; try{expenses=await getBusinessExpenses(today,today)}catch(e){console.warn('Gastos del día no disponibles:',e.message||e)}
