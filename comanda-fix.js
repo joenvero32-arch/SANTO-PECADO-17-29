@@ -1,21 +1,84 @@
 /* Santo Pecado 17-29 — Comanda cocina
-   Solo habilita el botón existente "🍳 Comanda cocina".
+   Habilita el botón existente y recupera el detalle real desde Supabase
+   cuando el pedido central no trae el texto de detalle en localStorage.
    No modifica la interfaz ni los demás botones.
 */
 (function(){
+  const URL='https://ghucwrrvqivmbogtcgcr.supabase.co';
+  const KEY='sb_publishable_chFTmgoaIVvJSdpgTTuUSQ_fBNEq4WJ';
+  const CDN='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+
   function esc(s){
     return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
   }
-  function printComanda(no){
+
+  async function getDetail(o){
+    if(String(o.detail||'').trim()) return o.detail;
+
+    const centralId=o.centralId;
+    if(!centralId) return '';
+
+    try{
+      if(!window.supabase){
+        await new Promise((resolve,reject)=>{
+          const sc=document.createElement('script');
+          sc.src=CDN;
+          sc.onload=resolve;
+          sc.onerror=reject;
+          document.head.appendChild(sc);
+        });
+      }
+
+      const db=window.supabase.createClient(URL,KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+      const {data:items,error}=await db
+        .from('order_items')
+        .select('id,product_name,quantity,notes,unit_price')
+        .eq('order_id',centralId)
+        .order('created_at');
+
+      if(error) throw error;
+
+      const rows=Array.isArray(items)?items:[];
+      const result=[];
+
+      for(const item of rows){
+        const qty=Number(item.quantity||1);
+        let line=String(item.product_name||'Producto')+(qty>1?' x'+qty:'');
+        if(item.notes) line+='\n  Nota: '+item.notes;
+
+        const {data:tops,error:topError}=await db
+          .from('order_item_toppings')
+          .select('topping_name,quantity,unit_price')
+          .eq('order_item_id',item.id)
+          .order('created_at');
+
+        if(!topError){
+          for(const t of (tops||[])){
+            const tq=Number(t.quantity||1);
+            line+='\n  '+String(t.topping_name||'Adicional')+(tq>1?' x'+tq:'');
+          }
+        }
+        result.push(line);
+      }
+
+      return result.join('\n');
+    }catch(e){
+      console.warn('No se pudo recuperar el detalle de la comanda desde Supabase:',e);
+      return '';
+    }
+  }
+
+  async function printComanda(no){
     try{
       const orders=JSON.parse(localStorage.getItem('ORDERS')||'[]');
       const queue=JSON.parse(localStorage.getItem('KITCHEN_QUEUE')||'[]');
       const o=orders.find(x=>String(x.no)===String(no)) || queue.find(x=>String(x.no)===String(no));
       if(!o){alert('No encontramos el pedido en este dispositivo.');return;}
 
+      const detail=await getDetail(o);
       const logo=document.querySelector('.brandLogo')?.src||'';
       const cleanLine=x=>String(x||'').replace(/\s+—\s+\$[\d.,]+/g,'').replace(/\s+\+\$[\d.,]+/g,'');
-      const lines=String(o.detail||'').split('\n').map(x=>x.trim()).filter(Boolean)
+      const lines=String(detail||'').split('\n').map(x=>x.trim()).filter(Boolean)
         .map(x=>'<div class="line">'+esc(cleanLine(x))+'</div>').join('');
       const date=o.created?new Date(o.created).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'}):'';
       const driver=o.type==='Domicilio'&&o.driverName?'<div><b>Domiciliario:</b> '+esc(o.driverName)+'</div>':'';
