@@ -13,12 +13,25 @@
   }
 
   async function getDetail(o){
-    if(String(o.detail||'').trim()) return o.detail;
-
-    const centralId=o.centralId;
-    if(!centralId) return '';
+    if(String(o.detail||'').trim()) return String(o.detail);
 
     try{
+      // Usamos la misma función segura que ya alimenta la pantalla Pedidos.
+      // Así Comanda cocina recibe exactamente el mismo pedido central.
+      if(window.SP_DB && typeof window.SP_DB.rpc==='function'){
+        const {data,error}=await window.SP_DB.rpc('sp_get_admin_orders');
+        if(!error){
+          const row=(Array.isArray(data)?data:[]).find(x=>String(x.order_number)===String(o.no));
+          if(row && String(row.detail||'').trim()) return String(row.detail);
+        }else{
+          console.warn('sp_get_admin_orders para comanda:',error);
+        }
+      }
+
+      // Respaldo directo si el pedido tiene referencia central.
+      const centralId=o.centralId;
+      if(!centralId) return '';
+
       if(!window.supabase){
         await new Promise((resolve,reject)=>{
           const sc=document.createElement('script');
@@ -40,30 +53,24 @@
 
       const rows=Array.isArray(items)?items:[];
       const result=[];
-
       for(const item of rows){
         const qty=Number(item.quantity||1);
         let line=String(item.product_name||'Producto')+(qty>1?' x'+qty:'');
         if(item.notes) line+='\n  Nota: '+item.notes;
-
-        const {data:tops,error:topError}=await db
+        const {data:tops}=await db
           .from('order_item_toppings')
           .select('topping_name,quantity,unit_price')
           .eq('order_item_id',item.id)
           .order('created_at');
-
-        if(!topError){
-          for(const t of (tops||[])){
-            const tq=Number(t.quantity||1);
-            line+='\n  '+String(t.topping_name||'Adicional')+(tq>1?' x'+tq:'');
-          }
+        for(const t of (tops||[])){
+          const tq=Number(t.quantity||1);
+          line+='\n  '+String(t.topping_name||'Adicional')+(tq>1?' x'+tq:'');
         }
         result.push(line);
       }
-
       return result.join('\n');
     }catch(e){
-      console.warn('No se pudo recuperar el detalle de la comanda desde Supabase:',e);
+      console.warn('No se pudo recuperar el detalle de la comanda:',e);
       return '';
     }
   }
