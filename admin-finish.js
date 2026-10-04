@@ -91,3 +91,27 @@ window.printComanda = function(no){
     alert('No se pudo abrir la comanda. Recarga la página y vuelve a intentarlo.');
   }
 };
+
+/* Interceptar directamente el clic de Comanda cocina, sin tocar Soporte ni otros botones. */
+(function(){
+  function runKitchen(e){
+    const el=e.target&&e.target.closest?e.target.closest('button[onclick*="printComanda"]'):null;
+    if(!el)return;
+    const code=el.getAttribute('onclick')||'';
+    const m=code.match(/printComanda\(\s*['"]([^'"]+)['"]\s*\)/i);
+    if(!m)return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if(typeof window.printComanda==='function'){
+      window.printComanda(m[1]);
+    }else{
+      alert('La comanda de cocina no está disponible. Recarga la página.');
+    }
+  }
+  document.addEventListener('click',runKitchen,true);
+  document.addEventListener('pointerup',function(e){
+    if(e.pointerType==='touch')runKitchen(e);
+  },true);
+  document.addEventListener('touchend',runKitchen,{capture:true,passive:false});
+})();
+
