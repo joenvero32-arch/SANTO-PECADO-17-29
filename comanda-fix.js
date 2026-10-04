@@ -20,6 +20,9 @@
       // Así Comanda cocina recibe exactamente el mismo pedido central.
       let centralId=o.centralId||'';
 
+      // Primero intentamos usar el id central que ya recuperó printComanda.
+      if(!centralId && o.centralId) centralId=o.centralId;
+
       // Primero intentamos obtener el pedido central por su número.
       // No dependemos de que localStorage haya guardado centralId.
       if(typeof SP_DB!=='undefined' && SP_DB && typeof SP_DB.rpc==='function'){
@@ -47,6 +50,7 @@
         else if(orderError) console.warn('Búsqueda de pedido central:',orderError);
       }
 
+      if(!centralId && o.centralId) centralId=o.centralId;
       if(!centralId) return '';
 
       if(!window.supabase){
@@ -126,11 +130,13 @@
     try{
       const orders=JSON.parse(localStorage.getItem('ORDERS')||'[]');
       const queue=JSON.parse(localStorage.getItem('KITCHEN_QUEUE')||'[]');
-      const o=orders.find(x=>String(x.no)===String(no)) || queue.find(x=>String(x.no)===String(no));
-      if(!o){alert('No encontramos el pedido en este dispositivo.');return;}
-
+      // La comanda no debe depender de que el pedido exista en localStorage.
+      // El pedido central de Supabase es la fuente de verdad.
+      const o=orders.find(x=>String(x.no)===String(no)) || queue.find(x=>String(x.no)===String(no)) || {no:String(no)};
+      
       const central=await getCentralOrder(o.no);
       if(central){
+        o.centralId=central.order_id||o.centralId||'';
         o.name=central.customer_name||o.name||'No registrado';
         o.type=central.order_type==='delivery'?'Domicilio':central.order_type==='pickup'?'Recoger':'Local';
         o.addr=central.address||o.addr||'';
