@@ -13,7 +13,7 @@
   }
 
   async function getDetail(o){
-    if(String(o.detail||'').trim()) return String(o.detail);
+    const localDetail=String(o.detail||'').trim();
 
     try{
       // Usamos la misma función segura que ya alimenta la pantalla Pedidos.
@@ -30,7 +30,8 @@
         if(!error){
           const row=(Array.isArray(data)?data:[]).find(x=>String(x.order_number)===String(o.no));
           if(row){
-            if(String(row.detail||'').trim()) return String(row.detail);
+            // No usamos row.detail porque no contiene de forma fiable la cantidad
+            // de cada topping. Consultamos order_items + order_item_toppings.
             centralId=row.id||centralId;
           }
         }else{
