@@ -18,8 +18,8 @@
     try{
       // Usamos la misma función segura que ya alimenta la pantalla Pedidos.
       // Así Comanda cocina recibe exactamente el mismo pedido central.
-      if(window.SP_DB && typeof window.SP_DB.rpc==='function'){
-        const {data,error}=await window.SP_DB.rpc('sp_get_admin_orders');
+      if(typeof SP_DB!=='undefined' && SP_DB && typeof SP_DB.rpc==='function'){
+        const {data,error}=await SP_DB.rpc('sp_get_admin_orders');
         if(!error){
           const row=(Array.isArray(data)?data:[]).find(x=>String(x.order_number)===String(o.no));
           if(row && String(row.detail||'').trim()) return String(row.detail);
