@@ -86,7 +86,7 @@
           .order('created_at');
         for(const t of (tops||[])){
           const tq=Number(t.quantity||1);
-          line+='\n  '+String(t.topping_name||'Adicional')+(tq>1?' x'+tq:'');
+          line+='\n  '+String(t.topping_name||'Adicional')+' x'+tq;
         }
         result.push(line);
       }
