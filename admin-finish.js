@@ -91,3 +91,38 @@ window.printComanda = function(no){
     alert('No se pudo abrir la comanda. Recarga la página y vuelve a intentarlo.');
   }
 };
+
+
+/* Botón independiente de comanda de cocina en pedidos recibidos. */
+(function(){
+  function addKitchenButtons(){
+    try{
+      document.querySelectorAll('button').forEach(function(btn){
+        const txt=(btn.textContent||'').trim().toLowerCase();
+        if(!txt.includes('imprimir soporte') && !txt.includes('soporte')) return;
+        if(btn.dataset.spComandaAdded==='1') return;
+        const onclick=btn.getAttribute('onclick')||'';
+        const m=onclick.match(/(?:printSupport|printSoporte|printReceipt|printTicket)\s*\(\s*['"]([^'"]+)['"]/i);
+        if(!m)return;
+        const no=m[1];
+        const b=document.createElement('button');
+        b.type='button';
+        b.textContent='🍳 Comanda cocina';
+        b.className=btn.className||'';
+        b.style.marginLeft='6px';
+        b.title='Imprimir comanda de cocina';
+        b.onclick=function(e){
+          e.preventDefault();
+          e.stopPropagation();
+          if(typeof window.printComanda==='function') window.printComanda(no);
+          else alert('La comanda de cocina aún no está disponible. Recarga la página.');
+        };
+        btn.insertAdjacentElement('afterend',b);
+        btn.dataset.spComandaAdded='1';
+      });
+    }catch(e){console.warn('Botón comanda:',e)}
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',addKitchenButtons);
+  else addKitchenButtons();
+  new MutationObserver(addKitchenButtons).observe(document.body,{childList:true,subtree:true});
+})();
