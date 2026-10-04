@@ -483,7 +483,7 @@ function save(){
 function total(){
   return cart.reduce((s,x)=>{
     const base=Number(x.base ?? (products.find(a=>a.id===x.id)?.price||0));
-    const extra=(x.toppings||[]).reduce((a,t)=>a+Number(t.price||0),0);
+    const extra=(x.toppings||[]).reduce((a,t)=>a+Number(t.price||0)*Number(t.quantity||1),0);
     return s+(base+extra)*x.qty;
   },0)
 }
@@ -572,12 +572,17 @@ function closeModal(){if(spStatusPollTimer){clearInterval(spStatusPollTimer);spS
 function addWithToppings(id){
   const p=products.find(x=>String(x.id)===String(id));
   if(!p)return;
-  const opts=toppings.filter(t=>t.active).map(t=>`<label style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #292929">
-    <span><input type="checkbox" value="${t.id}" ${t.tracked&&Number(t.stock)<Number(t.usage)?'disabled':''}> ${esc(t.name)}</span><b>${t.tracked&&Number(t.stock)<Number(t.usage)?'Agotado':t.price?'+ '+money(t.price):'Gratis'}</b>
-  </label>`).join('');
+  const opts=toppings.filter(t=>t.active).map(t=>{
+    const exhausted=t.tracked&&Number(t.stock)<Number(t.usage);
+    const maxQty=t.tracked?Math.max(1,Math.floor(Number(t.stock||0)/Number(t.usage||1))):99;
+    return `<label style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #292929">
+      <span style="display:flex;align-items:center;gap:8px"><input type="checkbox" value="${t.id}" ${exhausted?'disabled':''} onchange="this.closest('label').querySelector('.topQty').disabled=!this.checked"> ${esc(t.name)}</span>
+      <span style="display:flex;align-items:center;gap:6px"><input class="topQty" data-top-id="${t.id}" type="number" min="1" max="${maxQty}" value="1" disabled style="width:58px;padding:6px;border-radius:8px;border:1px solid #444;background:#111;color:#fff;text-align:center"><b>${exhausted?'Agotado':t.price?'+ '+money(t.price)+' c/u':'Gratis'}</b></span>
+    </label>`;
+  }).join('');
   document.getElementById('panel').innerHTML=`
     <div class="panelHead"><h2>${esc(p.name)}</h2><button class="close" onclick="closeModal()">✕</button></div>
-    <div class="notice" style="margin:14px 0">Elige salsas, toppings o adiciones para este producto.</div>
+    <div class="notice" style="margin:14px 0">Elige tus adicionales y la cantidad de cada uno. Puedes pedir 2 o más unidades de la misma adición.</div>
     <div id="toppingList">${opts||'<div class="muted">No hay adicionales configurados.</div>'}</div>
     <div class="field"><label>OBSERVACIÓN</label><textarea id="lineNote" placeholder="Ej. salsa aparte, sin cebolla..."></textarea></div>
     <div class="modalBtns"><button type="button" class="primary sp-confirm-toppings" data-product-id="${esc(String(p.id))}">Agregar al pedido</button><button type="button" class="secondary sp-direct-product" data-product-id="${esc(String(p.id))}">Agregar sin adicionales</button></div>`;
@@ -591,7 +596,11 @@ function confirmToppings(id){
     const checked=[...document.querySelectorAll('#toppingList input:checked')];
     const cleanChosen=checked.map(i=>{
       const t=toppings.find(x=>String(x.id)===String(i.value));
-      return t?{id:t.id,name:t.name,price:Number(t.price||0),usage:Number(t.usage||1)}:null;
+      const qtyInput=i.closest('label')?.querySelector('.topQty');
+      const quantity=Math.max(1,Number(qtyInput?.value||1));
+      const maxQty=Number(qtyInput?.max||99);
+      const safeQty=Math.min(quantity,maxQty);
+      return t?{id:t.id,name:t.name,price:Number(t.price||0),usage:Number(t.usage||1),quantity:safeQty}:null;
     }).filter(Boolean);
     cart.push({id:p.id,qty:1,base:Number(p.price||0),toppings:cleanChosen,note:(document.getElementById('lineNote')?.value||'').trim()});
     localStorage.setItem('sp_premium_cart_v2',JSON.stringify(cart));
@@ -677,13 +686,12 @@ async function openMyOrder(){
         const {data,error}=await SP_DB.rpc('sp_get_order_receipt',{p_order_number:String(o.no).trim()});
         if(!error&&data?.[0]){
           const central=data[0];
-          if(String(central.payment_status||'').toLowerCase()==='pagado'){
-            o.paymentStatus='pagado';
-            o.status=central.status||'entregado';
-            o.pay=central.payment_method||o.pay||'';
-            o.updated=central.updated_at||o.updated;
-            continue;
-          }
+          o.paymentStatus=central.payment_status||o.paymentStatus||'pendiente';
+          o.status=central.status||o.status||'recibido';
+          o.pay=central.payment_method||o.pay||'';
+          o.total=Number(central.total??o.total??0);
+          o.updated=central.updated_at||o.updated;
+          if(String(central.payment_status||'').toLowerCase()==='pagado' || String(central.status||'').toLowerCase()==='entregado')continue;
         }
       }catch(e){console.warn('No se pudo verificar el estado del pedido:',e)}
     }
@@ -692,6 +700,12 @@ async function openMyOrder(){
 
   localStorage.setItem(ORDERS,JSON.stringify(orders));
   const lastNo=localStorage.getItem(LAST_ORDER)||'';
+  if(pending.length>1){
+    const cards=pending.map(o=>'<div class="adminItem" style="margin:10px 0"><div class="adminTop"><b>Pedido '+esc(o.no)+'</b><b>'+money(o.total||0)+'</b></div><div class="muted">'+new Date(o.created).toLocaleString('es-CO')+' · '+statusLabel(o)+'</div><div class="adminActions"><button class="mini" onclick="trackOrder(\''+esc(o.no)+'\')">📍 Ver estado</button></div></div>').join('');
+    document.getElementById('panel').innerHTML='<div class="panelHead"><h2>🧾 Mis pedidos</h2><button class="close" onclick="closeModal()">✕</button></div><div class="notice" style="margin:14px 0">Tienes '+pending.length+' pedidos pendientes. Selecciona cualquiera para consultar su estado.</div>'+cards+'<div class="modalBtns"><button class="secondary" onclick="closeModal();document.getElementById(\'menu\').scrollIntoView({behavior:\'smooth\'})">🍔 Hacer un nuevo pedido</button></div>';
+    document.getElementById('modal').classList.add('open');
+    return;
+  }
   const o=pending.find(x=>String(x.no)===String(lastNo))||pending[0];
 
   if(!o){
@@ -715,7 +729,7 @@ function openCart(keep=false){
   const lines=cart.map(x=>{const p=products.find(a=>String(a.id)===String(x.id));if(!p)return '';return `
     <div class="cartLine">
       <div class="cartLineInfo"><b>${esc(p.name)}</b>
-      <span>${(x.toppings||[]).length?esc(x.toppings.map(t=>t.name).join(', ')):'Sin adicionales'}${x.note?' · '+esc(x.note):''}</span></div>
+      <span>${(x.toppings||[]).length?esc(x.toppings.map(t=>t.name+(Number(t.quantity||1)>1?' x'+Number(t.quantity):'')).join(', ')):'Sin adicionales'}${x.note?' · '+esc(x.note):''}</span></div>
       <div class="qty"><button onclick="cart[${cart.indexOf(x)}].qty--;if(cart[${cart.indexOf(x)}].qty<=0)cart.splice(${cart.indexOf(x)},1);updateCart();openCart()">−</button><b>${x.qty}</b><button onclick="cart[${cart.indexOf(x)}].qty++;updateCart();openCart()">+</button></div>
       <b>${money(((x.base??p.price)+(x.toppings||[]).reduce((a,t)=>a+t.price,0))*x.qty)}</b>
       <button class="remove" onclick="cart.splice(${cart.indexOf(x)},1);updateCart();openCart()">×</button>
@@ -765,16 +779,17 @@ async function sendOrder(){
     for(const extra of (x.toppings||[])){
       const t=toppings.find(a=>String(a.id)===String(extra.id))||toppings.find(a=>a.name===extra.name);
       if(!t){alert('La adición '+extra.name+' ya no existe. Vuelve a crear el pedido.');return}
-      if(t.tracked)needs.set(t.id,(needs.get(t.id)||0)+Number(t.usage||1)*Number(x.qty));
+      const topQty=Math.max(1,Number(extra.quantity||1));
+      if(t.tracked)needs.set(t.id,(needs.get(t.id)||0)+Number(t.usage||1)*topQty*Number(x.qty));
     }
   }
   for(const [id,amount] of needs){const t=toppings.find(a=>String(a.id)===String(id));if(t&&Number(t.stock)<amount){alert('No hay suficiente inventario de '+t.name+'.');return}}
   const no='SP-'+Math.floor(100000+Math.random()*900000);
-  const detail=cart.map(x=>{const p=products.find(a=>String(a.id)===String(x.id));const qty=Number(x.qty||1);const baseLine=Number(x.base??p.price)*qty;const tops=(x.toppings||[]).map(t=>t.name+': '+(t.price?'+':'')+money(t.price||0)).join('\n  ');return p.name+(qty>1?' x'+qty:'')+': '+money(baseLine)+(tops?'\n  '+tops:'')+(x.note?'\n  Nota: '+x.note:'')}).join('\n');
+  const detail=cart.map(x=>{const p=products.find(a=>String(a.id)===String(x.id));const qty=Number(x.qty||1);const baseLine=Number(x.base??p.price)*qty;const tops=(x.toppings||[]).map(t=>t.name+(Number(t.quantity||1)>1?' x'+Number(t.quantity):'')+': '+(t.price?'+':'')+money(Number(t.price||0)*Number(t.quantity||1)).toString()).join('\n  ');return p.name+(qty>1?' x'+qty:'')+': '+money(baseLine)+(tops?'\n  '+tops:'')+(x.note?'\n  Nota: '+x.note:'')}).join('\n');
   const msg=['🍔 SANTO PECADO 17-29','','NUEVO PEDIDO '+no,'','👤 Cliente: '+name,'📞 Teléfono: '+phone,'🚚 Tipo: '+type,(type==='En el local'?'🪑 Mesa: '+tableNumber:''),'📍 Dirección: '+(addr||'No aplica'),'💳 Pago: '+pay,'','PRODUCTOS:',detail,'','💰 TOTAL: '+money(total()),'📝 Observaciones: '+(obs||'Ninguna')].filter(Boolean).join('\n');
   if(SP_DB_ON){
     try{
-      const centralItems=cart.map(x=>({product_id:spMap('prod',x.id),product_name:(products.find(p=>String(p.id)===String(x.id))?.name||'Producto'),quantity:Number(x.qty||1),notes:x.note||'',toppings:(x.toppings||[]).map(t=>({topping_id:spMap('top',t.id),topping_name:t.name,quantity:1}))}));
+      const centralItems=cart.map(x=>({product_id:spMap('prod',x.id),product_name:(products.find(p=>String(p.id)===String(x.id))?.name||'Producto'),quantity:Number(x.qty||1),notes:x.note||'',toppings:(x.toppings||[]).map(t=>({topping_id:spMap('top',t.id),topping_name:t.name,quantity:Math.max(1,Number(t.quantity||1))}))}));
       const centralType=type==='Domicilio'?'delivery':type==='Recoger en el local'?'pickup':'local';
       const centralPayload={order_number:no,customer_name:name,customer_phone:phone,order_type:centralType,address:addr,observations:obs,payment_method:pay,table_number:tableNumber,items:centralItems};
       const {data:centralOrder,error:centralError}=await SP_DB.rpc('sp_create_public_order',{p_order:centralPayload});
