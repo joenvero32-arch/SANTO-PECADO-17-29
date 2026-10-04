@@ -13,47 +13,9 @@
   }
 
   async function getDetail(o){
-    const localDetail=String(o.detail||'').trim();
-
     try{
-      // Usamos la misma función segura que ya alimenta la pantalla Pedidos.
-      // Así Comanda cocina recibe exactamente el mismo pedido central.
-      let centralId=o.centralId||'';
-
-      // Primero intentamos usar el id central que ya recuperó printComanda.
-      if(!centralId && o.centralId) centralId=o.centralId;
-
-      // Primero intentamos obtener el pedido central por su número.
-      // No dependemos de que localStorage haya guardado centralId.
-      if(typeof SP_DB!=='undefined' && SP_DB && typeof SP_DB.rpc==='function'){
-        const {data,error}=await SP_DB.rpc('sp_get_admin_orders');
-        if(!error){
-          const row=(Array.isArray(data)?data:[]).find(x=>String(x.order_number)===String(o.no));
-          if(row){
-            // No usamos row.detail porque no contiene de forma fiable la cantidad
-            // de cada topping. Consultamos order_items + order_item_toppings.
-            centralId=row.id||centralId;
-          }
-        }else{
-          console.warn('sp_get_admin_orders para comanda:',error);
-        }
-      }
-
-      // Si el RPC no encontró el pedido, lo buscamos directamente por número.
-      // Esta consulta respeta la sesión administrativa de Supabase.
-      if(!centralId && typeof SP_DB!=='undefined' && SP_DB && typeof SP_DB.from==='function'){
-        const {data:order,error:orderError}=await SP_DB
-          .from('orders')
-          .select('id')
-          .eq('order_number',String(o.no))
-          .maybeSingle();
-        if(!orderError && order?.id) centralId=order.id;
-        else if(orderError) console.warn('Búsqueda de pedido central:',orderError);
-      }
-
-      if(!centralId && o.centralId) centralId=o.centralId;
-      if(!centralId) return '';
-
+      // Fuente de verdad para la comanda: RPC seguro que devuelve productos
+      // y cantidades reales de toppings, sin depender de RLS del navegador.
       if(!window.supabase){
         await new Promise((resolve,reject)=>{
           const sc=document.createElement('script');
@@ -63,34 +25,27 @@
           document.head.appendChild(sc);
         });
       }
-
       const db=window.supabase.createClient(URL,KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
-      const {data:items,error}=await db
-        .from('order_items')
-        .select('id,product_name,quantity,notes,unit_price')
-        .eq('order_id',centralId)
-        .order('created_at');
-
-      if(error) throw error;
-
-      const rows=Array.isArray(items)?items:[];
-      const result=[];
-      for(const item of rows){
-        const qty=Number(item.quantity||1);
-        let line=String(item.product_name||'Producto')+(qty>1?' x'+qty:'');
-        if(item.notes) line+='\n  Nota: '+item.notes;
-        const {data:tops}=await db
-          .from('order_item_toppings')
-          .select('topping_name,quantity,unit_price')
-          .eq('order_item_id',item.id)
-          .order('created_at');
-        for(const t of (tops||[])){
-          const tq=Number(t.quantity||1);
-          line+='\n  '+String(t.topping_name||'Adicional')+' x'+tq;
+      const {data,error}=await db.rpc('sp_get_kitchen_detail',{p_order_number:String(o.no)});
+      if(!error && Array.isArray(data) && data.length){
+        const grouped=new Map();
+        for(const row of data){
+          const id=String(row.order_item_id);
+          if(!grouped.has(id)){
+            const qty=Number(row.product_quantity||1);
+            let line=String(row.product_name||'Producto')+(qty>1?' x'+qty:'');
+            if(row.notes) line+='\\n  Nota: '+String(row.notes);
+            grouped.set(id,{line,toppings:[]});
+          }
+          if(row.topping_name){
+            const tq=Number(row.topping_quantity||1);
+            grouped.get(id).toppings.push('  '+String(row.topping_name)+' x'+tq);
+          }
         }
-        result.push(line);
+        return Array.from(grouped.values()).map(x=>[x.line,...x.toppings].join('\\n')).join('\\n');
       }
-      return result.join('\n');
+      if(error) console.warn('sp_get_kitchen_detail:',error);
+      return '';
     }catch(e){
       console.warn('No se pudo recuperar el detalle de la comanda:',e);
       return '';
