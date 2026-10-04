@@ -1410,7 +1410,6 @@ async function adminCash(){
   // No depender del localStorage de este computador.
   if(SP_DB_ON && SP_DB?.rpc){
     try{
-      if(!currentUser?.central) await ensureCentralAdminSession();
       const {data:centralOrders,error:centralError}=await SP_DB.rpc('sp_get_admin_orders');
       if(!centralError && Array.isArray(centralOrders)){
         list=centralOrders
