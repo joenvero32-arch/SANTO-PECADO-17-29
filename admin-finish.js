@@ -101,28 +101,69 @@ window.printComanda = function(no){
         const txt=(btn.textContent||'').trim().toLowerCase();
         if(!txt.includes('imprimir soporte') && !txt.includes('soporte')) return;
         if(btn.dataset.spComandaAdded==='1') return;
+
         const onclick=btn.getAttribute('onclick')||'';
         const m=onclick.match(/(?:printSupport|printSoporte|printReceipt|printTicket)\s*\(\s*['"]([^'"]+)['"]/i);
         if(!m)return;
+
         const no=m[1];
         const b=document.createElement('button');
         b.type='button';
         b.textContent='🍳 Comanda cocina';
-        b.className=btn.className||'';
-        b.style.marginLeft='6px';
+        b.setAttribute('data-sp-comanda','1');
+        b.setAttribute('data-sp-no',no);
         b.title='Imprimir comanda de cocina';
-        b.onclick=function(e){
-          e.preventDefault();
-          e.stopPropagation();
-          if(typeof window.printComanda==='function') window.printComanda(no);
-          else alert('La comanda de cocina aún no está disponible. Recarga la página.');
-        };
+        b.disabled=false;
+        b.removeAttribute('disabled');
+
+        /* No heredamos clases del botón de soporte: así evitamos que
+           estilos/estados del soporte bloqueen el toque de la comanda. */
+        b.style.cssText='display:inline-flex!important;align-items:center;justify-content:center;position:relative!important;z-index:10000!important;pointer-events:auto!important;touch-action:manipulation!important;cursor:pointer!important;margin-left:6px!important;opacity:1!important;';
+
+        function runComanda(e){
+          if(e){
+            e.preventDefault();
+            e.stopPropagation();
+          }
+          const orderNo=b.getAttribute('data-sp-no');
+          if(typeof window.printComanda==='function'){
+            window.printComanda(orderNo);
+          }else{
+            alert('La comanda de cocina aún no está disponible. Recarga la página.');
+          }
+        }
+
+        b.addEventListener('click',runComanda,true);
+        b.addEventListener('pointerup',function(e){
+          if(e.pointerType==='touch') runComanda(e);
+        },true);
+        b.addEventListener('touchend',runComanda,{capture:true,passive:false});
+
         btn.insertAdjacentElement('afterend',b);
         btn.dataset.spComandaAdded='1';
       });
     }catch(e){console.warn('Botón comanda:',e)}
   }
+
+  /* Delegación de respaldo: aunque otro manejador detenga el evento,
+     la comanda se ejecuta en fase de captura. */
+  function delegatedComanda(e){
+    const b=e.target && e.target.closest ? e.target.closest('button[data-sp-comanda="1"]') : null;
+    if(!b)return;
+    e.preventDefault();
+    e.stopPropagation();
+    const no=b.getAttribute('data-sp-no');
+    if(typeof window.printComanda==='function') window.printComanda(no);
+  }
+
+  document.addEventListener('click',delegatedComanda,true);
+  document.addEventListener('pointerup',function(e){
+    if(e.pointerType==='touch') delegatedComanda(e);
+  },true);
+  document.addEventListener('touchend',delegatedComanda,{capture:true,passive:false});
+
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',addKitchenButtons);
   else addKitchenButtons();
+
   new MutationObserver(addKitchenButtons).observe(document.body,{childList:true,subtree:true});
 })();
