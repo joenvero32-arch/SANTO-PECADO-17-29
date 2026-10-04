@@ -1406,6 +1406,8 @@ async function adminCash(){
   const openingRecord=apertures[0]||null;
   const opening=openingRecord?Number(openingRecord.opening||0):0;
   const list=salesForDay(today).filter(o=>!lastCloseAt||new Date(o.date||o.created||0).getTime()>lastCloseAt);
+  const pay=paymentTotals(list);
+  const salesTotal=list.reduce((a,o)=>a+Number(o.total||0),0);
   let expenses=[]; try{expenses=await getBusinessExpenses(today,today)}catch(e){console.warn('Gastos del día no disponibles:',e.message||e)}
   const sessionExpenses=expenses.filter(x=>!lastCloseAt||new Date(x.created_at||x.createdAt||x.date||0).getTime()>lastCloseAt);
   const expensesTotal=sessionExpenses.reduce((a,x)=>a+Number(x.amount||0),0);
