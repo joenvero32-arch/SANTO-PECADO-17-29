@@ -243,10 +243,15 @@ window.printComanda = async function(no){
     return [...root.querySelectorAll('*')].find(el=>el.children.length===0 && predicate((el.textContent||'').trim()));
   }
   function dashSetTop(root,total,count){
-    const amount=dashLeaf(root,t=>/^\$\s?0(?:[.,]00)?$/.test(t) || /^\$\s?[\d.,]+$/.test(t) && t.includes('0'));
+    const countEl=dashLeaf(root,t=>/^\d+ venta\(s\) registrada\(s)$/.test(t));
+    if(!countEl)return;
+    let scope=countEl, amount=null;
+    for(let i=0;i<7&&scope;i++,scope=scope.parentElement){
+      amount=dashLeaf(scope,t=>/^\$\s?[\d.,]+$/.test(t));
+      if(amount)break;
+    }
     if(amount) amount.textContent=dashMoney(total);
-    const countEl=dashLeaf(root,t=>/^\d+ venta\(s\) registrada\(s\)$/.test(t));
-    if(countEl) countEl.textContent=count+' venta(s) registrada(s)';
+    countEl.textContent=count+' venta(s) registrada(s)';
   }
   function dashSetPayments(root,groups){
     const empty=dashLeaf(root,t=>t==='Todavía no hay ventas hoy.');
@@ -255,14 +260,8 @@ window.printComanda = async function(no){
     if(!wrap)return;
     const rows=Object.entries(groups).sort((a,b)=>b[1]-a[1]);
     if(!rows.length)return;
-    const frag=document.createDocumentFragment();
-    rows.forEach(([method,total])=>{
-      const row=document.createElement('div');
-      row.textContent=method+': '+dashMoney(total);
-      row.style.cssText='display:flex;justify-content:space-between;gap:12px;padding:7px 0;font-weight:700;';
-      frag.appendChild(row);
-    });
-    wrap.replaceChildren(frag);
+    empty.textContent=rows.map(([method,total])=>method+': '+dashMoney(total)).join('\n');
+    empty.style.whiteSpace='pre-line';
   }
   async function dashRefresh(){
     const root=dashRoot();
