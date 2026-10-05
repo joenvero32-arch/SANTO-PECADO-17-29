@@ -627,6 +627,13 @@ function spHandleAddButton(btn){
   const id=btn?.getAttribute('data-product-id');
   if(!id)return;
   try{
+    const p=products.find(x=>String(x.id)===String(id));
+    const cat=String(p?.cat||'').trim().toLowerCase();
+    // Bebidas y Cervezas se agregan directamente: nunca muestran toppings.
+    if(p && (cat==='bebidas'||cat==='cervezas') && typeof window.addProductDirect==='function'){
+      window.addProductDirect(id);
+      return;
+    }
     if(typeof window.addWithToppings==='function'){
       window.addWithToppings(id);
       return;
@@ -1901,6 +1908,6 @@ function saveSettings(){
     }
   }catch(e){console.warn('Sincronización central pendiente.',e)}
 })();
-</script><script src="comanda-fix.js?v=20261004-detail1"></script>
+</script><script src="comanda-fix.js?v=20261005-detail2"></script>
 </body>
 </html>
