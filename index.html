@@ -1343,10 +1343,29 @@ function toggleCategory(c){
 function dayKey(d){const x=new Date(d);return x.toLocaleDateString('en-CA');}
 function salesForDay(key){return sales.filter(o=>dayKey(o.date||o.created)===key);}
 function paymentTotals(list){return list.reduce((a,o)=>{const k=o.pay||'Sin especificar';a[k]=(a[k]||0)+Number(o.total||0);return a},{})}
-function adminDashboard(){
+async function adminDashboard(){
   if(!isAdmin()){alert('Solo el administrador o dueño tiene acceso al panel principal.');return}
-  const today=dayKey(new Date()), ts=salesForDay(today), total=ts.reduce((a,o)=>a+Number(o.total||0),0), low=products.filter(p=>Number(p.stock||0)<=Number(p.minStock||0));
+  const today=dayKey(new Date());
+  const low=products.filter(p=>Number(p.stock||0)<=Number(p.minStock||0));
   const pending=JSON.parse(localStorage.getItem(ORDERS)||'[]').filter(o=>!['entregado','cancelado'].includes(o.status||'recibido')).length;
+  let ts=salesForDay(today);
+  if(SP_DB_ON){
+    try{
+      if(!currentUser?.central){
+        const ok=await ensureCentralAdminSession();
+        if(!ok) throw new Error('Sesión central de administrador no disponible.');
+      }
+      const {data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders');
+      if(error) throw error;
+      if(Array.isArray(centralOrders)){
+        ts=centralOrders
+          .filter(o=>String(o.payment_status||'').toLowerCase()==='pagado')
+          .map(o=>({no:o.order_number,date:o.updated_at||o.created_at,created:o.created_at,pay:o.payment_method||'',total:Number(o.total||0)}))
+          .filter(o=>dayKey(o.date||o.created)===today);
+      }
+    }catch(e){console.warn('Inicio: no se pudieron cargar ventas centrales:',e)}
+  }
+  const total=ts.reduce((a,o)=>a+Number(o.total||0),0);
   const pay=paymentTotals(ts);
   document.getElementById('panel').innerHTML=`<div class="panelHead"><div><div class="dashKicker">CENTRO DE CONTROL</div><h2>📊 Resumen del negocio</h2></div><button class="close" onclick="closeModal()">✕</button></div>${navTabs('dashboard')}
   <div class="dashboardHero"><div><span>HOY · ${new Date().toLocaleDateString('es-CO')}</span><strong>${money(total)}</strong><small>${ts.length} venta(s) registrada(s)</small></div><div class="heroPulse">●</div></div>
