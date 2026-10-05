@@ -1093,7 +1093,7 @@ function saveNewEmployee(){
   if(!name||!user||!pin){alert('Completa nombre, usuario y PIN.');return}
   if(users.some(x=>x.user.toLowerCase()===user.toLowerCase())){alert('Ese usuario ya existe.');return}
   users.push({id:'u_'+Date.now(),user,name,pin,role:'employee',allowOrders:document.getElementById('un_orders').checked,allowInventory:document.getElementById('un_inventory').checked});
-  localStorage.setItem(USERS,JSON.stringify(users)); alert('Empleado creado.'); adminUsers();
+  localStorage.setItem(USERS,JSON.stringify(users)); auditLog('Empleado creado',name+' · usuario '+user); alert('Empleado creado.'); adminUsers();
 }
 function editEmployee(id){
   if(!isAdmin())return; const u=users.find(x=>x.id===id); if(!u)return;
@@ -1116,11 +1116,11 @@ function saveEmployee(id){
   const pin=document.getElementById('eu_pin').value.trim();
   if(!name||!pin){alert('Completa nombre y PIN.');return}
   u.name=name; u.pin=pin; u.allowOrders=document.getElementById('eu_orders').checked; u.allowInventory=document.getElementById('eu_inventory').checked;
-  localStorage.setItem(USERS,JSON.stringify(users)); alert('Permisos guardados.'); adminUsers();
+  localStorage.setItem(USERS,JSON.stringify(users)); auditLog('Empleado modificado',u.name+' · permisos actualizados'); alert('Permisos guardados.'); adminUsers();
 }
 function deleteEmployee(id){
   if(!isAdmin())return; if(!confirm('¿Eliminar este empleado?'))return;
-  users=users.filter(x=>x.id!==id); localStorage.setItem(USERS,JSON.stringify(users)); adminUsers();
+  const removed=users.find(x=>x.id===id); users=users.filter(x=>x.id!==id); localStorage.setItem(USERS,JSON.stringify(users)); auditLog('Empleado eliminado',removed?.name||id); adminUsers();
 }
 function adminProducts(){
   if(!isAdmin()){alert('Solo el administrador o dueño tiene acceso a esta sección.');return}
@@ -1209,7 +1209,7 @@ async function saveProduct(id){
     p.sort_order=maxOrder+1;
     products.push(p);
   }
-  localStorage.setItem(KEY,JSON.stringify(products));render();adminProducts();
+  localStorage.setItem(KEY,JSON.stringify(products));auditLog(key?'Producto modificado':'Producto creado',p.name+' · '+p.cat+' · '+money(p.price));render();adminProducts();
   try{
     // Primero sincronizamos categorías + productos para evitar una condición de carrera:
     // el producto nuevo no debe enviarse antes de que exista su categoría en Supabase.
@@ -1230,7 +1230,7 @@ async function changePhoto(id){
     const reader=new FileReader();reader.onload=()=>{const im=new Image();im.onload=async()=>{try{
       const target=products.find(x=>String(x.id)===id);if(!target){alert('No se encontró el producto.');return}
       const max=1000,scale=Math.min(1,max/Math.max(1,im.width));const c=document.createElement('canvas');c.width=Math.max(1,Math.round(im.width*scale));c.height=Math.max(1,Math.round(im.height*scale));c.getContext('2d').drawImage(im,0,0,c.width,c.height);
-      target.img=c.toDataURL('image/jpeg',.82);localStorage.setItem(KEY,JSON.stringify(products));render();adminProducts();
+      target.img=c.toDataURL('image/jpeg',.82);localStorage.setItem(KEY,JSON.stringify(products));auditLog('Foto de producto modificada',target.name);render();adminProducts();
       try{await syncOneProductCentral(target)}catch(e){console.warn('Foto local guardada; sincronización central pendiente:',e);alert('La foto quedó guardada en este dispositivo, pero no pudo sincronizarse con Supabase: '+(e.message||e));}
     }catch(e){alert('No se pudo procesar la foto: '+(e.message||e))}finally{input.remove()}};im.onerror=()=>{alert('No se pudo leer la imagen.');input.remove()};im.src=reader.result};reader.onerror=()=>{alert('No se pudo leer el archivo.');input.remove()};reader.readAsDataURL(f)};
   input.click();
@@ -1243,6 +1243,7 @@ async function toggleProduct(id){
   const previous=p.active!==false;
   p.active=!previous;
   localStorage.setItem(KEY,JSON.stringify(products));
+  auditLog(p.active?'Producto activado':'Producto ocultado',p.name);
   render();adminProducts();
   try{
     await syncOneProductCentral(p);
@@ -1261,9 +1262,11 @@ async function deleteProduct(id){
   const p=products.find(x=>String(x.id)===id);
   if(!p){alert('No se encontró el producto.');return}
   if(!confirm('¿Eliminar "'+p.name+'"? Esta acción lo ocultará del catálogo.'))return;
+  const reason=askReason('Indica el motivo para ocultar/eliminar "'+p.name+'":');if(reason===null)return;
   const previous=p.active!==false;
   p.active=false;
   localStorage.setItem(KEY,JSON.stringify(products));
+  auditLog('Producto eliminado/ocultado',p.name+' · '+reason);
   render();adminProducts();
   try{
     await syncOneProductCentral(p);
@@ -1314,6 +1317,7 @@ async function newCategory(){
     }
     categories.push(v);
     localStorage.setItem(CATS,JSON.stringify(categories));
+    auditLog('Categoría creada',v);
     if(typeof window.loadPublicCatalog==='function') await window.loadPublicCatalog();
     render();adminCategories();
   }catch(e){
@@ -1329,7 +1333,7 @@ function editCategory(i){
   if(!v||v===old)return;
   if(categories.some((c,j)=>j!==i&&c.toLowerCase()===v.toLowerCase())){alert('Esa categoría ya existe.');return}
   products.forEach(p=>{if(p.cat===old)p.cat=v});
-  categories[i]=v;save();render();adminCategories();
+  categories[i]=v;save();auditLog('Categoría modificada',old+' → '+v);render();adminCategories();
 }
 function deleteCategory(i){
   if(!isAdmin()){alert('Solo el administrador o dueño puede modificar categorías.');return}
@@ -1340,7 +1344,8 @@ function deleteCategory(i){
     return;
   }
   if(!confirm('¿Eliminar la categoría "'+c+'"?'))return;
-  categories.splice(i,1);save();render();adminCategories();
+  const reason=askReason('Indica el motivo para eliminar la categoría "'+c+'":');if(reason===null)return;
+  categories.splice(i,1);save();auditLog('Categoría eliminada',c+' · '+reason);render();adminCategories();
 }
 function toggleCategory(c){
   alert('Las categorías se muestran mientras tengan productos activos. Para ocultar una categoría, oculta sus productos desde Productos.');
@@ -1857,14 +1862,14 @@ function newPromotion(){
   const end=prompt('Final (opcional). Formato: 2026-10-05 23:59','')||'';
   const image=prompt('URL de imagen de la promoción (opcional)','')||'';
   const p={id:Date.now(),title:title.trim(),description:description.trim(),offer:offer.trim(),productId,active:true,start:start.trim()?start.trim().replace(' ','T'):'',end:end.trim()?end.trim().replace(' ','T'):'',image:image.trim()};
-  promotions.push(p);announcePromotion(p);renderPromotions();adminPromotions();
+  promotions.push(p);announcePromotion(p);save();auditLog('Promoción creada',p.title);renderPromotions();adminPromotions();
 }
 function editPromotion(id){
   if(!isAdmin())return;const p=promotions.find(x=>x.id===id);if(!p)return;
-  const title=prompt('Nombre',p.title);if(title===null)return;p.title=title.trim();p.description=prompt('Descripción',p.description)||'';p.offer=prompt('Oferta o beneficio',p.offer)||'';p.start=prompt('Inicio (AAAA-MM-DD HH:MM)',p.start?p.start.replace('T',' '):'')||'';p.end=prompt('Final (AAAA-MM-DD HH:MM)',p.end?p.end.replace('T',' '):'')||'';p.start=p.start.trim()?p.start.trim().replace(' ','T'):'';p.end=p.end.trim()?p.end.trim().replace(' ','T'):'';p.image=prompt('URL de imagen (opcional)',p.image||'')||'';save();renderPromotions();adminPromotions();
+  const oldTitle=p.title; const title=prompt('Nombre',p.title);if(title===null)return;p.title=title.trim();p.description=prompt('Descripción',p.description)||'';p.offer=prompt('Oferta o beneficio',p.offer)||'';p.start=prompt('Inicio (AAAA-MM-DD HH:MM)',p.start?p.start.replace('T',' '):'')||'';p.end=prompt('Final (AAAA-MM-DD HH:MM)',p.end?p.end.replace('T',' '):'')||'';p.start=p.start.trim()?p.start.trim().replace(' ','T'):'';p.end=p.end.trim()?p.end.trim().replace(' ','T'):'';p.image=prompt('URL de imagen (opcional)',p.image||'')||'';save();auditLog('Promoción modificada',oldTitle+' → '+p.title);renderPromotions();adminPromotions();
 }
-function togglePromotion(id){if(!isAdmin())return;const p=promotions.find(x=>x.id===id);if(!p)return;p.active=!p.active;save();renderPromotions();adminPromotions();}
-function deletePromotion(id){if(!isAdmin())return;if(!confirm('¿Eliminar esta promoción?'))return;promotions=promotions.filter(x=>x.id!==id);save();renderPromotions();adminPromotions();}
+function togglePromotion(id){if(!isAdmin())return;const p=promotions.find(x=>x.id===id);if(!p)return;p.active=!p.active;save();auditLog(p.active?'Promoción activada':'Promoción desactivada',p.title);renderPromotions();adminPromotions();}
+function deletePromotion(id){if(!isAdmin())return;const p=promotions.find(x=>x.id===id);if(!p)return;if(!confirm('¿Eliminar esta promoción?'))return;const reason=askReason('Indica el motivo para eliminar la promoción:');if(reason===null)return;promotions=promotions.filter(x=>x.id!==id);save();auditLog('Promoción eliminada',p.title+' · '+reason);renderPromotions();adminPromotions();}
 
 function adminSettings(){
   if(!isAdmin()){alert('Solo el administrador o dueño tiene acceso a esta sección.');return}
@@ -1880,7 +1885,8 @@ function saveSettings(){
   if(!isAdmin()){alert('Solo el administrador o dueño puede modificar la configuración.');return}
   let v=document.getElementById('wa').value.replace(/\D/g,'');
   if(v.length<10){alert('Escribe un número de WhatsApp válido.');return}
-  settings.whatsapp=v;save();alert('Número de WhatsApp guardado correctamente. Los nuevos pedidos se enviarán a este número.');adminProducts();
+  const previous=settings.whatsapp||'';
+  settings.whatsapp=v;save();auditLog('Configuración modificada','WhatsApp '+(previous?'actualizado':'configurado'));alert('Número de WhatsApp guardado correctamente. Los nuevos pedidos se enviarán a este número.');adminProducts();
 }
 
 (async()=>{
