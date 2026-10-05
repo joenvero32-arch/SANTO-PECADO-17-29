@@ -1546,16 +1546,30 @@ function adminReports(){
   document.getElementById('modal').classList.add('open');
 }
 
-function adminSales(){
+async function adminSales(){
   if(!isAdmin()){alert('Solo el administrador o dueño tiene acceso a esta sección.');return}
-  const totalSales=sales.reduce((a,o)=>a+Number(o.total||0),0);
+  let rows=[];
+  if(SP_DB_ON){
+    try{
+      if(!currentUser?.central){
+        const ok=await ensureCentralAdminSession();
+        if(!ok) throw new Error('Sesión central de administrador no disponible.');
+      }
+      const {data,error}=await SP_DB.rpc('sp_get_admin_orders');
+      if(error) throw error;
+      if(Array.isArray(data)){
+        rows=data.filter(o=>String(o.payment_status||'').toLowerCase()==='pagado')
+          .map(o=>({no:o.order_number,total:Number(o.total||0),date:o.updated_at||o.created_at,name:o.customer_name||'',pay:o.payment_method||''}))
+          .sort((a,b)=>new Date(b.date)-new Date(a.date));
+      }
+    }catch(e){console.warn('Ventas: no se pudieron cargar ventas centrales:',e)}
+  }
+  if(!rows.length) rows=sales.slice().sort((a,b)=>new Date(b.date||b.created)-new Date(a.date||a.created)).map(o=>({no:o.no,total:Number(o.total||0),date:o.date||o.created,name:o.name||'',pay:o.pay||''}));
+  const totalSales=rows.reduce((a,o)=>a+Number(o.total||0),0);
   document.getElementById('panel').innerHTML=`
     <div class="panelHead"><h2>💰 Registro de ventas</h2><button class="close" onclick="adminProducts()">✕</button></div>
-    <div class="statgrid" style="margin:14px 0">
-      <div class="stat"><small>Ventas</small><b>${sales.length}</b></div>
-      <div class="stat"><small>Total</small><b>${money(totalSales)}</b></div>
-    </div>
-    ${sales.length?sales.slice(0,100).map(o=>`<div class="adminItem"><b>${esc(o.no)}</b> · <b>${money(o.total)}</b><br><span class="muted">${new Date(o.date).toLocaleString('es-CO')} · ${esc(o.name)} · ${esc(o.pay)}</span></div>`).join(''):'<div class="empty">No hay ventas registradas todavía.</div>'}`;
+    <div class="statgrid" style="margin:14px 0"><div class="stat"><small>Ventas</small><b>${rows.length}</b></div><div class="stat"><small>Total</small><b>${money(totalSales)}</b></div></div>
+    ${rows.length?rows.slice(0,100).map(o=>`<div class="adminItem"><b>${esc(o.no)}</b> · <b>${money(o.total)}</b><br><span class="muted">${new Date(o.date).toLocaleString('es-CO')} · ${esc(o.name)} · ${esc(o.pay)}</span></div>`).join(''):'<div class="empty">No hay ventas registradas todavía.</div>'}`;
   document.getElementById('modal').classList.add('open');
 }
 function adminInventory(){
