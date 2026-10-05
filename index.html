@@ -899,9 +899,24 @@ function deleteOrder(no){
   auditLog('Pedido eliminado',reason,no);
   adminOrders();
 }
-function adminAudit(){
+function auditCategory(x){
+  const a=String(x?.action||'').toLowerCase();
+  if(a.includes('inicio de sesión')||a.includes('cierre de sesión')||a.includes('login'))return 'access';
+  if(a.includes('caja')||a.includes('venta')||a.includes('gasto')||a.includes('cierre'))return 'cash';
+  if(a.includes('pedido')||a.includes('estado'))return 'orders';
+  if(a.includes('inventario')||a.includes('stock')||a.includes('topping'))return 'inventory';
+  return 'changes';
+}
+function auditCategoryLabel(cat){
+  return {access:'🔐 Acceso',changes:'✏️ Cambio',cash:'💰 Caja/Ventas',orders:'📋 Pedido',inventory:'📦 Inventario'}[cat]||'✏️ Cambio';
+}
+function adminAudit(filter='all'){
   if(!isAdmin()){alert('Solo el administrador o dueño puede consultar Auditoría.');return}
-  document.getElementById('panel').innerHTML=`<div class="panelHead"><h2>🛡️ Auditoría</h2><button class="close" onclick="adminProducts()">✕</button></div>${navTabs('audit')}<div class="notice" style="margin:12px 0">Aquí queda registrado quién realizó cambios, qué hizo, cuándo y por qué. Los empleados no pueden borrar este historial.</div>${audit.length?audit.slice(0,200).map(x=>`<div class="adminItem"><b>${esc(x.action)}</b>${x.orderNo?' · '+esc(x.orderNo):''}<br><span class="muted">${new Date(x.date).toLocaleString('es-CO')} · ${esc(x.name)} (${esc(x.user)})</span><br><span>${esc(x.details)}</span></div>`).join(''):'<div class="empty">No hay movimientos de auditoría todavía.</div>'}`;
+  const list=audit.filter(x=>filter==='all'||auditCategory(x)===filter).slice(0,200);
+  const buttons=[
+    ['all','Todos'],['access','🔐 Accesos'],['changes','✏️ Cambios'],['cash','💰 Caja/Ventas'],['orders','📋 Pedidos'],['inventory','📦 Inventario']
+  ].map(([k,label])=>`<button class="mini ${filter===k?'active':''}" onclick="adminAudit('${k}')">${label}</button>`).join('');
+  document.getElementById('panel').innerHTML=`<div class="panelHead"><h2>🛡️ Auditoría</h2><button class="close" onclick="adminProducts()">✕</button></div>${navTabs('audit')}<div class="notice" style="margin:12px 0">Aquí queda registrado quién realizó cambios, qué hizo, cuándo y por qué. Los empleados no pueden borrar este historial.</div><div class="adminActions" style="margin:12px 0;display:flex;flex-wrap:wrap;gap:8px">${buttons}</div>${list.length?list.map(x=>{const cat=auditCategory(x);return `<div class="adminItem"><div class="adminTop"><b>${esc(x.action)}</b><span class="muted">${auditCategoryLabel(cat)}</span></div>${x.orderNo?'<div class="muted">Pedido: '+esc(x.orderNo)+'</div>':''}<span class="muted">${new Date(x.date).toLocaleString('es-CO')} · ${esc(x.name)} (${esc(x.user)})</span><br><span>${esc(x.details)}</span></div>`}).join(''):'<div class="empty">No hay movimientos para este filtro.</div>'}`;
   document.getElementById('modal').classList.add('open');
 }
 function normalizeWhatsAppPhone(phone){
