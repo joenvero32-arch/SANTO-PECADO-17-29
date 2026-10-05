@@ -213,3 +213,98 @@ window.printComanda = async function(no){
   document.addEventListener('touchend',runKitchen,{capture:true,passive:false});
 })();
 
+
+
+/* SP DASHBOARD SALES SYNC v1 */
+(function(){
+  const SP_DASH_URL='https://ghucwrrvqivmbogtcgcr.supabase.co';
+  const SP_DASH_KEY='sb_publishable_chFTmgoaIVvJSdpgTTuUSQ_fBNEq4WJ';
+  let dashDb=null, lastDashRefresh=0, dashBusy=false;
+
+  function dashMoney(n){
+    return new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(Number(n||0));
+  }
+  function dashDayBounds(){
+    const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+    const m={}; parts.forEach(x=>{if(x.type!=='literal')m[x.type]=x.value});
+    const day=m.year+'-'+m.month+'-'+m.day;
+    const next=new Date(Date.parse(day+'T00:00:00-05:00')+86400000).toISOString();
+    return {start:day+'T00:00:00-05:00',end:next};
+  }
+  function dashRoot(){
+    const nodes=[...document.querySelectorAll('div')].filter(el=>{
+      const t=(el.textContent||'').trim();
+      return t.includes('Resumen del negocio') && t.includes('Ventas por medio de pago') && t.includes('Pedidos pendientes');
+    });
+    nodes.sort((a,b)=>(a.textContent||'').length-(b.textContent||'').length);
+    return nodes[0]||null;
+  }
+  function dashLeaf(root, predicate){
+    return [...root.querySelectorAll('*')].find(el=>el.children.length===0 && predicate((el.textContent||'').trim()));
+  }
+  function dashSetTop(root,total,count){
+    const amount=dashLeaf(root,t=>/^\$\s?0(?:[.,]00)?$/.test(t) || /^\$\s?[\d.,]+$/.test(t) && t.includes('0'));
+    if(amount) amount.textContent=dashMoney(total);
+    const countEl=dashLeaf(root,t=>/^\d+ venta\(s\) registrada\(s\)$/.test(t));
+    if(countEl) countEl.textContent=count+' venta(s) registrada(s)';
+  }
+  function dashSetPayments(root,groups){
+    const empty=dashLeaf(root,t=>t==='Todavía no hay ventas hoy.');
+    if(!empty)return;
+    const wrap=empty.parentElement;
+    if(!wrap)return;
+    const rows=Object.entries(groups).sort((a,b)=>b[1]-a[1]);
+    if(!rows.length)return;
+    const frag=document.createDocumentFragment();
+    rows.forEach(([method,total])=>{
+      const row=document.createElement('div');
+      row.textContent=method+': '+dashMoney(total);
+      row.style.cssText='display:flex;justify-content:space-between;gap:12px;padding:7px 0;font-weight:700;';
+      frag.appendChild(row);
+    });
+    wrap.replaceChildren(frag);
+  }
+  async function dashRefresh(){
+    const root=dashRoot();
+    if(!root || dashBusy || Date.now()-lastDashRefresh<2500)return;
+    dashBusy=true;
+    try{
+      if(!dashDb){
+        if(!window.supabase){
+          await new Promise((resolve,reject)=>{
+            const sc=document.createElement('script');
+            sc.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+            sc.onload=resolve; sc.onerror=reject;
+            document.head.appendChild(sc);
+          });
+        }
+        dashDb=window.supabase.createClient(SP_DASH_URL,SP_DASH_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+      }
+      const {start,end}=dashDayBounds();
+      const {data,error}=await dashDb.from('sales')
+        .select('total,payment_method,sold_at')
+        .gte('sold_at',start)
+        .lt('sold_at',end)
+        .order('sold_at',{ascending:true});
+      if(error)throw error;
+      const sales=Array.isArray(data)?data:[];
+      const total=sales.reduce((s,x)=>s+Number(x.total||0),0);
+      const groups={};
+      sales.forEach(x=>{
+        const k=String(x.payment_method||'Sin especificar');
+        groups[k]=(groups[k]||0)+Number(x.total||0);
+      });
+      dashSetTop(root,total,sales.length);
+      dashSetPayments(root,groups);
+      lastDashRefresh=Date.now();
+    }catch(e){
+      console.warn('Resumen de ventas:',e);
+    }finally{
+      dashBusy=false;
+    }
+  }
+  setInterval(dashRefresh,2500);
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(dashRefresh,800));
+  else setTimeout(dashRefresh,800);
+})();
+
