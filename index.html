@@ -1515,7 +1515,7 @@ function adminStats(){
   const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
   const period=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-i);const key=dayKey(d),ls=salesForDay(key);return {day:d.toLocaleDateString('es-CO',{weekday:'short',day:'2-digit',month:'2-digit'}),count:ls.length,total:ls.reduce((a,o)=>a+Number(o.total||0),0)}}).reverse();
   const total7=period.reduce((a,x)=>a+x.total,0), count7=period.reduce((a,x)=>a+x.count,0);
-  const map={};sales.forEach(o=>(o.items||[]).forEach(x=>{const k=x.name||'Producto';map[k]=(map[k]||0)+Number(x.qty||1)}));
+  const map={};sales.forEach(o=>(o.items||[]).forEach(x=>{const k=x.name||x.productName||x.product_name||products.find(p=>String(p.id)===String(x.id))?.name||'Producto';map[k]=(map[k]||0)+Number(x.qty||1)}));
   const top=Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,10);
   const pay=paymentTotals(sales.slice(0,1000));
   const delivered=orders.filter(o=>o.status==='entregado').length, pending=orders.filter(o=>!['entregado','cancelado'].includes(o.status||'recibido')).length;
@@ -1549,7 +1549,7 @@ function adminReports(){
   if(!isAdmin()){alert('Solo el administrador o dueño puede consultar reportes.');return}
   const last30=Array.from({length:30},(_,i)=>{const d=new Date();d.setDate(d.getDate()-i);const key=dayKey(d),ls=salesForDay(key);return {key,day:d.toLocaleDateString('es-CO',{day:'2-digit',month:'2-digit'}),count:ls.length,total:ls.reduce((a,o)=>a+Number(o.total||0),0)}});
   const period=last30.reduce((a,x)=>{a.count+=x.count;a.total+=x.total;return a},{count:0,total:0});
-  const productMap={};sales.slice(0,1000).forEach(o=>(o.items||[]).forEach(x=>{const k=x.name||'Producto';productMap[k]=(productMap[k]||0)+Number(x.qty||1)}));
+  const productMap={};sales.slice(0,1000).forEach(o=>(o.items||[]).forEach(x=>{const k=x.name||x.productName||x.product_name||products.find(p=>String(p.id)===String(x.id))?.name||'Producto';productMap[k]=(productMap[k]||0)+Number(x.qty||1)}));
   const top=Object.entries(productMap).sort((a,b)=>b[1]-a[1]).slice(0,8);
   document.getElementById('panel').innerHTML=`<div class="panelHead"><div><div class="dashKicker">ANÁLISIS</div><h2>📈 Reportes</h2></div><button class="close" onclick="adminDashboard()">✕</button></div>${navTabs('reports')}<div class="statgrid dashGrid"><div class="stat"><small>Ventas · 30 días</small><b>${period.count}</b></div><div class="stat"><small>Ingresos · 30 días</small><b>${money(period.total)}</b></div><div class="stat"><small>Promedio por venta</small><b>${money(period.count?period.total/period.count:0)}</b></div></div><div class="dashSection"><div class="dashSectionHead"><h3>🔥 Productos más vendidos</h3></div>${top.map(([n,q])=>`<div class="barRow"><span>${esc(n)}</span><b>${q} und.</b></div>`).join('')||'<div class="empty">Aún no hay datos suficientes.</div>'}</div><div class="dashSection"><div class="dashSectionHead"><h3>📅 Últimos 30 días</h3></div>${last30.filter(x=>x.count).slice(0,12).map(x=>`<div class="alertRow"><span>${x.day}</span><b>${x.count} ventas · ${money(x.total)}</b></div>`).join('')||'<div class="empty">No hay ventas en los últimos 30 días.</div>'}</div><div class="modalBtns"><button class="primary" onclick="window.print()">🖨️ Imprimir reporte</button></div>`;
   document.getElementById('modal').classList.add('open');
