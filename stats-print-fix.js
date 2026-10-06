@@ -25,7 +25,7 @@
       'div{color:#111}hr{border:0;border-top:1px solid #bbb}'+
       'table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ddd;padding:6px;text-align:left}'+
       '.printHeader{display:block!important;text-align:center;border-bottom:2px solid #111;padding-bottom:8px;margin-bottom:12px}'+
-      '.printHeader h1{margin:0 0 4px;font-size:22px}.printHeader p{margin:0;font-size:11px;color:#555}'+
+      '.printLogo{display:block;width:42mm;height:24mm;object-fit:contain;margin:0 auto 4px}.printHeader h1{margin:0 0 4px;font-size:22px}.printHeader p{margin:0;font-size:11px;color:#555}'+
       '.printBox{border:1px solid #ccc;border-radius:8px;padding:12px;margin:10px 0}'+
       '.printBox h2,.printBox h3,.printBox h4{margin:12px 0 7px}'+
       '.printBox p{margin:4px 0}'+
@@ -33,7 +33,7 @@
       '.printBox li{margin:3px 0}'+
       '.printBox [style*="display:grid"],.printBox [style*="display: grid"]{display:block!important}'+
       '</style></head><body>'+
-      '<div class="printHeader"><h1>SANTO PECADO 17-29</h1><p>REPORTE DE ESTADÍSTICAS</p><p>'+esc(new Date().toLocaleString('es-CO'))+'</p></div>'+
+      '<div class="printHeader">'+((document.querySelector('.brandLogo')?.src)?'<img class="printLogo" src="'+esc(document.querySelector('.brandLogo').src)+'">':'')+'<h1>SANTO PECADO 17-29</h1><p>REPORTE DE ESTADÍSTICAS</p><p>'+esc(new Date().toLocaleString('es-CO'))+'</p></div>'+
       '<div class="printBox">'+clone.innerHTML+'</div>'+
       '</body></html>';
     const w=window.open('','_blank','width=900,height=1000');
