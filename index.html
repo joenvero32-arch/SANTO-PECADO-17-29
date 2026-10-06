@@ -1582,7 +1582,30 @@ function adminDomicilios(search=''){
   '</div>';
   document.getElementById('modal').classList.add('open');
 }
-function newDriver(){if(!isAdmin())return;const name=prompt('Nombre del domiciliario:');if(!name||!name.trim())return;const phone=prompt('Teléfono:','');const drivers=JSON.parse(localStorage.getItem('sp_premium_drivers_v1')||'[]');drivers.unshift({id:String(Date.now()),name:name.trim(),phone:phone||'',active:true});localStorage.setItem('sp_premium_drivers_v1',JSON.stringify(drivers));auditLog('Nuevo domiciliario','Registrado '+name.trim());save();adminDomicilios();}
+function newDriver(){
+  if(!isAdmin())return;
+  const name=prompt('Nombre del domiciliario:');
+  if(!name||!name.trim())return;
+  const cleanName=name.trim();
+  const phone=prompt('Teléfono:','');
+  if(phone===null)return;
+  const cleanPhone=phone.trim();
+  const drivers=JSON.parse(localStorage.getItem('sp_premium_drivers_v1')||'[]');
+  const duplicate=drivers.find(d=>
+    String(d.name||'').trim().toLowerCase()===cleanName.toLowerCase() ||
+    (cleanPhone && String(d.phone||'').replace(/\D/g,'')===cleanPhone.replace(/\D/g,''))
+  );
+  if(duplicate){
+    alert('Este domiciliario ya está registrado. No se creó un duplicado.');
+    adminDomicilios();
+    return;
+  }
+  drivers.unshift({id:String(Date.now()),name:cleanName,phone:cleanPhone,active:true});
+  localStorage.setItem('sp_premium_drivers_v1',JSON.stringify(drivers));
+  auditLog('Nuevo domiciliario','Registrado '+cleanName);
+  save();
+  adminDomicilios();
+}
 function toggleDriver(id){if(!isAdmin())return;const drivers=JSON.parse(localStorage.getItem('sp_premium_drivers_v1')||'[]');const d=drivers.find(x=>x.id===id);if(!d)return;d.active=!d.active;localStorage.setItem('sp_premium_drivers_v1',JSON.stringify(drivers));auditLog('Estado domiciliario',d.name+' · '+(d.active?'Activo':'Inactivo'));save();adminDomicilios();}
 function assignDriver(no){if(!can('allowOrders'))return;const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]'),o=orders.find(x=>x.no===no);if(!o)return;const drivers=JSON.parse(localStorage.getItem('sp_premium_drivers_v1')||'[]').filter(d=>d.active);if(!drivers.length){alert('Primero registra un domiciliario activo.');return}const menu=drivers.map((d,i)=>`${i+1}. ${d.name} ${d.phone?'· '+d.phone:''}`).join('\n');const pick=prompt('Selecciona el domiciliario escribiendo el número:\n'+menu,'1');if(pick===null)return;const d=drivers[Number(pick)-1];if(!d)return;const reason=isAdmin()?'Asignación administrativa':askReason('Indica por qué asignas o cambias el domiciliario:');if(reason===null)return;o.driverId=d.id;o.driverName=d.name;o.driverPhone=d.phone||'';o.updated=new Date().toISOString();localStorage.setItem(ORDERS,JSON.stringify(orders));auditLog('Asignación de domiciliario',reason,no);adminDomicilios();}
 function markDelivered(no){if(!can('allowOrders'))return;const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]'),o=orders.find(x=>x.no===no);if(!o)return;if(!isAdmin()){const reason=askReason('Confirma el motivo/observación de la entrega:');if(reason===null)return;o.deliveryNote=reason}o.deliveredAt=new Date().toISOString();o.status='entregado';o.updated=o.deliveredAt;o.statusHistory=o.statusHistory||[];o.statusHistory.unshift({status:'entregado',date:o.updated,by:currentUser?currentUser.user:'sistema',reason:'Entrega confirmada'});localStorage.setItem(ORDERS,JSON.stringify(orders));auditLog('Pedido entregado','Domicilio entregado',no);queueStatusNotification(o,'entregado');adminDomicilios();}
