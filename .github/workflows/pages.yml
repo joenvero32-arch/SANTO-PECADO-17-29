@@ -38,7 +38,7 @@ jobs:
           import re
           s=re.sub(r'<script[^>]+admin-finish\.js(?:\?[^>]*)?</script>', '', s)
           if '</body>' in s:
-              s=s.replace('</body>',tag+'\n</body>',1)
+              head,tail=s.rsplit('</body>',1)\n              s=head+tag+'\n</body>'+tail
           else:
               s += '\n'+tag+'\n'
           p.write_text(s,encoding="utf-8")
