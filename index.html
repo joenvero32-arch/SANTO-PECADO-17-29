@@ -911,13 +911,44 @@ function auditCategory(x){
 function auditCategoryLabel(cat){
   return {access:'🔐 Acceso',changes:'✏️ Cambio',cash:'💰 Caja/Ventas',orders:'📋 Pedido',inventory:'📦 Inventario'}[cat]||'✏️ Cambio';
 }
-function adminAudit(filter='all'){
+function adminAudit(filter='all',search=''){
   if(!isAdmin()){alert('Solo el administrador o dueño puede consultar Auditoría.');return}
-  const list=audit.filter(x=>filter==='all'||auditCategory(x)===filter).slice(0,200);
+  const all=Array.isArray(audit)?audit:[];
+  const q=String(search||'').trim().toLowerCase();
+  const list=all.filter(x=>{
+    const cat=auditCategory(x);
+    if(filter!=='all'&&cat!==filter)return false;
+    if(!q)return true;
+    return [x.action,x.details,x.orderNo,x.name,x.user,x.role,auditCategoryLabel(cat)].join(' ').toLowerCase().includes(q);
+  }).slice(0,200);
+  const counts={all:all.length,access:0,changes:0,cash:0,orders:0,inventory:0};
+  all.forEach(x=>{const c=auditCategory(x);if(counts[c]!==undefined)counts[c]++});
+  const today=new Date().toLocaleDateString('es-CO');
+  const todayCount=all.filter(x=>new Date(x.date).toLocaleDateString('es-CO')===today).length;
   const buttons=[
     ['all','Todos'],['access','🔐 Accesos'],['changes','✏️ Cambios'],['cash','💰 Caja/Ventas'],['orders','📋 Pedidos'],['inventory','📦 Inventario']
-  ].map(([k,label])=>`<button class="mini ${filter===k?'active':''}" onclick="adminAudit('${k}')">${label}</button>`).join('');
-  document.getElementById('panel').innerHTML=`<div class="panelHead"><h2>🛡️ Auditoría</h2><button class="close" onclick="adminProducts()">✕</button></div>${navTabs('audit')}<div class="notice" style="margin:12px 0">Aquí queda registrado quién realizó cambios, qué hizo, cuándo y por qué. Los empleados no pueden borrar este historial.</div><div class="adminActions" style="margin:12px 0;display:flex;flex-wrap:wrap;gap:8px">${buttons}</div>${list.length?list.map(x=>{const cat=auditCategory(x);return `<div class="adminItem"><div class="adminTop"><b>${esc(x.action)}</b><span class="muted">${auditCategoryLabel(cat)}</span></div>${x.orderNo?'<div class="muted">Pedido: '+esc(x.orderNo)+'</div>':''}<span class="muted">${new Date(x.date).toLocaleString('es-CO')} · ${esc(x.name)} (${esc(x.user)})</span><br><span>${esc(x.details)}</span></div>`}).join(''):'<div class="empty">No hay movimientos para este filtro.</div>'}`;
+  ].map(([k,label])=>`<button class="mini ${filter===k?'active':''}" onclick="adminAudit('${k}',document.getElementById('auditSearch')?.value||'')">${label} <small style="opacity:.65">(${counts[k]})</small></button>`).join('');
+  const actions=[...new Set(all.map(x=>x.action).filter(Boolean))].sort();
+  const actionOptions='<option value="">Todas las acciones</option>'+actions.map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join('');
+  document.getElementById('panel').innerHTML=`<div class="panelHead"><h2>🛡️ Auditoría</h2><button class="close" onclick="adminProducts()">✕</button></div>${navTabs('audit')}
+  <div class="notice" style="margin:12px 0">Aquí queda registrado quién realizó cambios, qué hizo, cuándo y por qué. Los empleados no pueden borrar este historial.</div>
+  <div class="adminActions" style="margin:12px 0;display:flex;flex-wrap:wrap;gap:8px">${buttons}</div>
+  <div class="adminItem" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0">
+    <div><span class="muted">📚 Registros</span><br><b>${all.length}</b></div>
+    <div><span class="muted">📅 Hoy</span><br><b>${todayCount}</b></div>
+    <div><span class="muted">🧩 Módulos</span><br><b>5</b></div>
+  </div>
+  <div class="adminActions" style="display:grid;grid-template-columns:1fr auto;gap:8px;margin:12px 0">
+    <input id="auditSearch" class="search" style="width:100%;max-width:none" value="${esc(search)}" placeholder="🔎 Buscar usuario, acción, pedido o detalle">
+    <button class="mini" onclick="adminAudit('${filter}',document.getElementById('auditSearch').value)">🔎 Buscar</button>
+  </div>
+  <div class="adminActions" style="margin:8px 0">
+    <select class="search" style="width:100%;max-width:none" onchange="adminAudit('${filter}',this.value)">
+      ${actionOptions}
+    </select>
+  </div>
+  <div class="muted" style="margin:10px 0">Mostrando ${list.length} de ${all.length} registros</div>
+  ${list.length?list.map(x=>{const cat=auditCategory(x);return `<div class="adminItem"><div class="adminTop"><b>${esc(x.action)}</b><span class="muted">${auditCategoryLabel(cat)}</span></div>${x.orderNo?'<div class="muted">Pedido: '+esc(x.orderNo)+'</div>':''}<span class="muted">👤 ${esc(x.name)} (${esc(x.user)}) · 📅 ${new Date(x.date).toLocaleString('es-CO')}</span><br><span>📝 ${esc(x.details)}</span></div>`}).join(''):'<div class="empty">🔎 No hay movimientos para este filtro.</div>'}`;
   document.getElementById('modal').classList.add('open');
 }
 function normalizeWhatsAppPhone(phone){
