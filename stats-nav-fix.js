@@ -29,6 +29,14 @@
     b.textContent='🛡️ Auditoría';b.onclick=openAudit;
     parent.appendChild(b);
   }
-  style();wrap();addAuditButton();
-  const mo=new MutationObserver(()=>wrap());mo.observe(document.documentElement,{childList:true,subtree:true});setInterval(wrap,1200);
+  function fixNavLayout(){
+    document.querySelectorAll('.adminTabs').forEach(nav=>{
+      nav.style.flexWrap='wrap';
+      nav.style.overflow='visible';
+      nav.style.height='auto';
+      nav.querySelectorAll('button').forEach(b=>{b.style.flexShrink='0'});
+    });
+  }
+  style();wrap();addAuditButton();fixNavLayout();
+  const mo=new MutationObserver(()=>{wrap();addAuditButton();fixNavLayout()});mo.observe(document.documentElement,{childList:true,subtree:true});setInterval(wrap,1200);
 })();
