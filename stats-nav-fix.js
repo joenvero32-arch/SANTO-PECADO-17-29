@@ -1,4 +1,4 @@
-(()=>{function f(){const tabs=[...document.querySelectorAll(".adminTabs")];tabs.forEach(nav=>{if(nav.querySelector("[data-sp-stats]"))return;const buttons=[...nav.querySelectorAll("button")];if(!buttons.length)return;const b=document.createElement("button");b.className=buttons[0].className;b.dataset.spStats="1";b.type="button";b.textContent="📊 Estadísticas";b.addEventListener("click",()=>{if(typeof window.adminStats==="function")window.adminStats();else if(typeof adminStats==="function")adminStats()});nav.appendChild(b)});const inicio=[...document.querySelectorAll("button")].find(x=>(x.textContent||"").trim().includes("Inicio"));if(inicio&&!document.querySelector("[data-sp-stats]")){const nav=inicio.closest(".adminTabs")||inicio.parentElement;if(nav){const b=document.createElement("button");b.className=inicio.className;b.dataset.spStats="1";b.type="button";b.textContent="📊 Estadísticas";b.addEventListener("click",()=>{if(typeof window.adminStats==="function")window.adminStats();else if(typeof adminStats==="function")adminStats()});nav.appendChild(b)}}}f();new MutationObserver(f).observe(document.documentElement,{childList:true,subtree:true})})();
+(()=>{function f(){const tabs=[...document.querySelectorAll(".adminTabs")];tabs.forEach(nav=>{if(nav.querySelector("[data-sp-stats]"))return;const buttons=[...nav.querySelectorAll("button")];if(!buttons.length)return;const b=document.createElement("button");b.className=buttons[0].className;b.dataset.spStats="1";b.type="button";b.textContent="📊 Estadísticas";b.addEventListener("click",()=>{if(typeof window.adminStats==="function")window.adminStats();else if(typeof adminStats==="function")adminStats()});const config=[...nav.querySelectorAll('button')].find(x=>(x.textContent||'').trim().includes('Configuración'));if(config)config.insertAdjacentElement('afterend',b);else nav.appendChild(b)});const inicio=[...document.querySelectorAll("button")].find(x=>(x.textContent||"").trim().includes("Inicio"));if(inicio&&!document.querySelector("[data-sp-stats]")){const nav=inicio.closest(".adminTabs")||inicio.parentElement;if(nav){const b=document.createElement("button");b.className=inicio.className;b.dataset.spStats="1";b.type="button";b.textContent="📊 Estadísticas";b.addEventListener("click",()=>{if(typeof window.adminStats==="function")window.adminStats();else if(typeof adminStats==="function")adminStats()});nav.appendChild(b)}}}f();new MutationObserver(f).observe(document.documentElement,{childList:true,subtree:true})})();
 
 
 /* Auditoría — registro de cambios administrativos */
@@ -29,6 +29,10 @@
     b.textContent='🛡️ Auditoría';b.onclick=openAudit;
     parent.appendChild(b);
   }
+  function forceStatsVisible(){
+    document.querySelectorAll('[data-sp-stats]').forEach(b=>{b.style.setProperty('display','inline-flex','important');b.style.setProperty('visibility','visible','important');b.style.setProperty('opacity','1','important')});
+    document.querySelectorAll('.adminTabs').forEach(nav=>{nav.style.setProperty('display','flex','important');nav.style.setProperty('flex-wrap','wrap','important');nav.style.setProperty('overflow','visible','important');nav.style.setProperty('height','auto','important');nav.style.setProperty('max-height','none','important')});
+  }
   function fixNavLayout(){
     document.querySelectorAll('.adminTabs').forEach(nav=>{
       nav.style.flexWrap='wrap';
@@ -37,6 +41,6 @@
       nav.querySelectorAll('button').forEach(b=>{b.style.flexShrink='0'});
     });
   }
-  style();wrap();addAuditButton();fixNavLayout();
-  const mo=new MutationObserver(()=>{wrap();addAuditButton();fixNavLayout()});mo.observe(document.documentElement,{childList:true,subtree:true});setInterval(wrap,1200);
+  style();wrap();addAuditButton();fixNavLayout();forceStatsVisible();
+  const mo=new MutationObserver(()=>{wrap();addAuditButton();fixNavLayout();forceStatsVisible()});mo.observe(document.documentElement,{childList:true,subtree:true});setInterval(wrap,1200);
 })();
