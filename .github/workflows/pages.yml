@@ -38,7 +38,8 @@ jobs:
           import re
           s=re.sub(r'<script[^>]+admin-finish\.js(?:\?[^>]*)?</script>', '', s)
           if '</body>' in s:
-              head,tail=s.rsplit('</body>',1)\n              s=head+tag+'\n</body>'+tail
+              head,tail=s.rsplit('</body>',1)
+              s=head+tag+'\n<script src="stats-nav-fix.js?v='+os.environ.get("GITHUB_SHA","latest")+'"></script>\n</body>'+tail
           else:
               s += '\n'+tag+'\n'
           p.write_text(s,encoding="utf-8")
