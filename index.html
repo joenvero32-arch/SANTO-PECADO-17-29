@@ -1561,75 +1561,52 @@ function adminStats(){
 }
 async function adminDomicilios(search=''){
   if(!can('allowOrders')){alert('Tu usuario no tiene permiso para gestionar pedidos.');return}
-  let orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
+  let orders=JSON.parse(localStorage.getItem(ORDERS)||'[]'),centralError='';
   if(SP_DB_ON){
     try{
-      if(!currentUser?.central){
-        const ok=await ensureCentralAdminSession();
-        if(!ok)throw new Error('Sesión central de administrador no encontrada.');
-      }
-      const {data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders');
-      if(error)throw error;
+      if(!currentUser?.central&&!(await ensureCentralAdminSession()))throw new Error('Sesión central de administrador no encontrada.');
+      const {data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders');if(error)throw error;
       const rows=Array.isArray(centralOrders)?centralOrders:[];
-      const central=rows.map(o=>({
-        no:o.order_number,centralId:o.id,name:o.customer_name||'',phone:o.customer_phone||'',
-        type:o.order_type==='delivery'?'Domicilio':o.order_type==='pickup'?'Recoger':'Local',
-        pay:o.payment_method||'',paymentStatus:o.payment_status||'pendiente',addr:o.address||'',obs:o.observations||'',
-        total:Number(o.total||0),created:o.created_at,updated:o.updated_at,status:o.status||'recibido',
-        driverId:o.driver_id||null,driverName:o.driver_name||'',driverPhone:o.driver_phone||'',statusHistory:[],detail:o.detail||''
-      }));
-      const oldByNo=new Map(orders.map(x=>[String(x.no),x]));
-      orders=central.map(c=>({...oldByNo.get(String(c.no))||{},...c})).sort((a,b)=>new Date(b.created)-new Date(a.created));
-      localStorage.setItem(ORDERS,JSON.stringify(orders));
-    }catch(e){console.error('Error cargando domicilios centrales:',e)}
+      const central=rows.map(o=>({no:o.order_number,centralId:o.id,name:o.customer_name||'',phone:o.customer_phone||'',type:o.order_type==='delivery'?'Domicilio':o.order_type==='pickup'?'Recoger':'Local',pay:o.payment_method||'',paymentStatus:o.payment_status||'pendiente',addr:o.address||'',obs:o.observations||'',total:Number(o.total||0),created:o.created_at,updated:o.updated_at,status:o.status||'recibido',driverId:o.driver_id||null,driverName:o.driver_name||'',driverPhone:o.driver_phone||'',statusHistory:[],detail:o.detail||''}));
+      const oldByNo=new Map(orders.map(x=>[String(x.no),x]));orders=central.map(x=>({...oldByNo.get(String(x.no))||{},...x})).sort((a,b)=>new Date(b.created)-new Date(a.created));localStorage.setItem(ORDERS,JSON.stringify(orders));
+    }catch(e){centralError='No se pudieron cargar los pedidos centrales: '+(e?.message||e);console.error(centralError,e)}
   }
   const all=orders.filter(o=>String(o.type||o.deliveryType||o.tipoEntrega||'').toLowerCase().includes('domic')||o.delivery===true);
   const q=String(search||'').trim().toLowerCase();
   const list=all.filter(o=>!q||[o.no,o.name,o.phone,o.addr,o.address,o.driverName,o.status].join(' ').toLowerCase().includes(q));
-  const drivers=JSON.parse(localStorage.getItem('sp_premium_drivers_v1')||'[]');
-  const unassigned=all.filter(o=>!o.driverId&&o.status!=='entregado').length;
-  const onWay=all.filter(o=>o.status==='camino').length;
-  const delivered=all.filter(o=>o.status==='entregado').length;
+  let drivers=JSON.parse(localStorage.getItem('sp_premium_drivers_v1')||'[]');
+  if(SP_DB_ON&&!centralError){try{const {data,error}=await SP_DB.rpc('sp_admin_delivery_drivers');if(error)throw error;if(Array.isArray(data)){drivers=data.map(d=>({id:d.id,name:d.name||'',phone:d.phone||'',active:d.active!==false}));localStorage.setItem('sp_premium_drivers_v1',JSON.stringify(drivers))}}catch(e){console.error('Error cargando domiciliarios centrales:',e)}}
+  const unassigned=all.filter(o=>!o.driverId&&o.status!=='entregado').length,onWay=all.filter(o=>o.status==='camino').length,delivered=all.filter(o=>o.status==='entregado').length;
   const driverStats=drivers.map(d=>({d,count:all.filter(o=>o.driverId===d.id).length,del:all.filter(o=>o.driverId===d.id&&o.status==='entregado').length})).filter(x=>x.count).sort((a,b)=>b.count-a.count);
-  document.getElementById('panel').innerHTML='<div class="panelHead"><div><div class="dashKicker">LOGÍSTICA</div><h2>🛵 Domicilios</h2><div class="muted">Control y seguimiento de entregas</div></div><button class="close" onclick="adminOrders()">✕</button></div>'+navTabs('delivery')+
-  '<div class="statgrid dashGrid"><div class="stat"><small>Domicilios</small><b>'+all.length+'</b></div><div class="stat"><small>Sin asignar</small><b>'+unassigned+'</b></div><div class="stat"><small>En camino</small><b>'+onWay+'</b></div><div class="stat"><small>Entregados</small><b>'+delivered+'</b></div></div>'+
-  '<div class="notice" style="margin:12px 0">📍 Los pedidos de tipo domicilio se cargan desde la central. Aquí puedes asignar domiciliario, poner en camino y confirmar entrega.</div>'+
-  '<div class="adminActions" style="display:grid;grid-template-columns:1fr auto;gap:8px;margin:12px 0"><input id="deliverySearch" class="search" style="width:100%;max-width:none" value="'+esc(search)+'" placeholder="🔎 Buscar pedido, cliente, teléfono, dirección o domiciliario"><button class="mini" onclick="adminDomicilios(document.getElementById(\'deliverySearch\').value)">🔎 Buscar</button></div>'+
-  '<div class="modalBtns"><button class="primary" onclick="newDriver()">＋ Nuevo domiciliario</button></div>'+
-  '<div class="dashSection"><div class="dashSectionHead"><h3>🛵 Domiciliarios</h3></div>'+
-  drivers.map(d=>'<div class="adminItem"><div class="adminTop"><b>🛵 '+esc(d.name)+'</b><span>'+esc(d.phone||'')+'</span></div><div class="muted">'+(d.active?'Activo':'Inactivo')+' · '+(driverStats.find(x=>x.d.id===d.id)?.count||0)+' asignados · '+(driverStats.find(x=>x.d.id===d.id)?.del||0)+' entregados</div><div class="adminActions"><button class="mini" onclick="toggleDriver(\''+d.id+'\')">'+(d.active?'Desactivar':'Activar')+'</button></div></div>').join('')||'<div class="empty">No hay domiciliarios registrados.</div>'+
-  '</div><div class="dashSection"><div class="dashSectionHead"><h3>📦 Pedidos a domicilio</h3><span class="muted">'+list.length+' de '+all.length+'</span></div>'+
-  (list.slice(0,50).map(o=>'<div class="adminItem"><div class="adminTop"><div><b>'+esc(o.no)+'</b> · '+esc(o.name||'Cliente')+'</div><span>'+statusLabel(o)+'</span></div><div class="muted">📞 '+esc(o.phone||'-')+' · 📍 '+esc(o.addr||o.address||'Sin dirección')+'</div><div class="muted">Domiciliario: <b>'+esc(o.driverName||'Sin asignar')+'</b>'+(o.outAt?' · Salió: '+new Date(o.outAt).toLocaleTimeString('es-CO'):'')+(o.deliveredAt?' · Entregado: '+new Date(o.deliveredAt).toLocaleTimeString('es-CO'):'')+'</div><div class="adminActions"><button class="mini" onclick="assignDriver(\''+o.no+'\')">🛵 Asignar</button>'+(o.status!=='camino'&&o.status!=='entregado'?(o.driverId?'<button class="mini" onclick="setOrderStatus(\''+o.no+'\',\'camino\')">🛵 En camino</button>':'<button class="mini" onclick="assignDriver(\''+o.no+'\')">🛵 Asignar primero</button>'):'')+(o.status==='camino'?'<button class="primary" onclick="markDelivered(\''+o.no+'\')">✅ Entregado</button>':'')+'</div></div>').join('')||'<div class="empty">No hay domicilios registrados en la central.</div>')+
-  '</div>';
-  document.getElementById('modal').classList.add('open');
+  document.getElementById('panel').innerHTML='<div class="dashGrid"><div class="dashCard"><span>Domicilios</span><b>'+all.length+'</b></div><div class="dashCard"><span>Sin asignar</span><b>'+unassigned+'</b></div><div class="dashCard"><span>En camino</span><b>'+onWay+'</b></div><div class="dashCard"><span>Entregados</span><b>'+delivered+'</b></div></div>'+(centralError?'<div class="empty" style="margin:10px 0;border:1px solid #6b2b2b;padding:10px">⚠️ '+esc(centralError)+'</div>':'')+'<div class="adminToolbar"><input id="domSearch" placeholder="Buscar domicilio..." value="'+esc(search)+'" oninput="adminDomicilios(this.value)"><button class="mini" onclick="newDriver()">＋ Nuevo domiciliario</button></div>'+'<div class="dashSection"><div class="dashSectionHead"><h3>🛵 Domiciliarios</h3><span class="muted">'+drivers.length+'</span></div>'+(drivers.map(d=>'<div class="adminItem"><div class="adminTop"><div><b>'+esc(d.name)+'</b></div><span class="'+(d.active?'ok':'muted')+'">'+(d.active?'Activo':'Inactivo')+'</span></div><div class="muted">📞 '+esc(d.phone||'-')+'</div><div class="adminActions"><button class="mini" onclick="toggleDriver(\''+d.id+'\')">'+(d.active?'Desactivar':'Activar')+'</button></div></div>').join('')||'<div class="empty">No hay domiciliarios registrados.</div>')+'</div>'+'<div class="dashSection"><div class="dashSectionHead"><h3>📦 Pedidos a domicilio</h3><span class="muted">'+list.length+' de '+all.length+'</span></div>'+(list.slice(0,50).map(o=>'<div class="adminItem"><div class="adminTop"><div><b>'+esc(o.no)+'</b> · '+esc(o.name||'Cliente')+'</div><span>'+statusLabel(o)+'</span></div><div class="muted">📞 '+esc(o.phone||'-')+' · 📍 '+esc(o.addr||o.address||'Sin dirección')+'</div><div class="muted">Domiciliario: <b>'+esc(o.driverName||'Sin asignar')+'</b>'+(o.outAt?' · Salió: '+new Date(o.outAt).toLocaleTimeString('es-CO'):'')+(o.deliveredAt?' · Entregado: '+new Date(o.deliveredAt).toLocaleTimeString('es-CO'):'')+'</div><div class="adminActions"><button class="mini" onclick="assignDriver(\''+o.no+'\')">🛵 Asignar</button>'+(o.status!=='camino'&&o.status!=='entregado'?(o.driverId?'<button class="mini" onclick="setOrderStatus(\''+o.no+'\',\'camino\')">🛵 En camino</button>':'<button class="mini" onclick="assignDriver(\''+o.no+'\')">🛵 Asignar primero</button>'):'')+(o.status==='camino'?'<button class="primary" onclick="markDelivered(\''+o.no+'\')">✅ Entregado</button>':'')+'</div></div>').join('')||'<div class="empty">No hay domicilios registrados en la central.</div>')+'</div>';
 }
-function newDriver(){
-  if(!isAdmin())return;
-  const name=prompt('Nombre del domiciliario:');
-  if(!name||!name.trim())return;
-  const cleanName=name.trim();
-  const phone=prompt('Teléfono:','');
-  if(phone===null)return;
-  const cleanPhone=phone.trim();
-  const drivers=JSON.parse(localStorage.getItem('sp_premium_drivers_v1')||'[]');
-  const duplicate=drivers.find(d=>
-    String(d.name||'').trim().toLowerCase()===cleanName.toLowerCase() ||
-    (cleanPhone && String(d.phone||'').replace(/\D/g,'')===cleanPhone.replace(/\D/g,''))
-  );
-  if(duplicate){
-    alert('Este domiciliario ya está registrado. No se creó un duplicado.');
-    adminDomicilios();
-    return;
-  }
-  drivers.unshift({id:String(Date.now()),name:cleanName,phone:cleanPhone,active:true});
-  localStorage.setItem('sp_premium_drivers_v1',JSON.stringify(drivers));
-  auditLog('Nuevo domiciliario','Registrado '+cleanName);
-  save();
-  adminDomicilios();
+
+async function newDriver(){
+  if(!isAdmin())return;const name=prompt('Nombre del domiciliario:');if(!name||!name.trim())return;const cleanName=name.trim();const phone=prompt('Teléfono:','');if(phone===null)return;const cleanPhone=phone.trim();
+  if(SP_DB_ON){try{if(!currentUser?.central&&!(await ensureCentralAdminSession()))throw new Error('Sesión central de administrador no encontrada.');const {data,error}=await SP_DB.rpc('sp_admin_upsert_delivery_driver',{p_name:cleanName,p_phone:cleanPhone,p_active:true});if(error)throw error;const d=Array.isArray(data)?data[0]:data;if(!d)throw new Error('No se recibió el domiciliario creado.');const drivers=JSON.parse(localStorage.getItem('sp_premium_drivers_v1')||'[]');const merged=drivers.filter(x=>x.id!==d.id&&String(x.name||'').trim().toLowerCase()!==cleanName.toLowerCase());merged.unshift({id:d.id,name:d.name,phone:d.phone||'',active:d.active!==false});localStorage.setItem('sp_premium_drivers_v1',JSON.stringify(merged));auditLog('Nuevo domiciliario','Registrado '+d.name);save();adminDomicilios();return}catch(e){alert('No se pudo guardar el domiciliario en la central: '+(e?.message||e));return}}
+  const drivers=JSON.parse(localStorage.getItem('sp_premium_drivers_v1')||'[]');const duplicate=drivers.find(d=>String(d.name||'').trim().toLowerCase()===cleanName.toLowerCase()||(cleanPhone&&String(d.phone||'').replace(/\D/g,'')===cleanPhone.replace(/\D/g,'')));if(duplicate){alert('Este domiciliario ya está registrado. No se creó un duplicado.');adminDomicilios();return}drivers.unshift({id:String(Date.now()),name:cleanName,phone:cleanPhone,active:true});localStorage.setItem('sp_premium_drivers_v1',JSON.stringify(drivers));auditLog('Nuevo domiciliario','Registrado '+cleanName);save();adminDomicilios();
 }
-function toggleDriver(id){if(!isAdmin())return;const drivers=JSON.parse(localStorage.getItem('sp_premium_drivers_v1')||'[]');const d=drivers.find(x=>x.id===id);if(!d)return;d.active=!d.active;localStorage.setItem('sp_premium_drivers_v1',JSON.stringify(drivers));auditLog('Estado domiciliario',d.name+' · '+(d.active?'Activo':'Inactivo'));save();adminDomicilios();}
-function assignDriver(no){if(!can('allowOrders'))return;const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]'),o=orders.find(x=>x.no===no);if(!o)return;const drivers=JSON.parse(localStorage.getItem('sp_premium_drivers_v1')||'[]').filter(d=>d.active);if(!drivers.length){alert('Primero registra un domiciliario activo.');return}const menu=drivers.map((d,i)=>`${i+1}. ${d.name} ${d.phone?'· '+d.phone:''}`).join('\n');const pick=prompt('Selecciona el domiciliario escribiendo el número:\n'+menu,'1');if(pick===null)return;const d=drivers[Number(pick)-1];if(!d)return;const reason=isAdmin()?'Asignación administrativa':askReason('Indica por qué asignas o cambias el domiciliario:');if(reason===null)return;o.driverId=d.id;o.driverName=d.name;o.driverPhone=d.phone||'';o.updated=new Date().toISOString();localStorage.setItem(ORDERS,JSON.stringify(orders));auditLog('Asignación de domiciliario',reason,no);adminDomicilios();}
-function markDelivered(no){if(!can('allowOrders'))return;const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]'),o=orders.find(x=>x.no===no);if(!o)return;if(!isAdmin()){const reason=askReason('Confirma el motivo/observación de la entrega:');if(reason===null)return;o.deliveryNote=reason}o.deliveredAt=new Date().toISOString();o.status='entregado';o.updated=o.deliveredAt;o.statusHistory=o.statusHistory||[];o.statusHistory.unshift({status:'entregado',date:o.updated,by:currentUser?currentUser.user:'sistema',reason:'Entrega confirmada'});localStorage.setItem(ORDERS,JSON.stringify(orders));auditLog('Pedido entregado','Domicilio entregado',no);queueStatusNotification(o,'entregado');adminDomicilios();}
+
+async function toggleDriver(id){
+  if(!isAdmin())return;const drivers=JSON.parse(localStorage.getItem('sp_premium_drivers_v1')||'[]'),d=drivers.find(x=>x.id===id);if(!d)return;const next=!d.active;
+  if(SP_DB_ON){try{if(!currentUser?.central&&!(await ensureCentralAdminSession()))throw new Error('Sesión central de administrador no encontrada.');const {data,error}=await SP_DB.rpc('sp_set_delivery_driver_active',{p_driver_id:d.id,p_active:next});if(error)throw error;const row=Array.isArray(data)?data[0]:data;if(row){d.id=row.id;d.name=row.name;d.phone=row.phone||'';d.active=row.active!==false}}catch(e){alert('No se pudo actualizar el domiciliario en la central: '+(e?.message||e));return}}else d.active=next;
+  localStorage.setItem('sp_premium_drivers_v1',JSON.stringify(drivers));auditLog('Estado domiciliario',d.name+' · '+(d.active?'Activo':'Inactivo'));save();adminDomicilios();
+}
+
+async function assignDriver(no){
+  if(!can('allowOrders'))return;const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]'),o=orders.find(x=>String(x.no)===String(no));if(!o)return;let drivers=JSON.parse(localStorage.getItem('sp_premium_drivers_v1')||'[]').filter(d=>d.active);
+  if(SP_DB_ON){try{if(!currentUser?.central&&!(await ensureCentralAdminSession()))throw new Error('Sesión central de administrador no encontrada.');const {data,error}=await SP_DB.rpc('sp_admin_delivery_drivers');if(error)throw error;if(Array.isArray(data)){drivers=data.filter(d=>d.active!==false).map(d=>({id:d.id,name:d.name||'',phone:d.phone||'',active:true}));localStorage.setItem('sp_premium_drivers_v1',JSON.stringify(data.map(d=>({id:d.id,name:d.name||'',phone:d.phone||'',active:d.active!==false}))))}}catch(e){alert('No se pudieron cargar los domiciliarios centrales: '+(e?.message||e));return}}
+  if(!drivers.length){alert('Primero registra un domiciliario activo.');return}const menu=drivers.map((d,i)=>`${i+1}. ${d.name} ${d.phone?'· '+d.phone:''}`).join('\n');const pick=prompt('Selecciona el domiciliario escribiendo el número:\n'+menu,'1');if(pick===null)return;const d=drivers[Number(pick)-1];if(!d)return;const reason=isAdmin()?'Asignación administrativa':askReason('Indica por qué asignas o cambias el domiciliario:');if(reason===null)return;
+  if(SP_DB_ON){try{let driverId=d.id;if(!driverId||!/^[0-9a-f-]{36}$/i.test(String(driverId))){const up=await SP_DB.rpc('sp_admin_upsert_delivery_driver',{p_name:d.name,p_phone:d.phone||'',p_active:true});if(up.error)throw up.error;driverId=(Array.isArray(up.data)?up.data[0]:up.data)?.id}if(!driverId)throw new Error('No se pudo obtener el ID central del domiciliario.');let orderId=o.centralId;if(!orderId){const q=await SP_DB.from('orders').select('id').eq('order_number',o.no).maybeSingle();if(q.error)throw q.error;orderId=q.data?.id||null}if(!orderId)throw new Error('No se encontró el pedido en la central.');const asg=await SP_DB.rpc('sp_assign_delivery_driver',{p_order_id:orderId,p_driver_id:driverId});if(asg.error)throw asg.error;const row=Array.isArray(asg.data)?asg.data[0]:asg.data;o.centralId=orderId;o.driverId=driverId;o.driverName=row?.driver_name||d.name;o.driverPhone=row?.driver_phone||d.phone||''}catch(e){alert('No se pudo asignar el domiciliario en la central: '+(e?.message||e));return}}else{o.driverId=d.id;o.driverName=d.name;o.driverPhone=d.phone||''}
+  o.updated=new Date().toISOString();localStorage.setItem(ORDERS,JSON.stringify(orders));auditLog('Asignación de domiciliario',reason,no);save();adminDomicilios();
+}
+
+async function markDelivered(no){
+  if(!can('allowOrders'))return;const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]'),o=orders.find(x=>String(x.no)===String(no));if(!o)return;
+  if(!isAdmin()){const reason=askReason('Confirma el motivo/observación de la entrega:');if(reason===null)return;o.deliveryNote=reason}
+  if(SP_DB_ON&&o.centralId){const {data,error}=await SP_DB.rpc('sp_update_order_status',{p_order_id:o.centralId,p_status:'entregado'});if(error){alert('No se pudo actualizar la entrega central: '+error.message);return}if(data?.[0]?.status)o.status=data[0].status}
+  o.deliveredAt=new Date().toISOString();o.status='entregado';o.updated=o.deliveredAt;o.statusHistory=o.statusHistory||[];o.statusHistory.unshift({status:'entregado',date:o.updated,by:currentUser?currentUser.user:'sistema',reason:'Entrega confirmada'});localStorage.setItem(ORDERS,JSON.stringify(orders));auditLog('Pedido entregado','Domicilio entregado',no);queueStatusNotification(o,'entregado');adminDomicilios();
+}
 
 function adminReports(){
   if(!isAdmin()){alert('Solo el administrador o dueño puede consultar reportes.');return}
