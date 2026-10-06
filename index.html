@@ -1559,12 +1559,33 @@ function adminStats(){
   <div class="modalBtns"><button class="primary" onclick="window.print()">🖨️ Imprimir estadísticas</button></div>`;
   document.getElementById('modal').classList.add('open');
 }
-function adminDomicilios(search=''){
+async function adminDomicilios(search=''){
   if(!can('allowOrders')){alert('Tu usuario no tiene permiso para gestionar pedidos.');return}
-  const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
-  const all=orders.filter(o=>String(o.deliveryType||o.tipoEntrega||'').toLowerCase().includes('domic')||o.delivery===true||o.status==='camino');
+  let orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
+  if(SP_DB_ON){
+    try{
+      if(!currentUser?.central){
+        const ok=await ensureCentralAdminSession();
+        if(!ok)throw new Error('Sesión central de administrador no encontrada.');
+      }
+      const {data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders');
+      if(error)throw error;
+      const rows=Array.isArray(centralOrders)?centralOrders:[];
+      const central=rows.map(o=>({
+        no:o.order_number,centralId:o.id,name:o.customer_name||'',phone:o.customer_phone||'',
+        type:o.order_type==='delivery'?'Domicilio':o.order_type==='pickup'?'Recoger':'Local',
+        pay:o.payment_method||'',paymentStatus:o.payment_status||'pendiente',addr:o.address||'',obs:o.observations||'',
+        total:Number(o.total||0),created:o.created_at,updated:o.updated_at,status:o.status||'recibido',
+        driverId:o.driver_id||null,driverName:o.driver_name||'',driverPhone:o.driver_phone||'',statusHistory:[],detail:o.detail||''
+      }));
+      const oldByNo=new Map(orders.map(x=>[String(x.no),x]));
+      orders=central.map(c=>({...oldByNo.get(String(c.no))||{},...c})).sort((a,b)=>new Date(b.created)-new Date(a.created));
+      localStorage.setItem(ORDERS,JSON.stringify(orders));
+    }catch(e){console.error('Error cargando domicilios centrales:',e)}
+  }
+  const all=orders.filter(o=>String(o.type||o.deliveryType||o.tipoEntrega||'').toLowerCase().includes('domic')||o.delivery===true);
   const q=String(search||'').trim().toLowerCase();
-  const list=all.filter(o=>!q||[o.no,o.name,o.phone,o.address,o.driverName,o.status].join(' ').toLowerCase().includes(q));
+  const list=all.filter(o=>!q||[o.no,o.name,o.phone,o.addr,o.address,o.driverName,o.status].join(' ').toLowerCase().includes(q));
   const drivers=JSON.parse(localStorage.getItem('sp_premium_drivers_v1')||'[]');
   const unassigned=all.filter(o=>!o.driverId&&o.status!=='entregado').length;
   const onWay=all.filter(o=>o.status==='camino').length;
@@ -1572,13 +1593,13 @@ function adminDomicilios(search=''){
   const driverStats=drivers.map(d=>({d,count:all.filter(o=>o.driverId===d.id).length,del:all.filter(o=>o.driverId===d.id&&o.status==='entregado').length})).filter(x=>x.count).sort((a,b)=>b.count-a.count);
   document.getElementById('panel').innerHTML='<div class="panelHead"><div><div class="dashKicker">LOGÍSTICA</div><h2>🛵 Domicilios</h2><div class="muted">Control y seguimiento de entregas</div></div><button class="close" onclick="adminOrders()">✕</button></div>'+navTabs('delivery')+
   '<div class="statgrid dashGrid"><div class="stat"><small>Domicilios</small><b>'+all.length+'</b></div><div class="stat"><small>Sin asignar</small><b>'+unassigned+'</b></div><div class="stat"><small>En camino</small><b>'+onWay+'</b></div><div class="stat"><small>Entregados</small><b>'+delivered+'</b></div></div>'+
-  '<div class="notice" style="margin:12px 0">📍 Los pedidos sin domiciliario asignado aparecen como pendientes. Al marcar “En camino” se registra la salida y al entregar queda registrada la hora de entrega.</div>'+
+  '<div class="notice" style="margin:12px 0">📍 Los pedidos de tipo domicilio se cargan desde la central. Aquí puedes asignar domiciliario, poner en camino y confirmar entrega.</div>'+
   '<div class="adminActions" style="display:grid;grid-template-columns:1fr auto;gap:8px;margin:12px 0"><input id="deliverySearch" class="search" style="width:100%;max-width:none" value="'+esc(search)+'" placeholder="🔎 Buscar pedido, cliente, teléfono, dirección o domiciliario"><button class="mini" onclick="adminDomicilios(document.getElementById(\'deliverySearch\').value)">🔎 Buscar</button></div>'+
   '<div class="modalBtns"><button class="primary" onclick="newDriver()">＋ Nuevo domiciliario</button></div>'+
   '<div class="dashSection"><div class="dashSectionHead"><h3>🛵 Domiciliarios</h3></div>'+
   drivers.map(d=>'<div class="adminItem"><div class="adminTop"><b>🛵 '+esc(d.name)+'</b><span>'+esc(d.phone||'')+'</span></div><div class="muted">'+(d.active?'Activo':'Inactivo')+' · '+(driverStats.find(x=>x.d.id===d.id)?.count||0)+' asignados · '+(driverStats.find(x=>x.d.id===d.id)?.del||0)+' entregados</div><div class="adminActions"><button class="mini" onclick="toggleDriver(\''+d.id+'\')">'+(d.active?'Desactivar':'Activar')+'</button></div></div>').join('')||'<div class="empty">No hay domiciliarios registrados.</div>'+
   '</div><div class="dashSection"><div class="dashSectionHead"><h3>📦 Pedidos a domicilio</h3><span class="muted">'+list.length+' de '+all.length+'</span></div>'+
-  (list.slice(0,50).map(o=>'<div class="adminItem"><div class="adminTop"><div><b>'+esc(o.no)+'</b> · '+esc(o.name||'Cliente')+'</div><span>'+statusLabel(o)+'</span></div><div class="muted">📞 '+esc(o.phone||'-')+' · 📍 '+esc(o.address||'Sin dirección')+'</div><div class="muted">Domiciliario: <b>'+esc(o.driverName||'Sin asignar')+'</b>'+(o.outAt?' · Salió: '+new Date(o.outAt).toLocaleTimeString('es-CO'):'')+(o.deliveredAt?' · Entregado: '+new Date(o.deliveredAt).toLocaleTimeString('es-CO'):'')+'</div><div class="adminActions"><button class="mini" onclick="assignDriver(\''+o.no+'\')">🛵 Asignar</button>'+(o.status!=='camino'&&o.status!=='entregado'?(o.driverId?'<button class="mini" onclick="setOrderStatus(\''+o.no+'\',\'camino\')">🛵 En camino</button>':'<button class="mini" onclick="assignDriver(\''+o.no+'\')">🛵 Asignar primero</button>'):'')+(o.status==='camino'?'<button class="primary" onclick="markDelivered(\''+o.no+'\')">✅ Entregado</button>':'')+'</div></div>').join('')||'<div class="empty">No hay domicilios que coincidan con la búsqueda.</div>')+
+  (list.slice(0,50).map(o=>'<div class="adminItem"><div class="adminTop"><div><b>'+esc(o.no)+'</b> · '+esc(o.name||'Cliente')+'</div><span>'+statusLabel(o)+'</span></div><div class="muted">📞 '+esc(o.phone||'-')+' · 📍 '+esc(o.addr||o.address||'Sin dirección')+'</div><div class="muted">Domiciliario: <b>'+esc(o.driverName||'Sin asignar')+'</b>'+(o.outAt?' · Salió: '+new Date(o.outAt).toLocaleTimeString('es-CO'):'')+(o.deliveredAt?' · Entregado: '+new Date(o.deliveredAt).toLocaleTimeString('es-CO'):'')+'</div><div class="adminActions"><button class="mini" onclick="assignDriver(\''+o.no+'\')">🛵 Asignar</button>'+(o.status!=='camino'&&o.status!=='entregado'?(o.driverId?'<button class="mini" onclick="setOrderStatus(\''+o.no+'\',\'camino\')">🛵 En camino</button>':'<button class="mini" onclick="assignDriver(\''+o.no+'\')">🛵 Asignar primero</button>'):'')+(o.status==='camino'?'<button class="primary" onclick="markDelivered(\''+o.no+'\')">✅ Entregado</button>':'')+'</div></div>').join('')||'<div class="empty">No hay domicilios registrados en la central.</div>')+
   '</div>';
   document.getElementById('modal').classList.add('open');
 }
