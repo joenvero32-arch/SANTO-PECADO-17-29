@@ -18,9 +18,16 @@
   async function openAudit(){const d=await getDb();if(!d){alert('No se pudo conectar con Supabase.');return}let o=document.getElementById('spAuditOverlay');if(!o){o=document.createElement('div');o.id='spAuditOverlay';o.innerHTML='<div class="spAuditPanel"><div class="spAuditHead"><div><div class="spAuditMuted">CONTROL DEL SISTEMA</div><h2>🛡️ Auditoría</h2><div class="spAuditMuted">Registro de cambios realizados desde Administración</div></div><button id="spAuditClose">✕</button></div><div class="spAuditTools"><select id="spAuditType"><option value="">Todos los módulos</option><option value="product">Productos</option><option value="topping">Toppings</option><option value="promotion">Promociones</option></select><button id="spAuditRefresh">↻ Actualizar</button></div><div id="spAuditBody">Cargando…</div></div>';document.body.appendChild(o);document.getElementById('spAuditClose').onclick=()=>o.remove();document.getElementById('spAuditRefresh').onclick=load;document.getElementById('spAuditType').onchange=load}o.style.display='flex';await load();async function load(){const type=document.getElementById('spAuditType')?.value||'';let q=d.from('audit_logs').select('id,action,entity_type,entity_id,details,created_at,app_users(full_name,username)').order('created_at',{ascending:false}).limit(100);if(type)q=q.eq('entity_type',type);const {data,error}=await q;const b=document.getElementById('spAuditBody');if(error){b.innerHTML='<div class="spAuditEmpty">No se pudo cargar la auditoría: '+esc(error.message)+'</div>';return}const rows=data||[];if(!rows.length){b.innerHTML='<div class="spAuditEmpty">🛡️ Aún no hay cambios registrados.<br><small>Los cambios administrativos que se hagan desde ahora quedarán registrados aquí.</small></div>';return}b.innerHTML='<div class="spAuditCount">'+rows.length+' registros recientes</div>'+rows.map(x=>{const u=x.app_users?.full_name||x.app_users?.username||'Usuario';const m=x.entity_type==='product'?'Producto':x.entity_type==='topping'?'Topping':x.entity_type==='promotion'?'Promoción':x.entity_type||'Sistema';return '<div class="spAuditItem"><div><b>'+esc(x.action)+'</b><span class="spAuditPill">'+esc(m)+'</span></div><div class="spAuditMeta">'+esc(u)+' · '+new Date(x.created_at).toLocaleString('es-CO')+'</div></div>'}).join('')}}
   function addAuditButton(){
     if(document.querySelector('[data-sp-audit-btn]'))return;
+    const stats=document.querySelector('[data-sp-stats]');
+    const nav=stats?.closest('.adminTabs') || document.querySelector('.adminTabs');
     const caja=[...document.querySelectorAll('button')].find(b=>(b.textContent||'').trim().includes('Caja'));
-    if(!caja||!caja.parentElement)return;
-    const b=document.createElement('button');b.type='button';b.dataset.spAuditBtn='1';b.className=caja.className;b.textContent='🛡️ Auditoría';b.onclick=openAudit;caja.parentElement.appendChild(b);
+    const parent=nav || caja?.parentElement;
+    if(!parent)return;
+    const b=document.createElement('button');
+    b.type='button';b.dataset.spAuditBtn='1';
+    b.className=(stats||caja)?.className||'adminTab';
+    b.textContent='🛡️ Auditoría';b.onclick=openAudit;
+    parent.appendChild(b);
   }
   style();wrap();addAuditButton();
   const mo=new MutationObserver(()=>wrap());mo.observe(document.documentElement,{childList:true,subtree:true});setInterval(wrap,1200);
