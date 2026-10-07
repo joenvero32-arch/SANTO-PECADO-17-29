@@ -105,7 +105,7 @@
       const detail=await getDetail(o);
       const logo=document.querySelector('.brandLogo')?.src||'';
       const cleanLine=x=>String(x||'').replace(/\s+—\s+\$[\d.,]+/g,'').replace(/\s+\+\$[\d.,]+/g,'');
-      const lines=String(detail||'').split('\n').map(x=>x.trim()).filter(Boolean)
+      const lines=String(detail||'').replace(/\\n/g,'\n').split('\n').map(x=>x.trim()).filter(Boolean)
         .map(x=>'<div class="line">'+esc(cleanLine(x))+'</div>').join('');
       const date=o.created?new Date(o.created).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'}):'';
       const driver=o.type==='Domicilio'&&o.driverName?'<div><b>Domiciliario:</b> '+esc(o.driverName)+'</div>':'';
