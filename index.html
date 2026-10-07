@@ -1693,7 +1693,7 @@ function adminSales(){
 function adminInventory(){
   if(!can('allowInventory')){alert('Tu usuario no tiene permiso para inventario.');return}
   document.getElementById('panel').innerHTML=`
-    <div class="panelHead"><h2>📦 Inventario</h2><button class="close" onclick="adminProducts()">✕</button></div>
+    <div class="panelHead"><h2>📦 Inventario</h2><button class="close" onclick="closeModal()">✕</button></div>
     <div class="notice" style="margin:12px 0">Cada venta descuenta 1 unidad del producto terminado. Los extras descuentan solamente el inventario del topping agregado. Los ingredientes incluidos en la receta NO se descuentan por separado.</div>
     ${navTabs('inventory')}
     ${products.map(p=>`<div class="adminItem"><div class="adminTop"><b>${esc(p.name)}</b><b class="${p.stock<=p.minStock?'low':''}">${Number(p.stock||0)} und.</b></div><span class="muted">Mínimo: ${Number(p.minStock||0)} · ${esc(p.cat)}</span>
@@ -1703,7 +1703,7 @@ function adminInventory(){
 function adminToppingInventory(){
   if(!can('allowInventory')){alert('Tu usuario no tiene permiso para inventario.');return}
   document.getElementById('panel').innerHTML=`
-    <div class="panelHead"><h2>🧀 Inventario de toppings</h2><button class="close" onclick="adminProducts()">✕</button></div>
+    <div class="panelHead"><h2>🧀 Inventario de toppings</h2><button class="close" onclick="closeModal()">✕</button></div>
     <div class="notice" style="margin:12px 0">Activa el control de existencias de cada topping desde “Configurar”. Si un cliente lo agrega, se descuenta la cantidad por adición × cantidad de productos vendidos.</div>
     ${navTabs('inventory')}
     ${toppings.map(t=>`<div class="adminItem"><div class="adminTop"><b>${esc(t.name)}</b><b class="${t.tracked&&Number(t.stock)<=Number(t.minStock)?'low':''}">${t.tracked?Number(t.stock)+' '+esc(t.unit):'Sin control'}</b></div>
