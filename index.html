@@ -372,11 +372,12 @@ let audit=spSafeJSON(AUDIT,[]);
 if(!Array.isArray(audit)) audit=[];
 
 let users=spSafeJSON(USERS,null);
-if(!Array.isArray(users)||!users.length){ users=[{id:'owner',user:'admin',name:'Administrador / Dueño',pin:PIN,role:'admin',allowOrders:true,allowInventory:true}]; }
+if(!Array.isArray(users)||!users.length){ users=[{id:'owner',user:'admin',name:'Administrador / Dueño',pin:PIN,role:'admin',allowOrders:true,allowInventory:true,allowCash:true}]; }
 else{
   // Migración segura del acceso del dueño: solo rellena el PIN si el administrador local quedó sin PIN.
   const owner=users.find(x=>x.role==='admin'&&String(x.user||'').toLowerCase()==='admin');
   if(owner && !String(owner.pin||'').trim()) owner.pin=PIN;
+  users.forEach(x=>{if(x.role==='employee'&&x.allowCash===undefined)x.allowCash=true;});
 }
 // Seguridad: nunca precargar usuario ni PIN en los campos de acceso.
 // El PIN local se valida solo desde el registro guardado por el administrador.
@@ -420,7 +421,7 @@ function requirePermission(permission){
 } function auditLog(action,details,orderNo=''){audit.unshift({date:new Date().toISOString(),action,details,orderNo:orderNo||'',user:currentUser?currentUser.user:'sistema',name:currentUser?currentUser.name:'Sistema',role:currentUser?currentUser.role:'system'});audit=audit.slice(0,1000);localStorage.setItem(AUDIT,JSON.stringify(audit));} function askReason(label){const r=prompt(label||'Indica el motivo:');if(r===null)return null;const v=r.trim();if(!v){alert('El motivo es obligatorio. No se realizó el cambio.');return null}return v;}
 function navTabs(active){
   if(!currentUser)return '';
-  if(!isAdmin()) return `<div class="adminTabs"><button class="tab ${active==='orders'?'active':''}" onclick="adminOrders()">📋 Pedidos</button><button class="tab ${active==='kitchen'?'active':''}" onclick="adminKitchen()">🍳 Cocina</button><button class="tab ${active==='inventory'?'active':''}" onclick="adminInventory()">📦 Inventario</button><button class="tab" onclick="logoutUser()">🚪 Cerrar sesión</button></div>`;
+  if(!isAdmin()) return `<div class="adminTabs"><button class="tab ${active==='orders'?'active':''}" onclick="adminOrders()">📋 Pedidos</button><button class="tab ${active==='kitchen'?'active':''}" onclick="adminKitchen()">🍳 Cocina</button><button class="tab ${active==='inventory'?'active':''}" onclick="adminInventory()">📦 Inventario</button>${can('allowCash')?`<button class="tab ${active==='cash'?'active':''}" onclick="employeeCash()">💵 Mi Caja</button>`:''}<button class="tab" onclick="logoutUser()">🚪 Cerrar sesión</button></div>`;
   return `<div class="adminTabs"><button class="tab ${active==='dashboard'?'active':''}" onclick="adminDashboard()">📊 Inicio</button><button class="tab ${active==='products'?'active':''}" onclick="adminProducts()">Productos</button><button class="tab ${active==='categories'?'active':''}" onclick="adminCategories()">Categorías</button><button class="tab ${active==='orders'?'active':''}" onclick="adminOrders()">Pedidos</button><button class="tab ${active==='kitchen'?'active':''}" onclick="adminKitchen()">🍳 Cocina</button><button class="tab ${active==='sales'?'active':''}" onclick="adminSales()">Ventas</button><button class="tab ${active==='cash'?'active':''}" onclick="adminCash()">💵 Caja</button><button class="tab ${active==='expenses'?'active':''}" onclick="adminExpenses()">💸 Gastos</button><button class="tab ${active==='reports'?'active':''}" onclick="adminReports()">📈 Reportes</button><button class="tab ${active==='delivery'?'active':''}" onclick="adminDomicilios()">🛵 Domicilios</button><button class="tab ${active==='inventory'?'active':''}" onclick="adminInventory()">Inventario</button><button class="tab ${active==='toppings'?'active':''}" onclick="adminToppings()">Toppings</button><button class="tab ${active==='users'?'active':''}" onclick="adminUsers()">Usuarios</button><button class="tab ${active==='customers'?'active':''}" onclick="adminCustomers()">👥 Clientes</button><button class="tab ${active==='promotions'?'active':''}" onclick="adminPromotions()">🎁 Promociones</button><button class="tab ${active==='audit'?'active':''}" onclick="adminAudit()">🛡️ Auditoría</button><button class="tab ${active==='settings'?'active':''}" onclick="adminSettings()">Configuración</button><button class="tab ${active==='reports'?'active':''}" data-sp-native-stats="1" onclick="adminStats()">📊 Estadísticas</button></div>`;
 }
 async function logoutUser(){
@@ -1138,8 +1139,8 @@ async function submitLogin(){
   if(u.role!=='admin' && SP_DB_ON){
     try{await SP_DB.auth.signOut()}catch(e){console.warn('No se pudo limpiar la sesión central anterior:',e)}
   }
-  currentUser={...u,central:false}; sessionStorage.setItem(SESSION,JSON.stringify(currentUser));
-  if(isAdmin()) adminProducts(); else if(u.allowOrders) adminOrders(); else if(u.allowInventory) adminInventory(); else {alert('Este usuario no tiene permisos asignados.');logoutUser();}
+  currentUser={...u,allowCash:u.allowCash!==false,central:false}; sessionStorage.setItem(SESSION,JSON.stringify(currentUser));
+  if(isAdmin()) adminProducts(); else if(u.allowOrders) adminOrders(); else if(u.allowInventory) adminInventory(); else if(u.allowCash!==false) employeeCash(); else {alert('Este usuario no tiene permisos asignados.');logoutUser();}
 }
 function adminUsers(){
   if(!isAdmin()){alert('Solo el administrador o dueño puede administrar usuarios.');return}
@@ -1148,7 +1149,7 @@ function adminUsers(){
     <div class="notice" style="margin-top:14px">El administrador o dueño es el único que puede modificar productos, precios, categorías, toppings, configuración y permisos. A cada empleado puedes autorizarle pedidos y/o entradas de inventario.</div>
     ${navTabs('users')}
     <button class="primary" onclick="newEmployee()">＋ Nuevo empleado</button>
-    <div style="margin-top:14px">${users.map(u=>`<div class="adminItem"><div class="adminTop"><div class="adminName">${esc(u.name)} </div><span class="muted">${u.role==='admin'?'ADMINISTRADOR / DUEÑO':'EMPLEADO'}</span></div><div class="muted">Usuario: <b>${esc(u.user)}</b> · ${u.role==='admin'?'Acceso total':`Pedidos: ${u.allowOrders?'Sí':'No'} · Inventario: ${u.allowInventory?'Sí':'No'}`}</div>${u.role!=='admin'?`<div class="adminActions"><button class="mini" onclick="editEmployee('${u.id}')">✏️ Permisos</button><button class="mini" onclick="deleteEmployee('${u.id}')">🗑️ Eliminar</button></div>`:''}</div>`).join('')}</div>
+    <div style="margin-top:14px">${users.map(u=>`<div class="adminItem"><div class="adminTop"><div class="adminName">${esc(u.name)} </div><span class="muted">${u.role==='admin'?'ADMINISTRADOR / DUEÑO':'EMPLEADO'}</span></div><div class="muted">Usuario: <b>${esc(u.user)}</b> · ${u.role==='admin'?'Acceso total':`Pedidos: ${u.allowOrders?'Sí':'No'} · Inventario: ${u.allowInventory?'Sí':'No'} · Caja: ${u.allowCash!==false?'Sí':'No'}`}</div>${u.role!=='admin'?`<div class="adminActions"><button class="mini" onclick="editEmployee('${u.id}')">✏️ Permisos</button><button class="mini" onclick="deleteEmployee('${u.id}')">🗑️ Eliminar</button></div>`:''}</div>`).join('')}</div>
     <div class="modalBtns"><button class="secondary" onclick="logoutUser()">Cerrar sesión</button></div>`;
   document.getElementById('modal').classList.add('open');
 }
@@ -1165,6 +1166,7 @@ function newEmployee(){
     <div class="notice" style="margin-top:12px"><b>PERMISOS</b></div>
     <label class="adminItem" style="display:block;cursor:pointer"><input id="un_orders" type="checkbox" style="width:20px;height:20px;vertical-align:middle;margin-right:10px"> 📋 Gestionar pedidos y cambiar estados</label>
     <label class="adminItem" style="display:block;cursor:pointer"><input id="un_inventory" type="checkbox" style="width:20px;height:20px;vertical-align:middle;margin-right:10px"> 📦 Ingresar y gestionar inventario</label>
+    <label class="adminItem" style="display:block;cursor:pointer"><input id="un_cash" type="checkbox" checked style="width:20px;height:20px;vertical-align:middle;margin-right:10px"> 💵 Abrir, operar y cerrar su caja</label>
     <div class="modalBtns"><button class="primary" onclick="saveNewEmployee()">Guardar empleado</button><button class="secondary" onclick="adminUsers()">Cancelar</button></div>`;
 }
 function saveNewEmployee(){
@@ -1174,7 +1176,7 @@ function saveNewEmployee(){
   const pin=document.getElementById('un_pin').value.trim();
   if(!name||!user||!pin){alert('Completa nombre, usuario y PIN.');return}
   if(users.some(x=>x.user.toLowerCase()===user.toLowerCase())){alert('Ese usuario ya existe.');return}
-  users.push({id:'u_'+Date.now(),user,name,pin,role:'employee',allowOrders:document.getElementById('un_orders').checked,allowInventory:document.getElementById('un_inventory').checked});
+  users.push({id:'u_'+Date.now(),user,name,pin,role:'employee',allowOrders:document.getElementById('un_orders').checked,allowInventory:document.getElementById('un_inventory').checked,allowCash:document.getElementById('un_cash').checked});
   localStorage.setItem(USERS,JSON.stringify(users)); auditLog('Empleado creado',name+' · usuario '+user); alert('Empleado creado.'); adminUsers();
 }
 function editEmployee(id){
@@ -1190,6 +1192,7 @@ function editEmployee(id){
     <div class="notice" style="margin-top:12px"><b>PERMISOS</b></div>
     <label class="adminItem" style="display:block;cursor:pointer"><input id="eu_orders" type="checkbox" style="width:20px;height:20px;vertical-align:middle;margin-right:10px" ${u.allowOrders?'checked':''}> 📋 Gestionar pedidos y cambiar estados</label>
     <label class="adminItem" style="display:block;cursor:pointer"><input id="eu_inventory" type="checkbox" style="width:20px;height:20px;vertical-align:middle;margin-right:10px" ${u.allowInventory?'checked':''}> 📦 Ingresar y gestionar inventario</label>
+    <label class="adminItem" style="display:block;cursor:pointer"><input id="eu_cash" type="checkbox" style="width:20px;height:20px;vertical-align:middle;margin-right:10px" ${u.allowCash!==false?'checked':''}> 💵 Abrir, operar y cerrar su caja</label>
     <div class="modalBtns"><button class="primary" onclick="saveEmployee('${u.id}')">Guardar cambios</button><button class="secondary" onclick="adminUsers()">Cancelar</button></div>`;
 }
 function saveEmployee(id){
@@ -1197,7 +1200,7 @@ function saveEmployee(id){
   const name=document.getElementById('eu_name').value.trim();
   const pin=document.getElementById('eu_pin').value.trim();
   if(!name||!pin){alert('Completa nombre y PIN.');return}
-  u.name=name; u.pin=pin; u.allowOrders=document.getElementById('eu_orders').checked; u.allowInventory=document.getElementById('eu_inventory').checked;
+  u.name=name; u.pin=pin; u.allowOrders=document.getElementById('eu_orders').checked; u.allowInventory=document.getElementById('eu_inventory').checked; u.allowCash=document.getElementById('eu_cash').checked;
   localStorage.setItem(USERS,JSON.stringify(users)); auditLog('Empleado modificado',u.name+' · permisos actualizados'); alert('Permisos guardados.'); adminUsers();
 }
 function deleteEmployee(id){
@@ -1491,7 +1494,7 @@ async function adminExpenses(){
   document.getElementById('panel').innerHTML=html; document.getElementById('modal').classList.add('open');
 }
 async function adminCash(){
-  if(!isAdmin()){alert('Solo el administrador o dueño puede cerrar caja.');return}
+  if(!isAdmin()){alert('Solo el administrador o dueño puede consultar esta caja.');return}
   const today=dayKey(new Date());
   const allTodayClosures=cashClosures.filter(c=>c.day===today&&c.type!=='apertura').sort((a,b)=>new Date(b.date)-new Date(a.date));
   const lastClose=allTodayClosures[0]||null;
@@ -1543,11 +1546,11 @@ async function adminCash(){
   <div class="adminItem"><div class="adminTop"><b>💰 Efectivo esperado</b><b>${money(expected)}</b></div><div class="muted">Ventas en efectivo de esta caja + base inicial − gastos pagados en efectivo de esta caja.</div><div class="adminActions"><button class="mini" onclick="openCash('${today}')">🔓 Abrir caja</button>${openingRecord&&!list.length&&!sessionExpenses.length?'<button class="mini" onclick="changeOpeningCash(\''+today+'\')">✏️ Cambiar base</button>':''}<button class="primary" onclick="closeCash('${today}',${expected})">🔐 Registrar cierre de caja</button></div></div>
   ${lastClose?`<div class="notice" style="margin-top:12px">Último cierre de hoy: <b>${new Date(lastClose.date).toLocaleString('es-CO')}</b> · Efectivo contado: <b>${money(lastClose.counted)}</b> · Diferencia: <b>${money(lastClose.difference)}</b> · ${esc(lastClose.user)}</div>`:''}
   ${openingRecord?`<div class="notice" style="margin-top:12px">Caja abierta: <b>${new Date(openingRecord.date).toLocaleString('es-CO')}</b> · Base inicial: <b>${money(opening)}</b></div>`:''}
-  <div class="dashSection"><div class="dashSectionHead"><h3>Historial de cierres</h3></div>${cashClosures.filter(c=>c.type!=='apertura').slice(0,30).map(c=>`<div class="alertRow"><span>${new Date(c.date).toLocaleString('es-CO')} · ${esc(c.user)}</span><b>${money(c.counted)} · ${c.difference===0?'Cuadrada':money(c.difference)}</b></div>`).join('')||'<div class="empty">No hay cierres registrados.</div>'}</div>`;
+  <div class="dashSection"><div class="dashSectionHead"><h3>Historial de cierres</h3></div>${cashClosures.filter(c=>c.type!=='apertura').slice(0,30).map(c=>`<div class="alertRow"><span>${new Date(c.date).toLocaleString('es-CO')} · ${esc(c.user)} · ${c.status==='pendiente'?'⏳ Pendiente':'✅ Aprobado'}</span><span><b>${money(c.counted)} · ${c.difference===0?'Cuadrada':money(c.difference)}</b>${c.status==='pendiente'?'<button class="mini" style="margin-left:8px" onclick="approveCashClosure('+c.id+')">✅ Confirmar</button>':''}</span></div>`).join('')||'<div class="empty">No hay cierres registrados.</div>'}</div>`;
   document.getElementById('modal').classList.add('open');
 }
 function openCash(day){
-  if(!isAdmin())return;
+  if(!can('allowCash')){alert('Tu usuario no tiene permiso para operar caja.');return}
   const previousClosures=cashClosures.filter(c=>c.day===day&&c.type!=='apertura').sort((a,b)=>new Date(b.date)-new Date(a.date));
   const lastCloseAt=previousClosures[0]?new Date(previousClosures[0].date).getTime():0;
   const existing=cashClosures.find(c=>c.day===day&&c.type==='apertura'&&(!lastCloseAt||new Date(c.date).getTime()>lastCloseAt));
@@ -1556,6 +1559,18 @@ function openCash(day){
   const opening=Number(raw.replace(/[^0-9.-]/g,'')); if(!Number.isFinite(opening)||opening<0){alert('Valor no válido.');return}
   cashClosures.unshift({id:Date.now(),day,type:'apertura',opening,date:new Date().toISOString(),user:currentUser?.name||'Administrador'});
   auditLog('Apertura de caja','Base inicial '+money(opening)); save(); adminCash();
+}
+function employeeCash(){
+  if(!can('allowCash')){alert('Tu usuario no tiene permiso para operar caja.');return}
+  const today=dayKey(new Date());
+  const closes=cashClosures.filter(c=>c.day===today&&c.type!=='apertura').sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const lastClose=closes[0]||null,lastCloseAt=lastClose?new Date(lastClose.date).getTime():0;
+  const openingRecord=cashClosures.filter(c=>c.day===today&&c.type==='apertura'&&(!lastCloseAt||new Date(c.date).getTime()>lastCloseAt)).sort((a,b)=>new Date(b.date)-new Date(a.date))[0]||null;
+  const opening=Number(openingRecord?.opening||0);
+  const list=salesForDay(today).filter(o=>!lastCloseAt||new Date(o.date||o.created||0).getTime()>lastCloseAt);
+  const pay=paymentTotals(list),salesTotal=list.reduce((a,o)=>a+Number(o.total||0),0),expected=opening+Number(pay['Efectivo']||0);
+  document.getElementById('panel').innerHTML='<div class="panelHead"><div><div class="dashKicker">OPERACIÓN DEL EMPLEADO</div><h2>💵 Mi Caja</h2></div><button class="close" onclick="adminOrders()">✕</button></div>'+navTabs('cash')+'<div class="notice" style="margin:12px 0">Caja operativa del empleado. El administrador revisará y aprobará el cierre posteriormente.</div><div class="cashHero"><span>VENTAS DE HOY</span><b>'+money(salesTotal)+'</b><small>'+list.length+' operación(es) · Base inicial: '+money(opening)+'</small></div><div class="cashGrid">'+Object.entries(pay).map(([k,v])=>'<div class="cashCard"><small>'+esc(k)+'</small><b>'+money(v)+'</b></div>').join('')+'</div><div class="adminItem"><div class="adminTop"><b>💰 Efectivo esperado</b><b>'+money(expected)+'</b></div><div class="muted">Base inicial + ventas recibidas en efectivo.</div><div class="adminActions"><button class="mini" onclick="openCash(\''+today+'\')">🔓 Abrir caja</button><button class="primary" onclick="closeCash(\''+today+'\','+expected+')">🔐 Cerrar caja</button></div></div>'+(openingRecord?'<div class="notice" style="margin-top:12px">Caja abierta: <b>'+new Date(openingRecord.date).toLocaleString('es-CO')+'</b> · Base: <b>'+money(opening)+'</b></div>':'')+(lastClose?'<div class="notice" style="margin-top:12px">Último cierre: <b>'+new Date(lastClose.date).toLocaleString('es-CO')+'</b> · '+(lastClose.status==='pendiente'?'⏳ Pendiente de revisión':'✅ Aprobado')+' · Contado: <b>'+money(lastClose.counted)+'</b></div>':'');
+  document.getElementById('modal').classList.add('open');
 }
 function changeOpeningCash(day){
   if(!isAdmin())return;
@@ -1569,12 +1584,22 @@ function changeOpeningCash(day){
   save();adminCash();
 }
 function closeCash(day,expected){
-  if(!isAdmin())return;
+  if(!can('allowCash')){alert('Tu usuario no tiene permiso para operar caja.');return}
   const raw=prompt('Efectivo contado físicamente en caja:',String(expected));if(raw===null)return;
   const counted=Number(raw.replace(/[^0-9.-]/g,''));if(!Number.isFinite(counted)||counted<0){alert('Valor no válido.');return}
   const reason=prompt('Observación del cierre (opcional):','')||'';
-  const rec={id:Date.now(),day,date:new Date().toISOString(),expected,counted,difference:counted-expected,reason,user:currentUser?.name||'Administrador'};
+  const rec={id:Date.now(),day,date:new Date().toISOString(),expected,counted,difference:counted-expected,reason,user:currentUser?.name||'Administrador',status:isAdmin()?'aprobado':'pendiente',approvedBy:isAdmin()?(currentUser?.name||'Administrador'):null,approvedAt:isAdmin()?new Date().toISOString():null};
   cashClosures.unshift(rec);cashClosures=cashClosures.slice(0,365);auditLog('Cierre de caja',`Efectivo esperado ${money(expected)} · Contado ${money(counted)} · Diferencia ${money(counted-expected)}`);save();adminCash();
+}
+function approveCashClosure(id){
+  if(!isAdmin()){alert('Solo el administrador o dueño puede confirmar cierres.');return}
+  const rec=cashClosures.find(c=>String(c.id)===String(id)&&c.type!=='apertura');
+  if(!rec){alert('No se encontró el cierre.');return}
+  if(rec.status!=='pendiente'){alert('Este cierre ya fue confirmado.');return}
+  if(!confirm('¿Confirmas que revisaste este cierre y que los valores están correctos?'))return;
+  rec.status='aprobado';rec.approvedBy=currentUser?.name||'Administrador';rec.approvedAt=new Date().toISOString();
+  auditLog('Cierre de caja confirmado','Caja '+rec.day+' · Cierre de '+rec.user+' · Diferencia '+money(rec.difference));
+  save();adminCash();
 }
 function adminStats(){
   if(!isAdmin()){alert('Solo el administrador o dueño puede consultar estadísticas.');return}
@@ -1820,15 +1845,22 @@ function adminKitchen(){
 async function confirmOrderPayment(no){
   if(!can('allowOrders')){alert('Tu usuario no tiene permiso para confirmar pagos.');return}
   const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]'); const o=orders.find(x=>String(x.no)===String(no));
-  if(!o||!o.centralId){alert('Este pedido no tiene una referencia central válida.');return}
+  if(!o){alert('Pedido no encontrado.');return}
   if(o.paymentStatus==='pagado'){alert('Este pedido ya aparece como pagado.');return}
   const method=prompt('Confirma el medio de pago recibido:\n\n1. Efectivo\n2. Nequi\n3. Bancolombia\n4. Tarjeta\n5. Otro',o.pay||'Efectivo');
   if(method===null||!method.trim())return; const note=prompt('Nota de pago (opcional):','Pago recibido y pedido entregado')||'';
   if(!confirm('¿Confirmas que el pago fue recibido por '+method.trim()+' y que el pedido '+o.no+' será cerrado como VENTA?'))return;
-  const {data,error}=await SP_DB.rpc('sp_confirm_order_payment',{p_order_id:o.centralId,p_payment_method:method.trim(),p_notes:note.trim()});
-  if(error){alert('No se pudo registrar la venta: '+error.message);return}
-  const row=data?.[0]; o.pay=row?.payment_method||method.trim(); o.paymentStatus=row?.payment_status||'pagado'; o.status=row?.status||'entregado'; o.updated=new Date().toISOString();
-  localStorage.setItem(ORDERS,JSON.stringify(orders)); alert('✅ VENTA REGISTRADA\n\nPedido: '+o.no+'\nTotal: '+money(Number(row?.total||o.total||0))+'\nPago: '+o.pay+'\nEstado: ENTREGADO'); adminOrders();
+  let row=null;
+  if(currentUser?.central){
+    if(!o.centralId){alert('Este pedido no tiene una referencia central válida.');return}
+    const result=await SP_DB.rpc('sp_confirm_order_payment',{p_order_id:o.centralId,p_payment_method:method.trim(),p_notes:note.trim()});
+    if(result.error){alert('No se pudo registrar la venta: '+result.error.message);return}
+    row=result.data?.[0]||null;
+  }
+  o.pay=row?.payment_method||method.trim(); o.paymentStatus=row?.payment_status||'pagado'; o.status=row?.status||'entregado'; o.updated=new Date().toISOString();
+  const sale=sales.find(s=>String(s.no)===String(o.no)); if(sale){sale.pay=o.pay;sale.paymentStatus='pagado';}
+  save(); auditLog('Pago recibido','Pedido '+o.no+' · '+o.pay+' · '+money(Number(o.total||row?.total||0)),o.no);
+  alert('✅ VENTA REGISTRADA\n\nPedido: '+o.no+'\nTotal: '+money(Number(row?.total||o.total||0))+'\nPago: '+o.pay+'\nEstado: ENTREGADO'); adminOrders();
 }
 async function ensureCentralAdminSession(){
   if(!SP_DB_ON)return false;
