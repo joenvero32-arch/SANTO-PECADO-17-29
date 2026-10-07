@@ -268,7 +268,7 @@ window.loadPublicCatalog=async function(){
       })):toppings;
 
     try{
-      localStorage.setItem(KEY,JSON.stringify(products));
+      spSaveProductsLocal();
       localStorage.setItem(CATS,JSON.stringify(categories));
       localStorage.setItem(TOP,JSON.stringify(toppings));
     }catch(e){
@@ -461,6 +461,26 @@ const seed=[
 /* Corrige el último producto del catálogo */
 seed[seed.length-1].price=22000;
 
+function spSaveProductsLocal(){
+  const compact=(Array.isArray(products)?products:[]).map(p=>({
+    ...p,
+    img:(typeof p?.img==='string' && p.img.startsWith('data:'))?'':String(p?.img||'')
+  }));
+  try{
+    localStorage.setItem(KEY,JSON.stringify(compact));
+    return true;
+  }catch(e){
+    try{
+      localStorage.removeItem(KEY);
+      localStorage.setItem(KEY,JSON.stringify(compact));
+      return true;
+    }catch(e2){
+      console.warn('Catálogo local sin espacio; se conserva en memoria y Supabase:',e2?.message||e2);
+      return false;
+    }
+  }
+}
+
 let products=spSafeJSON(KEY,null);
 // Nunca permitir que un catálogo local vacío deje la vitrina pública en blanco.
 if(!Array.isArray(products)||!products.length) products=seed.map((p,i)=>({...p,id:p.id||('seed-'+i)}));
@@ -501,7 +521,7 @@ function save(){
   localStorage.setItem(TOP,JSON.stringify(toppings));
   localStorage.setItem(SALES,JSON.stringify(sales));
   localStorage.setItem(INV,JSON.stringify(movements));
-  localStorage.setItem(KEY,JSON.stringify(products));
+  spSaveProductsLocal();
   localStorage.setItem(SETTINGS,JSON.stringify(settings));
   localStorage.setItem(CATS,JSON.stringify(categories));
   localStorage.setItem(CUSTOMERS,JSON.stringify(customers));
@@ -1295,7 +1315,7 @@ async function saveProduct(id){
     p.sort_order=maxOrder+1;
     products.push(p);
   }
-  localStorage.setItem(KEY,JSON.stringify(products));auditLog(key?'Producto modificado':'Producto creado',p.name+' · '+p.cat+' · '+money(p.price));render();adminProducts();
+  spSaveProductsLocal();auditLog(key?'Producto modificado':'Producto creado',p.name+' · '+p.cat+' · '+money(p.price));render();adminProducts();
   try{
     // Primero sincronizamos categorías + productos para evitar una condición de carrera:
     // el producto nuevo no debe enviarse antes de que exista su categoría en Supabase.
@@ -1316,7 +1336,7 @@ async function changePhoto(id){
     const reader=new FileReader();reader.onload=()=>{const im=new Image();im.onload=async()=>{try{
       const target=products.find(x=>String(x.id)===id);if(!target){alert('No se encontró el producto.');return}
       const max=1000,scale=Math.min(1,max/Math.max(1,im.width));const c=document.createElement('canvas');c.width=Math.max(1,Math.round(im.width*scale));c.height=Math.max(1,Math.round(im.height*scale));c.getContext('2d').drawImage(im,0,0,c.width,c.height);
-      target.img=c.toDataURL('image/jpeg',.82);localStorage.setItem(KEY,JSON.stringify(products));auditLog('Foto de producto modificada',target.name);render();adminProducts();
+      target.img=c.toDataURL('image/jpeg',.82);spSaveProductsLocal();auditLog('Foto de producto modificada',target.name);render();adminProducts();
       try{await syncOneProductCentral(target)}catch(e){console.warn('Foto local guardada; sincronización central pendiente:',e);alert('La foto quedó guardada en este dispositivo, pero no pudo sincronizarse con Supabase: '+(e.message||e));}
     }catch(e){alert('No se pudo procesar la foto: '+(e.message||e))}finally{input.remove()}};im.onerror=()=>{alert('No se pudo leer la imagen.');input.remove()};im.src=reader.result};reader.onerror=()=>{alert('No se pudo leer el archivo.');input.remove()};reader.readAsDataURL(f)};
   input.click();
@@ -1328,7 +1348,7 @@ async function toggleProduct(id){
   if(!p){alert('No se encontró el producto.');return}
   const previous=p.active!==false;
   p.active=!previous;
-  localStorage.setItem(KEY,JSON.stringify(products));
+  spSaveProductsLocal();
   auditLog(p.active?'Producto activado':'Producto ocultado',p.name);
   render();adminProducts();
   try{
@@ -1337,7 +1357,7 @@ async function toggleProduct(id){
     render();adminProducts();
   }catch(e){
     p.active=previous;
-    localStorage.setItem(KEY,JSON.stringify(products));
+    spSaveProductsLocal();
     render();adminProducts();
     alert('No se pudo cambiar el estado en Supabase: '+(e.message||e));
   }
@@ -1351,7 +1371,7 @@ async function deleteProduct(id){
   const reason=askReason('Indica el motivo para ocultar/eliminar "'+p.name+'":');if(reason===null)return;
   const previous=p.active!==false;
   p.active=false;
-  localStorage.setItem(KEY,JSON.stringify(products));
+  spSaveProductsLocal();
   auditLog('Producto eliminado/ocultado',p.name+' · '+reason);
   render();adminProducts();
   try{
@@ -1360,7 +1380,7 @@ async function deleteProduct(id){
     render();adminProducts();
   }catch(e){
     p.active=previous;
-    localStorage.setItem(KEY,JSON.stringify(products));
+    spSaveProductsLocal();
     render();adminProducts();
     alert('No se pudo eliminar/ocultar el producto en Supabase: '+(e.message||e));
   }
