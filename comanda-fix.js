@@ -34,7 +34,7 @@
           if(!grouped.has(id)){
             const qty=Number(row.product_quantity||1);
             let line=String(row.product_name||'Producto')+(qty>1?' x'+qty:'');
-            if(row.notes) line+='\\n  Nota: '+String(row.notes);
+            if(row.notes) line+='\n  Nota: '+String(row.notes);
             grouped.set(id,{line,toppings:[]});
           }
           if(row.topping_name){
@@ -42,7 +42,7 @@
             grouped.get(id).toppings.push('  '+String(row.topping_name)+' x'+tq);
           }
         }
-        return Array.from(grouped.values()).map(x=>[x.line,...x.toppings].join('\\n')).join('\\n');
+        return Array.from(grouped.values()).map(x=>[x.line,...x.toppings].join('\n')).join('\n');
       }
       if(error) console.warn('sp_get_kitchen_detail:',error);
       return '';
