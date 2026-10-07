@@ -1127,7 +1127,7 @@ async function submitCentralLogin(){
   if(isAdmin()) adminProducts(); else if(currentUser.allowOrders) adminOrders(); else if(currentUser.allowInventory) adminInventory(); else {alert('Este usuario no tiene permisos asignados.');await logoutCentralUser();}
 }
 async function logoutCentralUser(){if(SP_DB_ON) await SP_DB.auth.signOut();logoutUser()}
-function submitLogin(){
+async function submitLogin(){
   const user=(document.getElementById('login_user')?.value||'').trim();
   const pin=(document.getElementById('login_pin')?.value||'').trim();
   if(!user||!pin){alert('Completa usuario y PIN.');return}
