@@ -1089,7 +1089,8 @@ async function trackOrder(noFromButton){
     <div class="notice" style="margin:14px 0">Pedido <b>${esc(o.no)}</b></div>
     ${statusMarkup(o)}
     <div class="totalBox"><span>ESTADO ACTUAL</span><span>${statusLabel(o)}</span></div>
-    <div class="muted">Última actualización: ${new Date(o.updated||o.created).toLocaleString('es-CO')}</div>`;
+    <div class="muted">Última actualización: ${new Date(o.updated||o.created).toLocaleString('es-CO')}</div>
+    ${can('allowOrders')?'<div class="modalBtns" style="margin-top:14px"><button class="primary" type="button" onclick="adminOrders()">↩️ Regresar a Pedidos</button></div>':''}`;
   document.getElementById('modal').classList.add('open');
 }function openAdmin(){
   document.getElementById('panel').innerHTML=`
