@@ -372,7 +372,12 @@ let audit=spSafeJSON(AUDIT,[]);
 if(!Array.isArray(audit)) audit=[];
 
 let users=spSafeJSON(USERS,null);
-if(!Array.isArray(users)||!users.length){ users=[{id:'owner',user:'admin',name:'Administrador / Dueño',pin:'',role:'admin',allowOrders:true,allowInventory:true}]; }
+if(!Array.isArray(users)||!users.length){ users=[{id:'owner',user:'admin',name:'Administrador / Dueño',pin:PIN,role:'admin',allowOrders:true,allowInventory:true}]; }
+else{
+  // Migración segura del acceso del dueño: solo rellena el PIN si el administrador local quedó sin PIN.
+  const owner=users.find(x=>x.role==='admin'&&String(x.user||'').toLowerCase()==='admin');
+  if(owner && !String(owner.pin||'').trim()) owner.pin=PIN;
+}
 // Seguridad: nunca precargar usuario ni PIN en los campos de acceso.
 // El PIN local se valida solo desde el registro guardado por el administrador.
 
