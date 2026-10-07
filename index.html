@@ -399,8 +399,25 @@ if(!Array.isArray(promoNotifications))promoNotifications=[];
 if(!Array.isArray(cashClosures))cashClosures=[];
 localStorage.setItem(USERS,JSON.stringify(users));
 function isAdmin(){return currentUser&&currentUser.role==='admin'}
-function can(permission){return isAdmin() || !!(currentUser&&currentUser[permission])}
-function requirePermission(permission){if(!can(permission)){alert('Tu usuario no tiene permiso para realizar esta acción.');return false}return true} function auditLog(action,details,orderNo=''){audit.unshift({date:new Date().toISOString(),action,details,orderNo:orderNo||'',user:currentUser?currentUser.user:'sistema',name:currentUser?currentUser.name:'Sistema',role:currentUser?currentUser.role:'system'});audit=audit.slice(0,1000);localStorage.setItem(AUDIT,JSON.stringify(audit));} function askReason(label){const r=prompt(label||'Indica el motivo:');if(r===null)return null;const v=r.trim();if(!v){alert('El motivo es obligatorio. No se realizó el cambio.');return null}return v;}
+function syncCurrentUserPermissions(){
+  if(!currentUser || isAdmin()) return;
+  const u=users.find(x=>
+    (x.id && currentUser.id && String(x.id)===String(currentUser.id)) ||
+    (String(x.user||'').toLowerCase()===String(currentUser.user||'').toLowerCase())
+  );
+  if(!u) return;
+  currentUser={...currentUser,...u};
+  sessionStorage.setItem(SESSION,JSON.stringify(currentUser));
+}
+function can(permission){
+  syncCurrentUserPermissions();
+  return isAdmin() || !!(currentUser&&currentUser[permission]);
+}
+function requirePermission(permission){
+  syncCurrentUserPermissions();
+  if(!can(permission)){alert('Tu usuario no tiene permiso para realizar esta acción.');return false}
+  return true
+} function auditLog(action,details,orderNo=''){audit.unshift({date:new Date().toISOString(),action,details,orderNo:orderNo||'',user:currentUser?currentUser.user:'sistema',name:currentUser?currentUser.name:'Sistema',role:currentUser?currentUser.role:'system'});audit=audit.slice(0,1000);localStorage.setItem(AUDIT,JSON.stringify(audit));} function askReason(label){const r=prompt(label||'Indica el motivo:');if(r===null)return null;const v=r.trim();if(!v){alert('El motivo es obligatorio. No se realizó el cambio.');return null}return v;}
 function navTabs(active){
   if(!currentUser)return '';
   if(!isAdmin()) return `<div class="adminTabs"><button class="tab ${active==='orders'?'active':''}" onclick="adminOrders()">📋 Pedidos</button><button class="tab ${active==='kitchen'?'active':''}" onclick="adminKitchen()">🍳 Cocina</button><button class="tab ${active==='inventory'?'active':''}" onclick="adminInventory()">📦 Inventario</button><button class="tab" onclick="logoutUser()">🚪 Cerrar sesión</button></div>`;
