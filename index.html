@@ -1541,7 +1541,7 @@ async function adminCash(){
   const cashExpenses=sessionExpenses.filter(x=>String(x.payment_method||'').trim().toLowerCase()==='efectivo').reduce((a,x)=>a+Number(x.amount||0),0);
   const expected=opening+Number(pay['Efectivo']||0)-cashExpenses;
   document.getElementById('panel').innerHTML=`<div class="panelHead"><div><div class="dashKicker">CONTROL FINANCIERO</div><h2>💵 Caja del día</h2></div><button class="close" onclick="adminDashboard()">✕</button></div>${navTabs('cash')}
-  <div class="cashHero"><span>VENTAS DE HOY</span><b>${money(salesTotal)}</b><small>${list.length} operación(es) · Base inicial: ${money(opening)}</small></div><div class="cashGrid"><div class="cashCard"><small>💸 Gastos de hoy</small><b>${money(expensesTotal)}</b></div><div class="cashCard"><small>📊 Neto del día</small><b>${money(salesTotal-expensesTotal)}</b></div></div><div class="dashSection"><div class="dashSectionHead"><h3>📋 Gastos de hoy</h3><button class="mini" onclick="adminExpenses()">Ver gastos</button></div>${sessionExpenses.map(x=>'<div class="alertRow"><span>'+esc(x.expense_type)+' · '+esc(x.category)+' · '+esc(x.description)+'</span><b>-'+money(x.amount)+'</b></div>').join('')||'<div class="empty">No hay gastos registrados en esta caja.</div>'}</div>
+  <div class="cashHero"><span>VENTAS DE HOY</span><b>${money(salesTotal)}</b><small>${list.length} operación(es) · Base inicial: ${money(opening)}</small><button class="mini" style="margin-top:10px" onclick="adminTodaySales()">🧾 Ventas del día</button></div><div class="cashGrid"><div class="cashCard"><small>💸 Gastos de hoy</small><b>${money(expensesTotal)}</b></div><div class="cashCard"><small>📊 Neto del día</small><b>${money(salesTotal-expensesTotal)}</b></div></div><div class="dashSection"><div class="dashSectionHead"><h3>📋 Gastos de hoy</h3><button class="mini" onclick="adminExpenses()">Ver gastos</button></div>${sessionExpenses.map(x=>'<div class="alertRow"><span>'+esc(x.expense_type)+' · '+esc(x.category)+' · '+esc(x.description)+'</span><b>-'+money(x.amount)+'</b></div>').join('')||'<div class="empty">No hay gastos registrados en esta caja.</div>'}</div>
   <div class="cashGrid">${Object.entries(pay).map(([k,v])=>`<div class="cashCard"><small>${esc(k)}</small><b>${money(v)}</b></div>`).join('')||'<div class="empty">No hay ventas registradas en esta caja.</div>'}</div>
   <div class="adminItem"><div class="adminTop"><b>💰 Efectivo esperado</b><b>${money(expected)}</b></div><div class="muted">Ventas en efectivo de esta caja + base inicial − gastos pagados en efectivo de esta caja.</div><div class="adminActions"><button class="mini" onclick="openCash('${today}')">🔓 Abrir caja</button>${openingRecord&&!list.length&&!sessionExpenses.length?'<button class="mini" onclick="changeOpeningCash(\''+today+'\')">✏️ Cambiar base</button>':''}<button class="primary" onclick="closeCash('${today}',${expected})">🔐 Registrar cierre de caja</button></div></div>
   ${lastClose?`<div class="notice" style="margin-top:12px">Último cierre de hoy: <b>${new Date(lastClose.date).toLocaleString('es-CO')}</b> · Efectivo contado: <b>${money(lastClose.counted)}</b> · Diferencia: <b>${money(lastClose.difference)}</b> · ${esc(lastClose.user)}</div>`:''}
@@ -1725,6 +1725,17 @@ function adminSales(){
       <div class="stat"><small>Total</small><b>${money(totalSales)}</b></div>
     </div>
     ${sales.length?sales.slice(0,100).map(o=>`<div class="adminItem"><b>${esc(o.no)}</b> · <b>${money(o.total)}</b><br><span class="muted">${new Date(o.date).toLocaleString('es-CO')} · ${esc(o.name)} · ${esc(o.pay)}</span></div>`).join(''):'<div class="empty">No hay ventas registradas todavía.</div>'}`;
+  document.getElementById('modal').classList.add('open');
+}
+function adminTodaySales(){
+  if(!isAdmin()){alert('Solo el administrador o dueño puede consultar las ventas del día.');return}
+  const today=dayKey(new Date());
+  const list=salesForDay(today).sort((a,b)=>new Date(b.date||b.created||0)-new Date(a.date||a.created||0));
+  const total=list.reduce((a,o)=>a+Number(o.total||0),0);
+  let html='<div class="panelHead"><div><div class="dashKicker">CONTROL FINANCIERO</div><h2>🧾 Ventas del día</h2></div><button class="close" onclick="adminCash()">✕</button></div>'+navTabs('cash');
+  html+='<div class="cashHero"><span>VENTAS DE HOY · '+new Date().toLocaleDateString('es-CO')+'</span><b>'+money(total)+'</b><small>'+list.length+' venta(s) registrada(s)</small></div>';
+  html+=list.length?list.map(o=>'<div class="adminItem"><div class="adminTop"><b>'+esc(o.no||'Venta')+'</b><b>'+money(o.total)+'</b></div><span class="muted">'+new Date(o.date||o.created).toLocaleString('es-CO')+' · '+esc(o.name||'')+' · '+esc(o.pay||'')+'</span></div>').join(''):'<div class="empty">No hay ventas registradas hoy.</div>';
+  document.getElementById('panel').innerHTML=html;
   document.getElementById('modal').classList.add('open');
 }
 function adminInventory(){
