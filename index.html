@@ -897,7 +897,9 @@ async function setOrderStatus(no,status,stayDetail=false){
   if((o.status||'recibido')===status)return;
   let reason='Cambio de estado operativo';
   if(!isAdmin()){reason=askReason('Explica por qué cambias el estado de este pedido:');if(reason===null)return;}
-  if(SP_DB_ON && o.centralId){
+  // Los usuarios locales no tienen sesión Supabase central por diseño.
+  // Para ellos el estado se actualiza localmente, sin mezclar sesiones.
+  if(SP_DB_ON && o.centralId && currentUser?.central){
     const {data,error}=await SP_DB.rpc('sp_update_order_status',{p_order_id:o.centralId,p_status:status});
     if(error){alert('No se pudo actualizar el estado central: '+error.message);return;}
     if(data?.[0]?.status)o.status=data[0].status;
