@@ -1993,6 +1993,54 @@ function editPromotion(id){
 function togglePromotion(id){if(!isAdmin())return;const p=promotions.find(x=>x.id===id);if(!p)return;p.active=!p.active;save();auditLog(p.active?'Promoción activada':'Promoción desactivada',p.title);renderPromotions();adminPromotions();}
 function deletePromotion(id){if(!isAdmin())return;const p=promotions.find(x=>x.id===id);if(!p)return;if(!confirm('¿Eliminar esta promoción?'))return;const reason=askReason('Indica el motivo para eliminar la promoción:');if(reason===null)return;promotions=promotions.filter(x=>x.id!==id);save();auditLog('Promoción eliminada',p.title+' · '+reason);renderPromotions();adminPromotions();}
 
+function adminSecurity(){
+  if(!isAdmin()){alert('Solo el administrador o dueño puede acceder a Seguridad del administrador.');return}
+  const owner=users.find(x=>x.role==='admin'&&String(x.user||'').trim());
+  if(!owner){alert('No se encontró el usuario administrador local.');return}
+  document.getElementById('panel').innerHTML=`
+    <div class="panelHead"><h2>🔐 Seguridad del administrador</h2><button class="close" onclick="adminSettings()">✕</button></div>
+    <div class="notice" style="margin:12px 0"><b>Módulo independiente.</b> Aquí puedes cambiar únicamente el usuario y el PIN del acceso local del administrador. No modifica la cuenta central de Supabase ni los demás módulos.</div>
+    ${navTabs('settings')}
+    <div class="adminItem" style="margin-top:14px">
+      <div class="adminTop"><b>👤 Usuario actual</b><b>${esc(owner.user)}</b></div>
+      <div class="muted">El cambio aplica al acceso local con usuario + PIN.</div>
+    </div>
+    <div class="formGrid" style="margin-top:14px">
+      <div class="field full"><label>USUARIO NUEVO</label><input id="sec_user" autocomplete="off" value="${esc(owner.user)}" placeholder="Nuevo usuario"></div>
+      <div class="field full"><label>PIN ACTUAL</label><input id="sec_current_pin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN actual"></div>
+      <div class="field"><label>NUEVO PIN</label><input id="sec_new_pin" type="password" inputmode="numeric" autocomplete="new-password" placeholder="Nuevo PIN"></div>
+      <div class="field"><label>CONFIRMAR PIN</label><input id="sec_confirm_pin" type="password" inputmode="numeric" autocomplete="new-password" placeholder="Repite el nuevo PIN"></div>
+    </div>
+    <div class="notice" style="margin-top:12px">🔒 El PIN nunca se mostrará ni se guardará en Auditoría. Solo se registrará que las credenciales fueron modificadas.</div>
+    <div class="modalBtns" style="margin-top:14px"><button class="primary" onclick="saveAdminSecurity()">Guardar cambios de seguridad</button><button class="secondary" onclick="adminSettings()">Cancelar</button></div>`;
+  document.getElementById('modal').classList.add('open');
+}
+function saveAdminSecurity(){
+  if(!isAdmin())return;
+  const owner=users.find(x=>x.role==='admin'&&String(x.user||'').trim());
+  if(!owner){alert('No se encontró el usuario administrador local.');return}
+  const newUser=(document.getElementById('sec_user')?.value||'').trim();
+  const currentPin=(document.getElementById('sec_current_pin')?.value||'').trim();
+  const newPin=(document.getElementById('sec_new_pin')?.value||'').trim();
+  const confirmPin=(document.getElementById('sec_confirm_pin')?.value||'').trim();
+  if(!newUser||!currentPin||!newPin||!confirmPin){alert('Completa todos los campos de seguridad.');return}
+  if(currentPin!==String(owner.pin||'')){alert('El PIN actual es incorrecto. No se realizó ningún cambio.');return}
+  if(!/^\d{4,12}$/.test(newPin)){alert('El nuevo PIN debe tener entre 4 y 12 números.');return}
+  if(newPin!==confirmPin){alert('Los PIN nuevos no coinciden.');return}
+  if(newUser.length<3){alert('El nuevo usuario debe tener al menos 3 caracteres.');return}
+  const duplicate=users.some(x=>x.id!==owner.id&&String(x.user||'').toLowerCase()===newUser.toLowerCase());
+  if(duplicate){alert('Ese usuario ya está utilizado por otro empleado. Elige otro.');return}
+  owner.user=newUser;
+  owner.pin=newPin;
+  localStorage.setItem(USERS,JSON.stringify(users));
+  auditLog('Cambio de credenciales del administrador','Se modificó el usuario y/o PIN del administrador local. El PIN no se registra.');
+  if(currentUser&&!currentUser.central&&currentUser.role==='admin'){
+    currentUser={...owner};
+    sessionStorage.setItem(SESSION,JSON.stringify(currentUser));
+  }
+  alert('Credenciales del administrador actualizadas correctamente.');
+  adminSettings();
+}
 function adminSettings(){
   if(!isAdmin()){alert('Solo el administrador o dueño tiene acceso a esta sección.');return}
   document.getElementById('panel').innerHTML=`
@@ -2001,6 +2049,7 @@ function adminSettings(){
     <div class="field"><label>📱 WHATSAPP PARA RECIBIR PEDIDOS</label><input id="wa" inputmode="numeric" autocomplete="tel" value="${esc(settings.whatsapp||ADMIN_WA)}" placeholder="573116637215"></div>
     <div class="notice">Los pedidos que los clientes envíen desde sus celulares se abrirán en este número de WhatsApp. <b>Solo el administrador puede cambiarlo.</b></div>
     <div class="adminItem" style="margin-top:12px"><div class="adminTop"><b>📲 Avisos de estados</b><b>${JSON.parse(localStorage.getItem(STATUS_NOTIFY)||'[]').filter(x=>!x.sent).length} pendientes</b></div><div class="muted">Preparación local de mensajes para En preparación, Pedido listo, En camino y Entregado. La automatización real se conectará después con WhatsApp Cloud API.</div><div class="modalBtns" style="margin-top:10px"><button class="secondary" onclick="adminStatusNotifications()">Ver avisos</button></div></div>
+    <div class="adminItem" style="margin-top:14px"><div class="adminTop"><b>🔐 Seguridad del administrador</b><b>Solo dueño</b></div><div class="muted">Cambia el usuario y PIN del acceso local sin modificar otros módulos.</div><div class="modalBtns" style="margin-top:10px"><button class="secondary" onclick="adminSecurity()">Administrar credenciales</button></div></div>
     <div class="modalBtns" style="margin-top:12px"><button class="primary" onclick="saveSettings()">Guardar número</button><button class="secondary" onclick="adminProducts()">Volver</button></div>`;
 }
 function saveSettings(){
