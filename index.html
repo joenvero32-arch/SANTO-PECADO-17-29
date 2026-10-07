@@ -903,9 +903,10 @@ function deleteOrder(no){
 function auditCategory(x){
   const a=String(x?.action||'').toLowerCase();
   if(a.includes('inicio de sesión')||a.includes('cierre de sesión')||a.includes('login'))return 'access';
-  if(a.includes('caja')||a.includes('venta')||a.includes('gasto')||a.includes('cierre'))return 'cash';
   if(a.includes('pedido')||a.includes('estado'))return 'orders';
-  if(a.includes('inventario')||a.includes('stock')||a.includes('topping'))return 'inventory';
+  // Las salidas generadas por una venta siguen siendo movimientos de inventario.
+  if(a.includes('inventario')||a.includes('stock')||a.includes('topping')||a==='entrada'||a==='salida'||a==='ajuste'||a.includes('salida por venta'))return 'inventory';
+  if(a.includes('caja')||a.includes('venta')||a.includes('gasto')||a.includes('cierre'))return 'cash';
   return 'changes';
 }
 function auditCategoryLabel(cat){
