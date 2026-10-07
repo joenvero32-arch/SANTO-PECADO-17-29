@@ -1558,7 +1558,8 @@ function openCash(day){
   const raw=prompt('Base inicial de efectivo en caja:', '0'); if(raw===null)return;
   const opening=Number(raw.replace(/[^0-9.-]/g,'')); if(!Number.isFinite(opening)||opening<0){alert('Valor no válido.');return}
   cashClosures.unshift({id:Date.now(),day,type:'apertura',opening,date:new Date().toISOString(),user:currentUser?.name||'Administrador'});
-  auditLog('Apertura de caja','Base inicial '+money(opening)); save(); adminCash();
+  auditLog('Apertura de caja','Base inicial '+money(opening)); save();
+  if(isAdmin()) adminCash(); else employeeCash();
 }
 function employeeCash(){
   if(!can('allowCash')){alert('Tu usuario no tiene permiso para operar caja.');return}
@@ -1589,7 +1590,8 @@ function closeCash(day,expected){
   const counted=Number(raw.replace(/[^0-9.-]/g,''));if(!Number.isFinite(counted)||counted<0){alert('Valor no válido.');return}
   const reason=prompt('Observación del cierre (opcional):','')||'';
   const rec={id:Date.now(),day,date:new Date().toISOString(),expected,counted,difference:counted-expected,reason,user:currentUser?.name||'Administrador',status:isAdmin()?'aprobado':'pendiente',approvedBy:isAdmin()?(currentUser?.name||'Administrador'):null,approvedAt:isAdmin()?new Date().toISOString():null};
-  cashClosures.unshift(rec);cashClosures=cashClosures.slice(0,365);auditLog('Cierre de caja',`Efectivo esperado ${money(expected)} · Contado ${money(counted)} · Diferencia ${money(counted-expected)}`);save();adminCash();
+  cashClosures.unshift(rec);cashClosures=cashClosures.slice(0,365);auditLog('Cierre de caja',`Efectivo esperado ${money(expected)} · Contado ${money(counted)} · Diferencia ${money(counted-expected)}`);save();
+  if(isAdmin()) adminCash(); else employeeCash();
 }
 function approveCashClosure(id){
   if(!isAdmin()){alert('Solo el administrador o dueño puede confirmar cierres.');return}
