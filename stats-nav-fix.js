@@ -152,3 +152,26 @@ function go(){
 new MutationObserver(()=>setTimeout(go,250)).observe(document.documentElement,{childList:true,subtree:true});
 setTimeout(go,1000);
 })();
+
+/* Auditoría central: replica los eventos locales cuando existe una sesión Auth válida.
+   No cambia permisos RLS ni bloquea las operaciones si la red falla. */
+(function(){
+  let wrapped=false;
+  function install(){
+    if(wrapped||typeof window.auditLog!=='function')return;
+    const original=window.auditLog;
+    window.auditLog=function(action,details,orderNo=''){
+      const result=original.apply(this,arguments);
+      try{
+        const session=JSON.parse(sessionStorage.getItem('sp_premium_session_v1')||'null');
+        if(session?.role==='admin'){
+          logAction(String(action||'Acción'), 'operacion', orderNo||null);
+        }
+      }catch(e){console.warn('Auditoría central pendiente:',e)}
+      return result;
+    };
+    wrapped=true;
+  }
+  install();
+  setInterval(install,2000);
+})();
