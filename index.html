@@ -427,8 +427,12 @@ function navTabs(active){
 async function logoutUser(){
   currentUser=null;
   sessionStorage.removeItem(SESSION);
+  if(SP_ADMIN_ORDERS_CHANNEL){
+    try{SP_DB.removeChannel(SP_ADMIN_ORDERS_CHANNEL)}catch(_){}
+    SP_ADMIN_ORDERS_CHANNEL=null;
+  }
   if(SP_DB_ON){
-    try{await SP_DB.auth.signOut()}catch(e){console.warn('No se pudo cerrar la sesión central:',e)}
+    try{await SP_DB.auth.signOut({scope:'local'})}catch(e){console.warn('No se pudo cerrar la sesión central:',e)}
   }
   closeModal();
 }
@@ -1157,11 +1161,32 @@ async function submitLogin(){
   if(!user||!pin){alert('Completa usuario y PIN.');return}
   const u=users.find(x=>x.user.toLowerCase()===user.toLowerCase() && x.pin===pin);
   if(!u){alert('Usuario o PIN incorrectos.');return}
+
+  // El dueño puede seguir entrando con su PIN local, pero los módulos
+  // centrales (Pedidos entre dispositivos, Caja central, etc.) necesitan
+  // una sesión autenticada de Supabase. Si ya existe, se reutiliza.
+  // Si no existe, solo se solicita el acceso central una vez.
+  if(u.role==='admin' && SP_DB_ON){
+    const centralReady=await ensureCentralAdminSession();
+    if(!centralReady){
+      currentUser={...u,allowCash:u.allowCash!==false,central:false};
+      sessionStorage.setItem(SESSION,JSON.stringify(currentUser));
+      openAdmin();
+      alert('Para sincronizar los pedidos de todos los celulares, inicia sesión central de Supabase una vez. Después podrás seguir entrando con tu PIN.');
+      return;
+    }
+    if(isAdmin()) adminProducts();
+    else if(currentUser.allowOrders) adminOrders();
+    else if(currentUser.allowInventory) adminInventory();
+    else if(currentUser.allowCash!==false) employeeCash();
+    return;
+  }
+
   if(u.role!=='admin' && SP_DB_ON){
-    try{await SP_DB.auth.signOut()}catch(e){console.warn('No se pudo limpiar la sesión central anterior:',e)}
+    try{await SP_DB.auth.signOut({scope:'local'})}catch(e){console.warn('No se pudo limpiar la sesión central anterior:',e)}
   }
   currentUser={...u,allowCash:u.allowCash!==false,central:false}; sessionStorage.setItem(SESSION,JSON.stringify(currentUser));
-  if(isAdmin()) adminProducts(); else if(u.allowOrders) adminOrders(); else if(u.allowInventory) adminInventory(); else if(u.allowCash!==false) employeeCash(); else {alert('Este usuario no tiene permisos asignados.');logoutUser();}
+  if(u.allowOrders) adminOrders(); else if(u.allowInventory) adminInventory(); else if(u.allowCash!==false) employeeCash(); else {alert('Este usuario no tiene permisos asignados.');logoutUser();}
 }
 function adminUsers(){
   if(!isAdmin()){alert('Solo el administrador o dueño puede administrar usuarios.');return}
@@ -1922,6 +1947,24 @@ async function ensureCentralAdminSession(){
     return false;
   }
 }
+let SP_ADMIN_ORDERS_CHANNEL=null;
+function ensureAdminOrdersRealtime(){
+  if(!SP_DB_ON||!currentUser?.central||SP_ADMIN_ORDERS_CHANNEL)return;
+  try{
+    SP_ADMIN_ORDERS_CHANNEL=SP_DB.channel('sp-admin-orders')
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'orders'},()=>{if(currentUser?.central)adminOrders()})
+      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'orders'},()=>{if(currentUser?.central)adminOrders()})
+      .subscribe(status=>{
+        if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){
+          try{SP_DB.removeChannel(SP_ADMIN_ORDERS_CHANNEL)}catch(_){}
+          SP_ADMIN_ORDERS_CHANNEL=null;
+        }
+      });
+  }catch(e){
+    console.warn('No se pudo activar la actualización en tiempo real de Pedidos:',e);
+    SP_ADMIN_ORDERS_CHANNEL=null;
+  }
+}
 async function adminOrders(){
   if(!can('allowOrders')){alert('Tu usuario no tiene permiso para gestionar pedidos.');return}
   let a=JSON.parse(localStorage.getItem(ORDERS)||'[]');
@@ -1961,6 +2004,7 @@ async function adminOrders(){
       }));
       // La fuente central es la autoridad. Conservamos únicamente los campos
       // locales que sirven para la interfaz y para operaciones ya realizadas.
+      ensureAdminOrdersRealtime();
       const oldByNo=new Map(a.map(x=>[String(x.no),x]));
       a=central.map(c=>{
         const old=oldByNo.get(String(c.no))||{};
