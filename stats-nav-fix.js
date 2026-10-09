@@ -9,6 +9,7 @@
   const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   async function getDb(){if(db)return db;if(!window.supabase)return null;db=window.supabase.createClient(URL,KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});return db}
   async function logAction(action,type,id){try{const d=await getDb();if(!d)return;const {data:{user}}=await d.auth.getUser();if(!user)return;await d.from('audit_logs').insert({user_id:user.id,action,entity_type:type||null,entity_id:id||null,details:{source:'administracion'}})}catch(e){console.warn('Auditoría:',e)}}
+  window.spAuditCentralLog=logAction;
   function wrap(){
     if(!window.SPAdmin||window.SPAdmin.__auditWrapped)return;
     [['saveProduct','Producto guardado','product'],['toggleProduct','Estado de producto cambiado','product'],['stockProduct','Stock de producto ajustado','product'],['saveTopping','Topping guardado','topping'],['toggleTopping','Estado de topping cambiado','topping'],['stockTopping','Stock de topping ajustado','topping'],['savePromotion','Promoción guardada','promotion'],['togglePromotion','Estado de promoción cambiado','promotion'],['deletePromotion','Promoción eliminada','promotion'],['sendPromotion','Promoción enviada a clientes','promotion']].forEach(([name,action,type])=>{const fn=window.SPAdmin[name];if(typeof fn!=='function')return;window.SPAdmin[name]=async function(...args){const result=await fn.apply(this,args);await logAction(action,type,args[0]||null);return result}});
@@ -165,7 +166,7 @@ setTimeout(go,1000);
       try{
         const session=JSON.parse(sessionStorage.getItem('sp_premium_session_v1')||'null');
         if(session?.role==='admin'){
-          logAction(String(action||'Acción'), 'operacion', orderNo||null);
+          window.spAuditCentralLog?.(String(action||'Acción'), 'operacion', orderNo||null);
         }
       }catch(e){console.warn('Auditoría central pendiente:',e)}
       return result;
