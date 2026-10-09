@@ -2181,13 +2181,33 @@ async function confirmOrderPayment(no){
     const note=prompt('Nota de pago (opcional):','Pago recibido y pedido entregado')||'';
     if(!confirm('¿Confirmas que el pago fue recibido por '+method.trim()+' y que el pedido '+o.no+' será cerrado como VENTA?'))return;
     let row=null;
-    if(currentUser?.central){
-      if(!o.centralId){alert('Este pedido no tiene una referencia central válida.');return}
-      const result=await SP_DB.rpc('sp_confirm_order_payment',{p_order_id:o.centralId,p_payment_method:method.trim(),p_notes:note.trim()});
-      if(result.error){alert('No se pudo registrar la venta: '+result.error.message);return}
-      row=result.data?.[0]||null;
-      if(String(row?.payment_status||'').toLowerCase()!=='pagado'){
-        alert('No se confirmó el pago en el sistema central. No se marcará como pagado localmente.');
+    if(SP_DB_ON){
+      if(!o.centralId){alert('Este pedido no tiene una referencia central válida. No se registrará el pago localmente.');return}
+      let result;
+      if(currentUser?.central){
+        result=await SP_DB.rpc('sp_confirm_order_payment',{p_order_id:o.centralId,p_payment_method:method.trim(),p_notes:note.trim()});
+      }else{
+        const localAdmin = ((typeof users!=='undefined' && Array.isArray(users))
+          ? users.find(x=>String(x.user||'').toLowerCase()===String(currentUser?.user||'').toLowerCase())
+          : null) || currentUser;
+        const pinSource=localAdmin?.pin||currentUser?.pin;
+        const pinHash=currentUser?.pinHash||(pinSource?await spSha256(pinSource):'');
+        if(!currentUser?.user||!pinHash){
+          alert('No se puede validar tu usuario y PIN con el sistema central. Vuelve a entrar con tu usuario y PIN e inténtalo de nuevo.');
+          return;
+        }
+        result=await SP_DB.rpc('sp_confirm_order_payment_pin',{
+          p_order_id:o.centralId,
+          p_username:currentUser.user,
+          p_pin_sha256:pinHash,
+          p_payment_method:method.trim(),
+          p_notes:note.trim()
+        });
+      }
+      if(result?.error){alert('No se pudo registrar la venta en el sistema central: '+result.error.message);return}
+      row=Array.isArray(result?.data)?result.data[0]:result?.data;
+      if(String(row?.payment_status||'').trim().toLowerCase()!=='pagado'){
+        alert('El sistema central no confirmó el pago. No se marcará como pagado localmente.');
         return;
       }
     }
