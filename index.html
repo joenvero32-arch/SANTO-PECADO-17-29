@@ -425,13 +425,18 @@ function navTabs(active){
   return `<div class="adminTabs"><button class="tab ${active==='dashboard'?'active':''}" onclick="adminDashboard()">📊 Inicio</button><button class="tab ${active==='products'?'active':''}" onclick="adminProducts()">Productos</button><button class="tab ${active==='categories'?'active':''}" onclick="adminCategories()">Categorías</button><button class="tab ${active==='orders'?'active':''}" onclick="adminOrders()">Pedidos</button><button class="tab ${active==='kitchen'?'active':''}" onclick="adminKitchen()">🍳 Cocina</button><button class="tab ${active==='sales'?'active':''}" onclick="adminSales()">Ventas</button><button class="tab ${active==='cash'?'active':''}" onclick="adminCash()">💵 Caja</button><button class="tab ${active==='expenses'?'active':''}" onclick="adminExpenses()">💸 Gastos</button><button class="tab ${active==='reports'?'active':''}" onclick="adminReports()">📈 Reportes</button><button class="tab ${active==='delivery'?'active':''}" onclick="adminDomicilios()">🛵 Domicilios</button><button class="tab ${active==='inventory'?'active':''}" onclick="adminInventory()">Inventario</button><button class="tab ${active==='toppings'?'active':''}" onclick="adminToppings()">Toppings</button><button class="tab ${active==='users'?'active':''}" onclick="adminUsers()">Usuarios</button><button class="tab ${active==='customers'?'active':''}" onclick="adminCustomers()">👥 Clientes</button><button class="tab ${active==='promotions'?'active':''}" onclick="adminPromotions()">🎁 Promociones</button><button class="tab ${active==='audit'?'active':''}" onclick="adminAudit()">🛡️ Auditoría</button><button class="tab ${active==='settings'?'active':''}" onclick="adminSettings()">Configuración</button><button class="tab ${active==='reports'?'active':''}" data-sp-native-stats="1" onclick="adminStats()">📊 Estadísticas</button></div>`;
 }
 async function logoutUser(){
+  // El PIN local y la sesión central son capas distintas. Para el dueño,
+  // conservamos la sesión central de Supabase para que pueda volver a entrar
+  // con su PIN sin tener que introducir correo/contraseña cada vez.
+  const keepCentralAdmin=!!(currentUser?.role==='admin'&&currentUser?.central);
+  const wasEmployee=!keepCentralAdmin;
   currentUser=null;
   sessionStorage.removeItem(SESSION);
   if(SP_ADMIN_ORDERS_CHANNEL){
     try{SP_DB.removeChannel(SP_ADMIN_ORDERS_CHANNEL)}catch(_){}
     SP_ADMIN_ORDERS_CHANNEL=null;
   }
-  if(SP_DB_ON){
+  if(SP_DB_ON&&wasEmployee){
     try{await SP_DB.auth.signOut({scope:'local'})}catch(e){console.warn('No se pudo cerrar la sesión central:',e)}
   }
   closeModal();
