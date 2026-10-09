@@ -1361,7 +1361,7 @@ async function saveEmployee(id){
   if(pin){u.pin=pin;u.pinHash=await spSha256(pin);}
   localStorage.setItem(USERS,JSON.stringify(users));auditLog('Empleado modificado',u.name+' · permisos actualizados');alert('Permisos guardados.');adminUsers();
 }
-async async function deleteEmployee(id){
+async function deleteEmployee(id){
   if(!isAdmin())return; if(!confirm('¿Desactivar este empleado? Podrás crear otro usuario después sin tocar los demás módulos.'))return;
   const removed=users.find(x=>String(x.id)===String(id)); if(!removed||removed.role==='admin')return;
   if(SP_DB_ON){
