@@ -967,7 +967,14 @@ async function setOrderStatus(no,status,stayDetail=false){
     }catch(e){
       alert('No se pudo actualizar el estado central: '+(e?.message||String(e))+' . No se guardó el cambio.');return;
     }
-    if(result?.error){alert('No se pudo actualizar el estado central: '+result.error.message+'. No se guardó el cambio.');return;}
+    if(result?.error){
+      const __msg=String(result.error.message||result.error);
+      if(/no autorizado/i.test(__msg)){
+        alert('Supabase rechazó la sesión guardada. Por seguridad no se cambió el pedido. Cierra sesión y vuelve a entrar con el PIN actual del dueño para renovar la sesión.');
+        await logoutCentralUser();return;
+      }
+      alert('No se pudo actualizar el estado central: '+__msg+'. No se guardó el cambio.');return;
+    }
     const centralStatus=result?.data?.[0]?.status;
     if(!centralStatus){alert('Supabase no confirmó el cambio de estado. No se guardó el cambio local.');return;}
     o.status=centralStatus;
