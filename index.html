@@ -2157,8 +2157,8 @@ function ensureAdminOrdersRealtime(){
   if(!SP_DB_ON||!(currentUser?.central||currentUser?.allowOrders)||SP_ADMIN_ORDERS_CHANNEL)return;
   try{
     SP_ADMIN_ORDERS_CHANNEL=SP_DB.channel('sp-admin-orders')
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'orders'},()=>{if(currentUser?.central||currentUser?.allowOrders)adminOrders()})
-      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'orders'},()=>{if(currentUser?.central||currentUser?.allowOrders)adminOrders()})
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'orders'},()=>{if(!isEmployeeOrderMode()&&(currentUser?.central||currentUser?.allowOrders))adminOrders()})
+      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'orders'},()=>{if(!isEmployeeOrderMode()&&(currentUser?.central||currentUser?.allowOrders))adminOrders()})
       .subscribe(status=>{
         if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){
           try{SP_DB.removeChannel(SP_ADMIN_ORDERS_CHANNEL)}catch(_){}
@@ -2288,7 +2288,7 @@ async function adminOrders(){
   // vuelve a consultar los pedidos centrales cada 8 segundos mientras está abierta.
   if(SP_DB_ON && (currentUser?.central || currentUser?.role==='admin' || currentUser?.allowOrders)){
     SP_ADMIN_ORDERS_REFRESH_TIMER=setTimeout(()=>{
-      if(currentUser?.central || currentUser?.role==='admin' || currentUser?.allowOrders) adminOrders();
+      if(!isEmployeeOrderMode() && (currentUser?.central || currentUser?.role==='admin' || currentUser?.allowOrders)) adminOrders();
     },8000);
   }
 }
