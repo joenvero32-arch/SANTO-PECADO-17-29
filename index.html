@@ -1304,9 +1304,7 @@ async function saveNewEmployee(){
   adminUsers();
 }
 function editEmployee(id){
-  if(!isAdmin())return;
-  const u=users.find(x=>String(x.id)===String(id));
-  if(!u){alert('No se encontró el usuario para editar.');return;}
+  if(!isAdmin())return; const u=users.find(x=>x.id===id); if(!u)return;
   document.getElementById('panel').innerHTML=`
     <div class="panelHead"><h2>✏️ Editar empleado</h2><button class="close" onclick="adminUsers()">✕</button></div>
     <div class="notice" style="margin:12px 0">Configura todos los datos y permisos en una sola pantalla.</div>
@@ -1333,15 +1331,25 @@ async function saveEmployee(id){
   if(SP_DB_ON){
     try{
       const pinHash=currentUser.pinHash||await spSha256(currentUser.pin||'');
-      const {data,error}=await SP_DB.rpc('sp_local_user_upsert',{
-        p_admin_username:currentUser.user||'admin',p_admin_pin_sha256:pinHash,p_id:u.id,
-        p_username:u.user,p_full_name:name,p_pin_sha256:pin?await spSha256(pin):'',
-        p_role:'employee',p_can_manage_orders:allowOrders,p_can_manage_inventory:allowInventory,
-        p_can_manage_cash:allowCash,p_active:true
-      });
+      const newPinHash=pin?await spSha256(pin):'';
+      let data,error;
+      if(String(u.id||'').match(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)){
+        ({data,error}=await SP_DB.rpc('sp_local_user_upsert',{
+          p_admin_username:currentUser.user||'admin',p_admin_pin_sha256:pinHash,p_id:u.id,
+          p_username:u.user,p_full_name:name,p_pin_sha256:newPinHash,
+          p_role:'employee',p_can_manage_orders:allowOrders,p_can_manage_inventory:allowInventory,
+          p_can_manage_cash:allowCash,p_active:true
+        }));
+      }else{
+        ({data,error}=await SP_DB.rpc('sp_local_user_update',{
+          p_admin_username:currentUser.user||'admin',p_admin_pin_sha256:pinHash,p_username:u.user,p_full_name:name,
+          p_pin_sha256:newPinHash,p_role:'employee',p_can_manage_orders:allowOrders,
+          p_can_manage_inventory:allowInventory,p_can_manage_cash:allowCash,p_active:true
+        }));
+      }
       if(error)throw error;
       u.name=name;u.allowOrders=allowOrders;u.allowInventory=allowInventory;u.allowCash=allowCash;u.active=true;
-      if(pin){u.pin=pin;u.pinHash=await spSha256(pin);}
+      if(pin){u.pin=pin;u.pinHash=newPinHash;}
       localStorage.setItem(USERS,JSON.stringify(users));
       auditLog('Empleado modificado',u.name+' · permisos actualizados');
       alert('Permisos guardados y sincronizados.');
