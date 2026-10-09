@@ -2259,9 +2259,8 @@ function saveSettings(){
 })();
 </script><script src="stats-nav-fix.js?v=20261007-permissions"></script><script src="comanda-fix.js?v=20261005-detail2"></script><script src="audit-inventory-fix.js?v=20261006-audit1"></script>
 <script>
-/* SP PEDIDOS PIN SYNC v1 — sincroniza pedidos centrales aunque el Admin entre solo con PIN */
+/* SP PEDIDOS PIN SYNC v2 — lee pedidos centrales por RPC seguro validado con usuario+PIN */
 (function(){
-  const ENDPOINT='https://ghucwrrvqivmbogtcgcr.supabase.co/functions/v1/admin-orders-pin';
   let timer=null, loading=false;
   const originalAdminOrders=window.adminOrders;
   async function fetchPinOrders(){
@@ -2270,37 +2269,56 @@ function saveSettings(){
     if(!u || u.role!=='admin' || u.central || !u.user || !u.pin) return false;
     loading=true;
     try{
-      const response=await fetch(ENDPOINT,{
-        method:'POST',
-        headers:{
-          'Content-Type':'application/json',
-          'apikey':(typeof SP_SUPABASE_PUBLISHABLE_KEY!=='undefined'?SP_SUPABASE_PUBLISHABLE_KEY:'')
-        },
-        body:JSON.stringify({username:u.user,pin:u.pin})
+      const {data,error}=await SP_DB.rpc('sp_get_admin_orders_pin',{
+        p_username:u.user,
+        p_pin:u.pin
       });
-      const data=await response.json().catch(()=>({}));
-      if(!response.ok || !data.ok) throw new Error(data.error||'No se pudieron sincronizar los pedidos.');
-      localStorage.setItem('sp_premium_orders_v2',JSON.stringify(data.orders||[]));
+      if(error) throw error;
+      const orders=Array.isArray(data)?data:[];
+      const central=orders.map(o=>({
+        no:o.order_number,
+        centralId:o.id,
+        name:o.customer_name||'',
+        phone:o.customer_phone||'',
+        type:o.order_type==='delivery'?'Domicilio':o.order_type==='pickup'?'Recoger':'Local',
+        pay:o.payment_method||'',
+        paymentStatus:o.payment_status||'pendiente',
+        addr:o.address||'',
+        obs:o.observations||'',
+        total:Number(o.total||0),
+        created:o.created_at,
+        updated:o.updated_at,
+        status:o.status||'recibido',
+        driverId:o.driver_id||null,
+        driverName:o.driver_name||'',
+        driverPhone:o.driver_phone||'',
+        statusHistory:[],
+        detail:o.detail||''
+      })).sort((a,b)=>new Date(b.created)-new Date(a.created));
+      localStorage.setItem(ORDERS,JSON.stringify(central));
       return true;
-    }catch(e){ console.warn('Pedidos Admin + PIN:',e); return false; }
-    finally{ loading=false; }
+    }catch(e){
+      console.warn('Pedidos Admin + PIN RPC:',e?.message||e);
+      return false;
+    }finally{loading=false;}
   }
   function schedule(){
     if(timer) clearTimeout(timer);
     timer=setTimeout(async()=>{
       const u=(typeof currentUser!=='undefined')?currentUser:null;
       if(u?.role==='admin' && !u.central){
-        await fetchPinOrders();
-        await originalAdminOrders();
+        const ok=await fetchPinOrders();
+        if(ok) await originalAdminOrders();
         schedule();
       }
-    },8000);
+    },5000);
   }
   window.adminOrders=async function(){
     const u=(typeof currentUser!=='undefined')?currentUser:null;
     if(u?.role==='admin' && !u.central){
-      await fetchPinOrders();
-      await originalAdminOrders();
+      const ok=await fetchPinOrders();
+      if(ok) await originalAdminOrders();
+      else await originalAdminOrders();
       schedule();
       return;
     }
@@ -2308,5 +2326,5 @@ function saveSettings(){
   };
   window.addEventListener('beforeunload',()=>{if(timer)clearTimeout(timer)});
 })();
-</script></body>
+</script></script></body>
 </html>
