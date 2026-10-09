@@ -2150,7 +2150,19 @@ const SP_PAYMENT_CONFIRMING=new Set();
 async function confirmOrderPayment(no){
   const key=String(no||'').trim();
   if(!key)return;
-  if(SP_PAYMENT_CONFIRMING.has(key)){alert('Estamos procesando el pago de este pedido. Espera un momento.');return}
+  const paymentAuditKey='sp_payment_confirmed_audit_'+key;
+  const paymentLockKey='sp_payment_confirming_lock_'+key;
+  if(localStorage.getItem(paymentAuditKey)==='1'){
+    alert('Este pedido ya tiene registrada la confirmación en este navegador. Se actualizará el estado sin registrar otro pago.');
+    await adminOrders();
+    return;
+  }
+  if(SP_PAYMENT_CONFIRMING.has(key)||localStorage.getItem(paymentLockKey)){
+    alert('Estamos procesando el pago de este pedido. Espera un momento.');
+    return;
+  }
+  // Bloqueo compartido entre pestañas del mismo navegador.
+  localStorage.setItem(paymentLockKey,String(Date.now()));
   SP_PAYMENT_CONFIRMING.add(key);
   const btns=[...document.querySelectorAll('button[data-no]')].filter(b=>String(b.dataset.no)===key&&String(b.getAttribute('onclick')||'').includes('confirmOrderPayment'));
   btns.forEach(b=>{b.disabled=true;b.textContent='⏳ Procesando pago…'});
@@ -2188,6 +2200,7 @@ async function confirmOrderPayment(no){
     localStorage.setItem(ORDERS,JSON.stringify(orders));
     save();
     auditLog('Pago recibido','Pedido '+o.no+' · '+o.pay+' · '+money(Number(row?.total??o.total??0))+(note.trim()?' · '+note.trim():''),o.no);
+    localStorage.setItem(paymentAuditKey,'1');
     alert('✅ VENTA REGISTRADA\n\nPedido: '+o.no+'\nTotal: '+money(Number(row?.total??o.total??0))+'\nPago: '+o.pay+'\nEstado: PAGADO · ENTREGADO');
     await adminOrders();
   }catch(e){
@@ -2195,6 +2208,7 @@ async function confirmOrderPayment(no){
     alert('No se pudo completar la confirmación. Verifica el estado del pedido antes de intentarlo otra vez.');
   }finally{
     SP_PAYMENT_CONFIRMING.delete(key);
+    localStorage.removeItem(paymentLockKey);
     btns.forEach(b=>{b.disabled=false});
   }
 }
@@ -2323,7 +2337,8 @@ async function adminOrders(){
       const statusButtons=list.map(x =>
         `<button class="${current===x[0]?'active':''}" onclick="setOrderStatus('${esc(o.no)}','${x[0]}')">${x[1]} ${x[2]}</button>`
       ).join('');
-      const paymentButton=o.paymentStatus==='pagado'
+      const paymentIsPaid=String(o.paymentStatus||'').trim().toLowerCase()==='pagado';
+      const paymentButton=paymentIsPaid
         ? '<button class="mini" disabled>✅ Venta registrada</button>'
         : `<button class="mini" data-no="${esc(o.no)}" onclick="confirmOrderPayment(this.dataset.no)">💰 Confirmar pago y entregar</button>`;
       return `
