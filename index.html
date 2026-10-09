@@ -1317,19 +1317,30 @@ function editEmployee(id){
     <label class="adminItem" style="display:block;cursor:pointer"><input id="eu_orders" type="checkbox" style="width:20px;height:20px;vertical-align:middle;margin-right:10px" ${u.allowOrders?'checked':''}> 📋 Gestionar pedidos y cambiar estados</label>
     <label class="adminItem" style="display:block;cursor:pointer"><input id="eu_inventory" type="checkbox" style="width:20px;height:20px;vertical-align:middle;margin-right:10px" ${u.allowInventory?'checked':''}> 📦 Ingresar y gestionar inventario</label>
     <label class="adminItem" style="display:block;cursor:pointer"><input id="eu_cash" type="checkbox" style="width:20px;height:20px;vertical-align:middle;margin-right:10px" ${u.allowCash!==false?'checked':''}> 💵 Abrir, operar y cerrar su caja</label>
-    <div class="modalBtns"><button class="primary" onclick="saveEmployee('${u.id}')">Guardar cambios</button><button class="secondary" onclick="adminUsers()">Cancelar</button></div>`;
+    <div class="modalBtns"><button type="button" class="primary" onclick="saveEmployee('${u.id}')">Guardar cambios</button><button class="secondary" onclick="adminUsers()">Cancelar</button></div>`;
 }
 async function saveEmployee(id){
-  if(!isAdmin())return; const u=users.find(x=>String(x.id)===String(id)); if(!u)return;
-  const name=document.getElementById('eu_name').value.trim();
-  const pin=document.getElementById('eu_pin').value.trim();
-  if(!name){alert('Completa el nombre.');return}
-  const allowOrders=document.getElementById('eu_orders').checked;
-  const allowInventory=document.getElementById('eu_inventory').checked;
-  const allowCash=document.getElementById('eu_cash').checked;
-  if(String(u.user).toLowerCase()==='admin'){alert('El administrador se gestiona como dueño y no se puede editar aquí.');return}
-  if(SP_DB_ON){
-    try{
+  try{
+    if(!currentUser || String(currentUser.role||'').toLowerCase()!=='admin'){
+      alert('La sesión de administrador no está activa. Cierra sesión y vuelve a entrar como administrador.');
+      return;
+    }
+    const u=users.find(x=>String(x.id)===String(id));
+    if(!u){
+      alert('No se encontró el usuario seleccionado. Vuelve a abrir Usuarios y permisos.');
+      return;
+    }
+    const name=(document.getElementById('eu_name')?.value||'').trim();
+    const pin=(document.getElementById('eu_pin')?.value||'').trim();
+    if(!name){alert('Completa el nombre.');return}
+    const allowOrders=!!document.getElementById('eu_orders')?.checked;
+    const allowInventory=!!document.getElementById('eu_inventory')?.checked;
+    const allowCash=!!document.getElementById('eu_cash')?.checked;
+    if(String(u.user).toLowerCase()==='admin'){
+      alert('El administrador se gestiona como dueño y no se puede editar aquí.');
+      return;
+    }
+    if(SP_DB_ON){
       const pinHash=currentUser.pinHash||await spSha256(currentUser.pin||'');
       const newPinHash=pin?await spSha256(pin):'';
       let data,error;
@@ -1353,13 +1364,19 @@ async function saveEmployee(id){
       localStorage.setItem(USERS,JSON.stringify(users));
       auditLog('Empleado modificado',u.name+' · permisos actualizados');
       alert('Permisos guardados y sincronizados.');
-      adminUsers();
-    }catch(e){alert('No se pudo sincronizar el usuario: '+(e.message||e));}
-    return;
+      await adminUsers();
+      return;
+    }
+    u.name=name;u.allowOrders=allowOrders;u.allowInventory=allowInventory;u.allowCash=allowCash;u.active=true;
+    if(pin){u.pin=pin;u.pinHash=await spSha256(pin);}
+    localStorage.setItem(USERS,JSON.stringify(users));
+    auditLog('Empleado modificado',u.name+' · permisos actualizados');
+    alert('Permisos guardados.');
+    await adminUsers();
+  }catch(e){
+    alert('No se pudo guardar el usuario: '+(e?.message||e));
+    console.error('saveEmployee error',e);
   }
-  u.name=name;u.allowOrders=allowOrders;u.allowInventory=allowInventory;u.allowCash=allowCash;u.active=true;
-  if(pin){u.pin=pin;u.pinHash=await spSha256(pin);}
-  localStorage.setItem(USERS,JSON.stringify(users));auditLog('Empleado modificado',u.name+' · permisos actualizados');alert('Permisos guardados.');adminUsers();
 }
 async function deleteEmployee(id){
   if(!isAdmin())return; if(!confirm('¿Desactivar este empleado? Podrás crear otro usuario después sin tocar los demás módulos.'))return;
