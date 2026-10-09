@@ -420,9 +420,20 @@ function requirePermission(permission){
   if(!can(permission)){alert('Tu usuario no tiene permiso para realizar esta acción.');return false}
   return true
 } function auditLog(action,details,orderNo=''){audit.unshift({date:new Date().toISOString(),action,details,orderNo:orderNo||'',user:currentUser?currentUser.user:'sistema',name:currentUser?currentUser.name:'Sistema',role:currentUser?currentUser.role:'system'});audit=audit.slice(0,1000);localStorage.setItem(AUDIT,JSON.stringify(audit));} function askReason(label){const r=prompt(label||'Indica el motivo:');if(r===null)return null;const v=r.trim();if(!v){alert('El motivo es obligatorio. No se realizó el cambio.');return null}return v;}
+function startEmployeeOrder(){
+  if(!requirePermission('allowOrders'))return;
+  cart=[];
+  updateCart();
+  sessionStorage.setItem('SP_EMPLOYEE_ORDER_MODE','1');
+  closeModal();
+  window.scrollTo({top:0,behavior:'smooth'});
+  alert('📝 Modo registrar pedido activado. Selecciona los productos del cliente y luego abre el carrito para completar el pedido.');
+}
+function isEmployeeOrderMode(){return sessionStorage.getItem('SP_EMPLOYEE_ORDER_MODE')==='1'}
+function clearEmployeeOrderMode(){sessionStorage.removeItem('SP_EMPLOYEE_ORDER_MODE')}
 function navTabs(active){
   if(!currentUser)return '';
-  if(!isAdmin()) return `<div class="adminTabs"><button class="tab ${active==='orders'?'active':''}" onclick="adminOrders()">📋 Pedidos</button><button class="tab ${active==='kitchen'?'active':''}" onclick="adminKitchen()">🍳 Cocina</button><button class="tab ${active==='inventory'?'active':''}" onclick="adminInventory()">📦 Inventario</button>${can('allowCash')?`<button class="tab ${active==='cash'?'active':''}" onclick="employeeCash()">💵 Mi Caja</button>`:''}<button class="tab" onclick="logoutUser()">🚪 Cerrar sesión</button></div>`;
+  if(!isAdmin()) return `<div class="adminTabs"><button class="tab ${active==='orders'?'active':''}" onclick="adminOrders()">📋 Pedidos</button>${can('allowOrders')?`<button class="tab" onclick="startEmployeeOrder()">＋ Registrar pedido</button>`:''}<button class="tab ${active==='kitchen'?'active':''}" onclick="adminKitchen()">🍳 Cocina</button><button class="tab ${active==='inventory'?'active':''}" onclick="adminInventory()">📦 Inventario</button>${can('allowCash')?`<button class="tab ${active==='cash'?'active':''}" onclick="employeeCash()">💵 Mi Caja</button>`:''}<button class="tab" onclick="logoutUser()">🚪 Cerrar sesión</button></div>`;
   return `<div class="adminTabs"><button class="tab ${active==='dashboard'?'active':''}" onclick="adminDashboard()">📊 Inicio</button><button class="tab ${active==='products'?'active':''}" onclick="adminProducts()">Productos</button><button class="tab ${active==='categories'?'active':''}" onclick="adminCategories()">Categorías</button><button class="tab ${active==='orders'?'active':''}" onclick="adminOrders()">Pedidos</button><button class="tab ${active==='kitchen'?'active':''}" onclick="adminKitchen()">🍳 Cocina</button><button class="tab ${active==='sales'?'active':''}" onclick="adminSales()">Ventas</button><button class="tab ${active==='cash'?'active':''}" onclick="adminCash()">💵 Caja</button><button class="tab ${active==='expenses'?'active':''}" onclick="adminExpenses()">💸 Gastos</button><button class="tab ${active==='reports'?'active':''}" onclick="adminReports()">📈 Reportes</button><button class="tab ${active==='delivery'?'active':''}" onclick="adminDomicilios()">🛵 Domicilios</button><button class="tab ${active==='inventory'?'active':''}" onclick="adminInventory()">Inventario</button><button class="tab ${active==='toppings'?'active':''}" onclick="adminToppings()">Toppings</button><button class="tab ${active==='users'?'active':''}" onclick="adminUsers()">Usuarios</button><button class="tab ${active==='customers'?'active':''}" onclick="adminCustomers()">👥 Clientes</button><button class="tab ${active==='promotions'?'active':''}" onclick="adminPromotions()">🎁 Promociones</button><button class="tab ${active==='audit'?'active':''}" onclick="adminAudit()">🛡️ Auditoría</button><button class="tab ${active==='settings'?'active':''}" onclick="adminSettings()">Configuración</button><button class="tab ${active==='reports'?'active':''}" data-sp-native-stats="1" onclick="adminStats()">📊 Estadísticas</button></div>`;
 }
 async function logoutUser(){
@@ -829,7 +840,7 @@ function selectTable(n){const v=Number(n);if(!TABLES.includes(v))return;const in
 function toggleOrderTypeFields(){const type=document.getElementById('type')?.value||'En el local';const field=document.getElementById('tableField');const addr=document.getElementById('addr');if(field)field.style.display=type==='En el local'?'block':'none';if(addr&&type!=='Domicilio')addr.value='';if(type==='En el local'&&!document.getElementById('tableNumber')?.value)selectTable(1);}
 function checkout(){
   document.getElementById('panel').innerHTML=`
-    <div class="panelHead"><h2>📋 Datos del pedido</h2><button class="close" onclick="openCart()">✕</button></div>
+    <div class="panelHead"><h2>${isEmployeeOrderMode()?'📝 Registrar pedido':'📋 Datos del pedido'}</h2><button class="close" onclick="openCart()">✕</button></div>
     <div class="formGrid">
       <div class="field"><label>NOMBRE DEL CLIENTE</label><input id="cn" placeholder="Ej. Keira"></div>
       <div class="field"><label>TELÉFONO</label><input id="ct" inputmode="tel" placeholder="Ej. 3196985294"></div>
@@ -839,7 +850,7 @@ function checkout(){
       <div class="field full"><label>OBSERVACIONES</label><textarea id="obs" placeholder="Ej. mucha cebolla, sin piña, salsa aparte..."></textarea></div>
     </div>
     <div class="totalBox"><span>TOTAL</span><span>${money(total())}</span></div>
-    <div class="modalBtns"><button type="button" id="sendOrderBtn" class="primary" onclick="window.sendOrder()">📲 Enviar pedido</button><button class="secondary" onclick="openCart()">Volver</button></div>`;
+    <div class="modalBtns"><button type="button" id="sendOrderBtn" class="primary" onclick="window.sendOrder()">${isEmployeeOrderMode()?'💾 Registrar pedido':'📲 Enviar pedido'}</button><button class="secondary" onclick="openCart()">Volver</button></div>`;
 }
 function upsertCustomerFromOrder(name,phone,type,addr){const clean=phone.replace(/\D/g,'');let c=customers.find(x=>x.phone===clean);if(!c){c={id:Date.now(),name,phone:clean,created:new Date().toISOString(),orders:0,total:0,addresses:[]};customers.push(c)}c.name=name;c.lastOrder=new Date().toISOString();c.orders=Number(c.orders||0)+1;c.total=Number(c.total||0)+total();c.type=type;if(addr&&!c.addresses.includes(addr))c.addresses.unshift(addr);c.addresses=c.addresses.slice(0,10);save();}
 
@@ -891,7 +902,9 @@ async function sendOrder(){
   localStorage.setItem(ORDERS,JSON.stringify(orders));
   localStorage.setItem(LAST_ORDER,no);save();queueKitchenOrder(no);
   const url='https://wa.me/'+(settings.whatsapp||ADMIN_WA)+'?text='+encodeURIComponent(msg);cart=[];updateCart();
-  document.getElementById('panel').innerHTML='<div class="panelHead"><h2>✅ Pedido enviado</h2><button class="close" onclick="closeModal()">✕</button></div><div class="notice" style="margin:16px 0">El pedido <b>'+no+'</b> fue guardado en el sistema. Abriendo WhatsApp…</div><div class="modalBtns"><button class="primary" type="button" onclick="location.href=\''+url+'\'">📲 Abrir WhatsApp</button><button class="secondary" onclick="printOrder(\''+no+'\')">🖨️ Imprimir soporte</button><button class="secondary" onclick="trackOrder(\''+no+'\')">📍 Ver estado</button></div>';
+  const employeeOrder=isEmployeeOrderMode();
+  clearEmployeeOrderMode();
+  document.getElementById('panel').innerHTML='<div class="panelHead"><h2>✅ '+(employeeOrder?'Pedido registrado':'Pedido enviado')+'</h2><button class="close" onclick="closeModal()">✕</button></div><div class="notice" style="margin:16px 0">El pedido <b>'+no+'</b> fue guardado en el sistema y enviado al WhatsApp registrado.</div><div class="modalBtns"><button class="primary" type="button" onclick="printComanda(\''+no+'\')">🍳 Imprimir comanda</button><button class="secondary" onclick="printOrder(\''+no+'\')">🧾 Imprimir soporte</button><button class="secondary" type="button" onclick="location.href=\''+url+'\'">📲 Abrir WhatsApp</button><button class="secondary" onclick="trackOrder(\''+no+'\')">📍 Ver estado</button></div>';
   setTimeout(function(){try{location.href=url}catch(e){}},250);
   }catch(e){
     console.error('Error inesperado al enviar pedido:',e);
@@ -935,9 +948,15 @@ async function setOrderStatus(no,status,stayDetail=false){
   // Los usuarios locales no tienen sesión Supabase central por diseño.
   // Para ellos el estado se actualiza localmente, sin mezclar sesiones.
   if(SP_DB_ON && o.centralId && currentUser?.central){
-    const {data,error}=await SP_DB.rpc('sp_update_order_status',{p_order_id:o.centralId,p_status:status});
-    if(error){alert('No se pudo actualizar el estado central: '+error.message);return;}
-    if(data?.[0]?.status)o.status=data[0].status;
+    if(isAdmin()){
+      const {data,error}=await SP_DB.rpc('sp_update_order_status',{p_order_id:o.centralId,p_status:status});
+      if(error){alert('No se pudo actualizar el estado central: '+error.message);return;}
+      if(data?.[0]?.status)o.status=data[0].status;
+    }else if(currentUser?.allowOrders && currentUser?.user && currentUser?.pinHash){
+      const {data,error}=await SP_DB.rpc('sp_update_order_status_staff_hash',{p_username:currentUser.user,p_pin_sha256:currentUser.pinHash,p_order_id:o.centralId,p_status:status});
+      if(error){alert('No se pudo actualizar el estado central: '+error.message);return;}
+      if(data?.[0]?.status)o.status=data[0].status;
+    }
   }
   o.status=status;
   o.updated=new Date().toISOString();
@@ -2135,10 +2154,10 @@ async function ensureCentralAdminSession(){
 let SP_ADMIN_ORDERS_CHANNEL=null;
 let SP_ADMIN_ORDERS_REFRESH_TIMER=null;
 function ensureAdminOrdersRealtime(){
-  if(!SP_DB_ON||!currentUser?.central||SP_ADMIN_ORDERS_CHANNEL)return;
+  if(!SP_DB_ON||!(currentUser?.central||currentUser?.allowOrders)||SP_ADMIN_ORDERS_CHANNEL)return;
   try{
     SP_ADMIN_ORDERS_CHANNEL=SP_DB.channel('sp-admin-orders')
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'orders'},()=>{if(currentUser?.central)adminOrders()})
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'orders'},()=>{if(currentUser?.central||currentUser?.allowOrders)adminOrders()})
       .on('postgres_changes',{event:'UPDATE',schema:'public',table:'orders'},()=>{if(currentUser?.central)adminOrders()})
       .subscribe(status=>{
         if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){
@@ -2172,16 +2191,19 @@ async function adminOrders(){
       const localPin = localAdmin?.pin || currentUser?.pin;
       const localUser = localAdmin?.user || currentUser?.user;
       if(currentUser?.role==='admin' && localUser && localPin){
-        // Para el dueño/Admin, el acceso por usuario + PIN es la vía principal.
-        // Así una sesión central antigua o restaurada no puede dejar Pedidos en modo local.
         ({data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders_pin',{
           p_username:localUser,
           p_pin:localPin
         }));
+      }else if(!isAdmin() && currentUser?.allowOrders && currentUser?.user && currentUser?.pinHash){
+        ({data:centralOrders,error}=await SP_DB.rpc('sp_get_orders_staff_hash',{
+          p_username:currentUser.user,
+          p_pin_sha256:currentUser.pinHash
+        }));
       }else if(currentUser?.central){
         ({data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders'));
       }else{
-        throw new Error('No hay credenciales de administrador disponibles para sincronizar pedidos.');
+        throw new Error('No hay credenciales disponibles para sincronizar pedidos.');
       }
       if(error)throw error;
       const rows=Array.isArray(centralOrders)?centralOrders:[];
@@ -2264,9 +2286,9 @@ async function adminOrders(){
 
   // Respaldo automático: si Realtime no entrega un evento, la pantalla
   // vuelve a consultar los pedidos centrales cada 8 segundos mientras está abierta.
-  if(SP_DB_ON && (currentUser?.central || currentUser?.role==='admin')){
+  if(SP_DB_ON && (currentUser?.central || currentUser?.role==='admin' || currentUser?.allowOrders)){
     SP_ADMIN_ORDERS_REFRESH_TIMER=setTimeout(()=>{
-      if(currentUser?.central || currentUser?.role==='admin') adminOrders();
+      if(currentUser?.central || currentUser?.role==='admin' || currentUser?.allowOrders) adminOrders();
     },8000);
   }
 }
