@@ -435,6 +435,10 @@ async function logoutUser(){
     try{SP_DB.removeChannel(SP_ADMIN_ORDERS_CHANNEL)}catch(_){}
     SP_ADMIN_ORDERS_CHANNEL=null;
   }
+  if(SP_ADMIN_ORDERS_REFRESH_TIMER){
+    clearTimeout(SP_ADMIN_ORDERS_REFRESH_TIMER);
+    SP_ADMIN_ORDERS_REFRESH_TIMER=null;
+  }
   closeModal();
   // El cierre de Supabase no debe bloquear la salida de la aplicación.
   if(SP_DB_ON&&wasEmployee){
@@ -1953,6 +1957,7 @@ async function ensureCentralAdminSession(){
   }
 }
 let SP_ADMIN_ORDERS_CHANNEL=null;
+let SP_ADMIN_ORDERS_REFRESH_TIMER=null;
 function ensureAdminOrdersRealtime(){
   if(!SP_DB_ON||!currentUser?.central||SP_ADMIN_ORDERS_CHANNEL)return;
   try{
@@ -1972,17 +1977,21 @@ function ensureAdminOrdersRealtime(){
 }
 async function adminOrders(){
   if(!can('allowOrders')){alert('Tu usuario no tiene permiso para gestionar pedidos.');return}
+  if(SP_ADMIN_ORDERS_REFRESH_TIMER){
+    clearTimeout(SP_ADMIN_ORDERS_REFRESH_TIMER);
+    SP_ADMIN_ORDERS_REFRESH_TIMER=null;
+  }
   let a=JSON.parse(localStorage.getItem(ORDERS)||'[]');
   if(SP_DB_ON){
     try{
       // Los pedidos administrativos se leen mediante una función segura en Supabase.
       // Esto evita depender del localStorage de este celular y evita fallos de RLS
       // al consultar directamente la tabla orders.
-      if(!currentUser?.central){
-        const ok=await ensureCentralAdminSession();
-        if(!ok){
-          throw new Error('Sesión central de administrador no encontrada. Cierra sesión y entra con el acceso central de Supabase.');
-        }
+      // Validamos/recuperamos la sesión central en cada sincronización.
+      // Así no nos quedamos mostrando una copia vieja del localStorage.
+      const ok=await ensureCentralAdminSession();
+      if(!ok){
+        throw new Error('Sesión central de administrador no encontrada. La aplicación conservará el acceso por PIN, pero necesita una sesión central activa para sincronizar pedidos.');
       }
       const {data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders');
       if(error)throw error;
@@ -2063,6 +2072,14 @@ async function adminOrders(){
         </div>`;
     }).join('') : '<div class="empty">No hay pedidos registrados en Supabase.</div>'}`;
   document.getElementById('modal').classList.add('open');
+
+  // Respaldo automático: si Realtime no entrega un evento, la pantalla
+  // vuelve a consultar los pedidos centrales cada 8 segundos mientras está abierta.
+  if(SP_DB_ON && currentUser?.central){
+    SP_ADMIN_ORDERS_REFRESH_TIMER=setTimeout(()=>{
+      if(currentUser?.central) adminOrders();
+    },8000);
+  }
 }
 function printOrder(no){
   const o=JSON.parse(localStorage.getItem(ORDERS)||'[]').find(x=>String(x.no)===String(no));
