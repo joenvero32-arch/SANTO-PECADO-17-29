@@ -1259,7 +1259,7 @@ async function adminUsers(){
     <div class="notice" style="margin-top:14px">Los trabajadores son usuarios transitorios. Tú puedes crear, cambiar permisos o desactivar a quien esté trabajando. Los usuarios operativos se sincronizan con Supabase; <b>Prueba</b> no es operativo.</div>
     ${navTabs('users')}
     <button class="primary" onclick="newEmployee()">＋ Nuevo empleado</button>
-    <div style="margin-top:14px">${users.map(u=>`<div class="adminItem"><div class="adminTop"><div class="adminName">${esc(u.name)} </div><span class="muted">${u.role==='admin'?'ADMINISTRADOR / DUEÑO':'EMPLEADO'}</span></div><div class="muted">Usuario: <b>${esc(u.user)}</b> · ${u.role==='admin'?'Acceso total':`Pedidos: ${u.allowOrders?'Sí':'No'} · Inventario: ${u.allowInventory?'Sí':'No'} · Caja: ${u.allowCash!==false?'Sí':'No'}`}</div>${u.role!=='admin'?`<div class="adminActions"><button class="mini" onclick="editEmployee('${u.id}')">✏️ Permisos</button><button class="mini" onclick="deleteEmployee('${u.id}')">🗑️ Eliminar</button></div>`:''}</div>`).join('')}</div>
+    <div style="margin-top:14px">${users.map(u=>`<div class="adminItem"><div class="adminTop"><div class="adminName">${esc(u.name)} </div><span class="muted">${u.role==='admin'?'ADMINISTRADOR / DUEÑO':'EMPLEADO'}</span></div><div class="muted">Usuario: <b>${esc(u.user)}</b> · ${u.role==='admin'?'Acceso total':`Pedidos: ${u.allowOrders?'Sí':'No'} · Inventario: ${u.allowInventory?'Sí':'No'} · Caja: ${u.allowCash!==false?'Sí':'No'}`}</div>${u.role!=='admin'?`<div class="adminActions"><button class="mini" onclick="editEmployee('${esc(String(u.id))}')">✏️ Permisos</button><button class="mini" onclick="deleteEmployee('${u.id}')">🗑️ Eliminar</button></div>`:''}</div>`).join('')}</div>
     <div class="modalBtns"><button class="secondary" onclick="logoutUser()">Cerrar sesión</button></div>`;
   document.getElementById('modal').classList.add('open');
 }
@@ -1304,7 +1304,9 @@ async function saveNewEmployee(){
   adminUsers();
 }
 function editEmployee(id){
-  if(!isAdmin())return; const u=users.find(x=>x.id===id); if(!u)return;
+  if(!isAdmin())return;
+  const u=users.find(x=>String(x.id)===String(id));
+  if(!u){alert('No se encontró el usuario para editar.');return;}
   document.getElementById('panel').innerHTML=`
     <div class="panelHead"><h2>✏️ Editar empleado</h2><button class="close" onclick="adminUsers()">✕</button></div>
     <div class="notice" style="margin:12px 0">Configura todos los datos y permisos en una sola pantalla.</div>
