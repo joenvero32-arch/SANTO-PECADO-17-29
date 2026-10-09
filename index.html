@@ -952,25 +952,14 @@ async function setOrderStatus(no,status,stayDetail=false){
   if(SP_DB_ON && o.centralId){
     let result=null;
     try{
-      if(currentUser?.central && currentUser?.user && currentUser?.pinHash){
+      if(currentUser?.user && currentUser?.pinHash){
+        // Usar siempre el hash calculado durante el inicio de sesión con PIN.
+        // Evita que el usuario admin caiga en una ruta distinta con un PIN local desactualizado.
         result=await SP_DB.rpc('sp_update_order_status_staff_hash',{
           p_username:currentUser.user,
           p_pin_sha256:currentUser.pinHash,
           p_order_id:o.centralId,
           p_status:status
-        });
-      }else if(currentUser?.role==='admin' && currentUser?.user){
-        const localAdmin=((typeof users!=='undefined'&&Array.isArray(users))
-          ?users.find(x=>String(x.user||'').toLowerCase()===String(currentUser.user||'').toLowerCase())
-          :null)||currentUser;
-        const localPin=localAdmin?.pin||currentUser?.pin;
-        if(!localPin){alert('No se puede validar el PIN para sincronizar el estado central. Cierra sesión y vuelve a entrar con tu usuario y PIN.');return;}
-        result=await SP_DB.rpc('sp_update_order_status_pin',{
-          p_username:currentUser.user,p_pin:localPin,p_order_id:o.centralId,p_status:status
-        });
-      }else if(currentUser?.allowOrders && currentUser?.user && currentUser?.pinHash){
-        result=await SP_DB.rpc('sp_update_order_status_staff_hash',{
-          p_username:currentUser.user,p_pin_sha256:currentUser.pinHash,p_order_id:o.centralId,p_status:status
         });
       }else{
         alert('No se pudo sincronizar el estado: la sesión no tiene credenciales válidas para Supabase. No se guardó el cambio.');return;
