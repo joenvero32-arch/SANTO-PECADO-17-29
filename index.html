@@ -2258,5 +2258,55 @@ function saveSettings(){
   }catch(e){console.warn('Sincronización central pendiente.',e)}
 })();
 </script><script src="stats-nav-fix.js?v=20261007-permissions"></script><script src="comanda-fix.js?v=20261005-detail2"></script><script src="audit-inventory-fix.js?v=20261006-audit1"></script>
-</body>
+<script>
+/* SP PEDIDOS PIN SYNC v1 — sincroniza pedidos centrales aunque el Admin entre solo con PIN */
+(function(){
+  const ENDPOINT='https://ghucwrrvqivmbogtcgcr.supabase.co/functions/v1/admin-orders-pin';
+  let timer=null, loading=false;
+  const originalAdminOrders=window.adminOrders;
+  async function fetchPinOrders(){
+    if(loading) return false;
+    const u=(typeof currentUser!=='undefined')?currentUser:null;
+    if(!u || u.role!=='admin' || u.central || !u.user || !u.pin) return false;
+    loading=true;
+    try{
+      const response=await fetch(ENDPOINT,{
+        method:'POST',
+        headers:{
+          'Content-Type':'application/json',
+          'apikey':(typeof SP_SUPABASE_PUBLISHABLE_KEY!=='undefined'?SP_SUPABASE_PUBLISHABLE_KEY:'')
+        },
+        body:JSON.stringify({username:u.user,pin:u.pin})
+      });
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok || !data.ok) throw new Error(data.error||'No se pudieron sincronizar los pedidos.');
+      localStorage.setItem('sp_premium_orders_v2',JSON.stringify(data.orders||[]));
+      return true;
+    }catch(e){ console.warn('Pedidos Admin + PIN:',e); return false; }
+    finally{ loading=false; }
+  }
+  function schedule(){
+    if(timer) clearTimeout(timer);
+    timer=setTimeout(async()=>{
+      const u=(typeof currentUser!=='undefined')?currentUser:null;
+      if(u?.role==='admin' && !u.central){
+        await fetchPinOrders();
+        await originalAdminOrders();
+        schedule();
+      }
+    },8000);
+  }
+  window.adminOrders=async function(){
+    const u=(typeof currentUser!=='undefined')?currentUser:null;
+    if(u?.role==='admin' && !u.central){
+      await fetchPinOrders();
+      await originalAdminOrders();
+      schedule();
+      return;
+    }
+    return originalAdminOrders();
+  };
+  window.addEventListener('beforeunload',()=>{if(timer)clearTimeout(timer)});
+})();
+</script></body>
 </html>
