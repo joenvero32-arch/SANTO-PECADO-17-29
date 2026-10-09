@@ -126,7 +126,7 @@ const SP_SUPABASE_PUBLISHABLE_KEY='sb_publishable_chFTmgoaIVvJSdpgTTuUSQ_fBNEq4W
 let SP_DB=null, SP_DB_ON=false, SP_DB_LAST='';
 try{
   if(window.supabase?.createClient){
-    SP_DB=window.supabase.createClient(SP_SUPABASE_URL,SP_SUPABASE_PUBLISHABLE_KEY);
+    SP_DB=window.supabase.createClient(SP_SUPABASE_URL,SP_SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}});
     SP_DB_ON=true;
   }
 }catch(e){console.warn('Supabase no pudo inicializarse',e)}
@@ -1167,31 +1167,31 @@ async function submitLogin(){
   const u=users.find(x=>x.user.toLowerCase()===user.toLowerCase() && x.pin===pin);
   if(!u){alert('Usuario o PIN incorrectos.');return}
 
-  // El dueño puede seguir entrando con su PIN local, pero los módulos
-  // centrales (Pedidos entre dispositivos, Caja central, etc.) necesitan
-  // una sesión autenticada de Supabase. Si ya existe, se reutiliza.
-  // Si no existe, solo se solicita el acceso central una vez.
+  // El PIN local es el acceso de la aplicación. No debe bloquearse porque
+  // la sesión central de Supabase tarde en restaurarse o no esté disponible.
+  // Si existe una sesión central persistida, la recuperamos automáticamente.
+  currentUser={...u,allowCash:u.allowCash!==false,central:false};
   if(u.role==='admin' && SP_DB_ON){
-    const centralReady=await ensureCentralAdminSession();
-    if(!centralReady){
-      currentUser={...u,allowCash:u.allowCash!==false,central:false};
-      sessionStorage.setItem(SESSION,JSON.stringify(currentUser));
-      openAdmin();
-      alert('Para sincronizar los pedidos de todos los celulares, inicia sesión central de Supabase una vez. Después podrás seguir entrando con tu PIN.');
-      return;
-    }
-    if(isAdmin()) adminProducts();
-    else if(currentUser.allowOrders) adminOrders();
-    else if(currentUser.allowInventory) adminInventory();
-    else if(currentUser.allowCash!==false) employeeCash();
+    try{
+      const {data:{session}}=await SP_DB.auth.getSession();
+      if(session?.user?.id){
+        const {data:profile,error}=await SP_DB.from('app_users').select('*').eq('id',session.user.id).maybeSingle();
+        if(!error&&profile&&profile.active!==false&&profile.role==='admin'){
+          currentUser={...currentUser,...profile,user:profile.username||u.user,name:profile.full_name||u.name,allowOrders:true,allowInventory:true,allowCash:true,central:true};
+        }
+      }
+    }catch(e){console.warn('No se pudo restaurar la sesión central; se mantiene el acceso por PIN:',e)}
+  }
+  sessionStorage.setItem(SESSION,JSON.stringify(currentUser));
+
+  if(u.role==='admin'){
+    adminProducts();
     return;
   }
-
-  if(u.role!=='admin' && SP_DB_ON){
-    try{await SP_DB.auth.signOut({scope:'local'})}catch(e){console.warn('No se pudo limpiar la sesión central anterior:',e)}
-  }
-  currentUser={...u,allowCash:u.allowCash!==false,central:false}; sessionStorage.setItem(SESSION,JSON.stringify(currentUser));
-  if(u.allowOrders) adminOrders(); else if(u.allowInventory) adminInventory(); else if(u.allowCash!==false) employeeCash(); else {alert('Este usuario no tiene permisos asignados.');logoutUser();}
+  if(u.allowOrders) adminOrders();
+  else if(u.allowInventory) adminInventory();
+  else if(u.allowCash!==false) employeeCash();
+  else {alert('Este usuario no tiene permisos asignados.');logoutUser();}
 }
 function adminUsers(){
   if(!isAdmin()){alert('Solo el administrador o dueño puede administrar usuarios.');return}
