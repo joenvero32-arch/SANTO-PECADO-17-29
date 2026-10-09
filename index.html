@@ -1984,18 +1984,23 @@ async function adminOrders(){
   let a=JSON.parse(localStorage.getItem(ORDERS)||'[]');
   if(SP_DB_ON){
     try{
-      // Los pedidos administrativos se leen mediante una función segura en Supabase.
-      // Esto evita depender del localStorage de este celular y evita fallos de RLS
-      // al consultar directamente la tabla orders.
-      // Validamos/recuperamos la sesión central en cada sincronización.
-      // Así no nos quedamos mostrando una copia vieja del localStorage.
+      // Los pedidos administrativos se leen desde Supabase. En modo Admin+PIN
+      // recuperamos las credenciales también desde la lista local de usuarios, porque
+      // una sesión creada antes de esta versión puede no tener el PIN en sessionStorage.
       let centralOrders,error;
+      const localAdmin = (!currentUser?.central && currentUser?.role==='admin')
+        ? ((typeof users!=='undefined' && Array.isArray(users)
+            ? users.find(x=>String(x.user||'').toLowerCase()===String(currentUser?.user||'').toLowerCase())
+            : null) || currentUser)
+        : null;
+      const localPin = localAdmin?.pin || currentUser?.pin;
+      const localUser = localAdmin?.user || currentUser?.user;
       if(currentUser?.central){
         ({data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders'));
-      }else if(currentUser?.role==='admin' && currentUser?.user && currentUser?.pin){
+      }else if(currentUser?.role==='admin' && localUser && localPin){
         ({data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders_pin',{
-          p_username:currentUser.user,
-          p_pin:currentUser.pin
+          p_username:localUser,
+          p_pin:localPin
         }));
       }else{
         throw new Error('No hay credenciales de administrador disponibles para sincronizar pedidos.');
@@ -2083,7 +2088,7 @@ async function adminOrders(){
   // vuelve a consultar los pedidos centrales cada 8 segundos mientras está abierta.
   if(SP_DB_ON && (currentUser?.central || currentUser?.role==='admin')){
     SP_ADMIN_ORDERS_REFRESH_TIMER=setTimeout(()=>{
-      if(currentUser?.central) adminOrders();
+      if(currentUser?.central || currentUser?.role==='admin') adminOrders();
     },8000);
   }
 }
