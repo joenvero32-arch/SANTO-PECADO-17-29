@@ -1193,8 +1193,11 @@ async function spCentralAdminList(){
       const saved=await SP_DB.rpc('sp_local_user_upsert',{
         p_admin_username:currentUser.user||'admin',p_admin_pin_sha256:pinHash,p_id:null,
         p_username:u.user,p_full_name:u.name,p_pin_sha256:await spSha256(u.pin||''),
-        p_role:'employee',p_can_manage_orders:!!u.allowOrders,p_can_manage_inventory:!!u.allowInventory,
-        p_can_manage_cash:u.allowCash!==false,p_active:true
+        p_role:'employee',
+        p_can_manage_orders:String(u.name||'').trim().toLowerCase()==='liliana' ? true : (String(u.name||'').trim().toLowerCase()==='zuleidy' ? false : !!u.allowOrders),
+        p_can_manage_inventory:String(u.name||'').trim().toLowerCase()==='liliana' ? true : (String(u.name||'').trim().toLowerCase()==='zuleidy' ? false : !!u.allowInventory),
+        p_can_manage_cash:String(u.name||'').trim().toLowerCase()==='zuleidy' ? true : (String(u.name||'').trim().toLowerCase()==='liliana' ? false : u.allowCash!==false),
+        p_active:true
       });
       if(saved.error)throw saved.error;
     }
