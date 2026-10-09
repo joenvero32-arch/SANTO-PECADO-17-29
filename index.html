@@ -2213,7 +2213,18 @@ async function confirmOrderPayment(no){
     if(SP_DB_ON){
       if(!o.centralId){alert('Este pedido no tiene una referencia central válida. No se registrará el pago localmente.');return}
       let result;
-      if(currentUser?.central){
+      // "central" también se usa para usuarios Admin+PIN validados por RPC;
+      // solo la sesión Auth real de Supabase debe usar la función que exige auth.uid().
+      let authAdmin=false;
+      try{
+        const {data:{session}}=await SP_DB.auth.getSession();
+        if(session?.user?.id){
+          const {data:profile,error:profileError}=await SP_DB.from('app_users')
+            .select('role,active').eq('id',session.user.id).maybeSingle();
+          authAdmin=!profileError&&!!profile&&profile.active!==false&&profile.role==='admin';
+        }
+      }catch(_){authAdmin=false}
+      if(authAdmin){
         result=await SP_DB.rpc('sp_confirm_order_payment',{p_order_id:o.centralId,p_payment_method:method.trim(),p_notes:note.trim()});
       }else{
         const localAdmin = ((typeof users!=='undefined' && Array.isArray(users))
