@@ -1450,6 +1450,7 @@ async function employeeInventoryEntryToppingCentral(t,qty){
     p_delta:Number(qty),p_reason:'Entrada de inventario'
   });
   if(error)throw error;
+  return data;
 }
 async function saveProduct(id){
   if(!isAdmin()){alert('Solo el administrador o dueño puede modificar productos.');return}
