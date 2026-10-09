@@ -1989,11 +1989,17 @@ async function adminOrders(){
       // al consultar directamente la tabla orders.
       // Validamos/recuperamos la sesión central en cada sincronización.
       // Así no nos quedamos mostrando una copia vieja del localStorage.
-      const ok=await ensureCentralAdminSession();
-      if(!ok){
-        throw new Error('Sesión central de administrador no encontrada. La aplicación conservará el acceso por PIN, pero necesita una sesión central activa para sincronizar pedidos.');
+      let centralOrders,error;
+      if(currentUser?.central){
+        ({data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders'));
+      }else if(currentUser?.role==='admin' && currentUser?.user && currentUser?.pin){
+        ({data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders_pin',{
+          p_username:currentUser.user,
+          p_pin:currentUser.pin
+        }));
+      }else{
+        throw new Error('No hay credenciales de administrador disponibles para sincronizar pedidos.');
       }
-      const {data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders');
       if(error)throw error;
       const rows=Array.isArray(centralOrders)?centralOrders:[];
       const central=rows.map(o=>({
@@ -2075,7 +2081,7 @@ async function adminOrders(){
 
   // Respaldo automático: si Realtime no entrega un evento, la pantalla
   // vuelve a consultar los pedidos centrales cada 8 segundos mientras está abierta.
-  if(SP_DB_ON && currentUser?.central){
+  if(SP_DB_ON && (currentUser?.central || currentUser?.role==='admin')){
     SP_ADMIN_ORDERS_REFRESH_TIMER=setTimeout(()=>{
       if(currentUser?.central) adminOrders();
     },8000);
@@ -2258,73 +2264,5 @@ function saveSettings(){
   }catch(e){console.warn('Sincronización central pendiente.',e)}
 })();
 </script><script src="stats-nav-fix.js?v=20261007-permissions"></script><script src="comanda-fix.js?v=20261005-detail2"></script><script src="audit-inventory-fix.js?v=20261006-audit1"></script>
-<script>
-/* SP PEDIDOS PIN SYNC v2 — lee pedidos centrales por RPC seguro validado con usuario+PIN */
-(function(){
-  let timer=null, loading=false;
-  const originalAdminOrders=window.adminOrders;
-  async function fetchPinOrders(){
-    if(loading) return false;
-    const u=(typeof currentUser!=='undefined')?currentUser:null;
-    if(!u || u.role!=='admin' || u.central || !u.user || !u.pin) return false;
-    loading=true;
-    try{
-      const {data,error}=await SP_DB.rpc('sp_get_admin_orders_pin',{
-        p_username:u.user,
-        p_pin:u.pin
-      });
-      if(error) throw error;
-      const orders=Array.isArray(data)?data:[];
-      const central=orders.map(o=>({
-        no:o.order_number,
-        centralId:o.id,
-        name:o.customer_name||'',
-        phone:o.customer_phone||'',
-        type:o.order_type==='delivery'?'Domicilio':o.order_type==='pickup'?'Recoger':'Local',
-        pay:o.payment_method||'',
-        paymentStatus:o.payment_status||'pendiente',
-        addr:o.address||'',
-        obs:o.observations||'',
-        total:Number(o.total||0),
-        created:o.created_at,
-        updated:o.updated_at,
-        status:o.status||'recibido',
-        driverId:o.driver_id||null,
-        driverName:o.driver_name||'',
-        driverPhone:o.driver_phone||'',
-        statusHistory:[],
-        detail:o.detail||''
-      })).sort((a,b)=>new Date(b.created)-new Date(a.created));
-      localStorage.setItem(ORDERS,JSON.stringify(central));
-      return true;
-    }catch(e){
-      console.warn('Pedidos Admin + PIN RPC:',e?.message||e);
-      return false;
-    }finally{loading=false;}
-  }
-  function schedule(){
-    if(timer) clearTimeout(timer);
-    timer=setTimeout(async()=>{
-      const u=(typeof currentUser!=='undefined')?currentUser:null;
-      if(u?.role==='admin' && !u.central){
-        const ok=await fetchPinOrders();
-        if(ok) await originalAdminOrders();
-        schedule();
-      }
-    },5000);
-  }
-  window.adminOrders=async function(){
-    const u=(typeof currentUser!=='undefined')?currentUser:null;
-    if(u?.role==='admin' && !u.central){
-      const ok=await fetchPinOrders();
-      if(ok) await originalAdminOrders();
-      else await originalAdminOrders();
-      schedule();
-      return;
-    }
-    return originalAdminOrders();
-  };
-  window.addEventListener('beforeunload',()=>{if(timer)clearTimeout(timer)});
-})();
-</script></script></body>
+</script></body>
 </html>
