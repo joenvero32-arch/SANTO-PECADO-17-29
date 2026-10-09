@@ -2253,8 +2253,8 @@ function ensureAdminOrdersRealtime(){
   if(!SP_DB_ON||!(currentUser?.central||currentUser?.allowOrders)||SP_ADMIN_ORDERS_CHANNEL)return;
   try{
     SP_ADMIN_ORDERS_CHANNEL=SP_DB.channel('sp-admin-orders')
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'orders'},()=>{if(!isEmployeeOrderMode()&&(currentUser?.central||currentUser?.allowOrders)&&document.getElementById('modal')?.classList.contains('open')&&document.querySelector('.adminTabs .tab.active')?.textContent?.includes('Pedidos'))adminOrders()})
-      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'orders'},()=>{if(!isEmployeeOrderMode()&&(currentUser?.central||currentUser?.allowOrders)&&document.getElementById('modal')?.classList.contains('open')&&document.querySelector('.adminTabs .tab.active')?.textContent?.includes('Pedidos'))adminOrders()})
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'orders'},()=>{if(!isEmployeeOrderMode()&&(currentUser?.central||currentUser?.allowOrders)&&document.getElementById('modal')?.classList.contains('open')&&document.querySelector('#panel .panelHead h2')?.textContent?.includes('Pedidos'))adminOrders()})
+      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'orders'},()=>{if(!isEmployeeOrderMode()&&(currentUser?.central||currentUser?.allowOrders)&&document.getElementById('modal')?.classList.contains('open')&&document.querySelector('#panel .panelHead h2')?.textContent?.includes('Pedidos'))adminOrders()})
       .subscribe(status=>{
         if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){
           try{SP_DB.removeChannel(SP_ADMIN_ORDERS_CHANNEL)}catch(_){}
@@ -2386,8 +2386,8 @@ async function adminOrders(){
   if(SP_DB_ON && (currentUser?.central || currentUser?.role==='admin' || currentUser?.allowOrders)){
     SP_ADMIN_ORDERS_REFRESH_TIMER=setTimeout(()=>{
       const modalOpen=document.getElementById('modal')?.classList.contains('open');
-      const ordersTabActive=document.querySelector('.adminTabs .tab.active')?.textContent?.includes('Pedidos');
-      if(modalOpen && ordersTabActive && !isEmployeeOrderMode() && (currentUser?.central || currentUser?.role==='admin' || currentUser?.allowOrders)) adminOrders();
+      const ordersPanelVisible=document.querySelector('#panel .panelHead h2')?.textContent?.includes('Pedidos');
+      if(modalOpen && ordersPanelVisible && !isEmployeeOrderMode() && (currentUser?.central || currentUser?.role==='admin' || currentUser?.allowOrders)) adminOrders();
     },8000);
   }
 }
