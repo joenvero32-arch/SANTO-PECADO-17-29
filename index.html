@@ -1839,6 +1839,32 @@ function approveCashClosure(id){
   auditLog('Cierre de caja confirmado','Caja '+rec.day+' · Cierre de '+rec.user+' · Diferencia '+money(rec.difference));
   save();adminCash();
 }
+function printStatsReport(){
+  const panel=document.getElementById('panel');
+  if(!panel){alert('No se encontró el reporte de Estadísticas.');return}
+  const report=panel.cloneNode(true);
+  report.querySelectorAll('.adminTabs,.modalBtns,.close,button').forEach(el=>el.remove());
+  const w=window.open('','_blank');
+  if(!w){alert('Chrome bloqueó la ventana de impresión. Permite ventanas emergentes para este sitio.');return}
+  const content=report.innerHTML;
+  w.document.open();
+  w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Estadísticas · Santo Pecado 17-29</title><style>
+    *{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#171717;background:#fff;margin:0;padding:18px;font-size:12px}
+    h2{font-size:22px;margin:4px 0 12px}h3{font-size:15px;margin:0 0 10px}.dashKicker{font-size:10px;letter-spacing:1px;color:#555}
+    .statgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:12px 0}
+    .stat,.dashSection,.adminItem,.notice{border:1px solid #bbb;border-radius:8px;padding:10px;margin:8px 0;break-inside:avoid;page-break-inside:avoid}
+    .stat small{display:block;color:#555;margin-bottom:5px}.stat b{font-size:16px}
+    .dashSectionHead{margin-bottom:8px}.barRow{display:grid;grid-template-columns:90px 95px 1fr;align-items:center;gap:8px;border-bottom:1px solid #ddd;padding:5px 0;break-inside:avoid}
+    .barRow i{display:block;height:7px;background:#eee;border-radius:5px;overflow:hidden}.barRow em{display:block;height:100%;background:#555}
+    .alertRow{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #ddd;padding:6px 0;break-inside:avoid}
+    .muted{color:#555}.empty{padding:10px;color:#555}
+    @page{size:auto;margin:12mm}
+    @media print{body{padding:0}.statgrid{grid-template-columns:repeat(4,minmax(0,1fr))}.dashSection,.stat,.adminItem{break-inside:avoid;page-break-inside:avoid}}
+    @media(max-width:600px){.statgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  </style></head><body><header style="border-bottom:2px solid #222;padding-bottom:10px;margin-bottom:14px"><b style="font-size:18px">SANTO PECADO 17-29</b><div style="color:#555;margin-top:4px">Reporte de estadísticas · ${new Date().toLocaleString('es-CO')}</div></header>${content}</body></html>`);
+  w.document.close();
+  w.onload=()=>{w.focus();setTimeout(()=>{try{w.print()}catch(e){console.warn('No se pudo imprimir Estadísticas:',e)}},300)};
+}
 function adminStats(){
   if(!isAdmin()){alert('Solo el administrador o dueño puede consultar estadísticas.');return}
   const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
@@ -1854,7 +1880,7 @@ function adminStats(){
   <div class="dashSection"><div class="dashSectionHead"><h3>🔥 Productos más vendidos</h3></div>${top.map(([n,q])=>`<div class="alertRow"><span>${esc(n)}</span><b>${q} und.</b></div>`).join('')||'<div class="empty">Aún no hay ventas.</div>'}</div>
   <div class="dashSection"><div class="dashSectionHead"><h3>💳 Ventas por medio de pago</h3></div>${Object.entries(pay).map(([k,v])=>`<div class="alertRow"><span>${esc(k)}</span><b>${money(v)}</b></div>`).join('')||'<div class="empty">Sin datos.</div>'}</div>
   <div class="statgrid dashGrid"><div class="stat"><small>Pedidos pendientes</small><b>${pending}</b></div><div class="stat"><small>Pedidos entregados</small><b>${delivered}</b></div><div class="stat"><small>Promociones activas</small><b>${activePromotions().length}</b></div><div class="stat"><small>Stock bajo</small><b>${products.filter(p=>Number(p.stock||0)<=Number(p.minStock||0)).length}</b></div></div>
-  <div class="modalBtns"><button class="primary" onclick="window.print()">🖨️ Imprimir estadísticas</button></div>`;
+  <div class="modalBtns"><button class="primary" onclick="printStatsReport()">🖨️ Imprimir estadísticas</button></div>`;
   document.getElementById('modal').classList.add('open');
 }
 async function adminDomicilios(search=''){
