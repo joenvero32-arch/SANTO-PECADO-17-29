@@ -1897,11 +1897,13 @@ function printStatsReport(){
 function adminStats(){
   if(!isAdmin()){alert('Solo el administrador o dueño puede consultar estadísticas.');return}
   const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
-  const period=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-i);const key=dayKey(d),ls=salesForDay(key);return {day:d.toLocaleDateString('es-CO',{weekday:'short',day:'2-digit',month:'2-digit'}),count:ls.length,total:ls.reduce((a,o)=>a+Number(o.total||0),0)}}).reverse();
+  const period=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-i);const key=dayKey(d),ls=salesForDay(key);return {key,day:d.toLocaleDateString('es-CO',{weekday:'short',day:'2-digit',month:'2-digit'}),count:ls.length,total:ls.reduce((a,o)=>a+Number(o.total||0),0)}}).reverse();
   const total7=period.reduce((a,x)=>a+x.total,0), count7=period.reduce((a,x)=>a+x.count,0);
   const map={};sales.forEach(o=>(o.items||[]).forEach(x=>{const k=x.name||x.productName||x.product_name||products.find(p=>String(p.id)===String(x.id))?.name||'Producto';map[k]=(map[k]||0)+Number(x.qty||1)}));
   const top=Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,10);
-  const pay=paymentTotals(sales.slice(0,1000));
+  const periodKeys=new Set(period.map(x=>x.key));
+  const periodSales=sales.filter(o=>periodKeys.has(dayKey(o.date||o.created)));
+  const pay=periodSales.reduce((a,o)=>{const k=o.pay||o.payment_method||o.paymentMethod||'Sin especificar';a[k]=(a[k]||0)+Number(o.total||0);return a},{});
   const delivered=orders.filter(o=>o.status==='entregado').length, pending=orders.filter(o=>!['entregado','cancelado'].includes(o.status||'recibido')).length;
   document.getElementById('panel').innerHTML=`<div class="panelHead"><div><div class="dashKicker">INTELIGENCIA DEL NEGOCIO</div><h2>📊 Estadísticas</h2></div><button class="close" onclick="adminDashboard()">✕</button></div>${navTabs('reports')}
   <div class="statgrid dashGrid"><div class="stat"><small>Ventas · 7 días</small><b>${money(total7)}</b></div><div class="stat"><small>Pedidos · 7 días</small><b>${count7}</b></div><div class="stat"><small>Ticket promedio</small><b>${money(count7?total7/count7:0)}</b></div><div class="stat"><small>Clientes registrados</small><b>${customers.length}</b></div></div>
