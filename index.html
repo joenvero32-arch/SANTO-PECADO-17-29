@@ -946,35 +946,53 @@ async function setOrderStatus(no,status,stayDetail=false){
   if((o.status||'recibido')===status)return;
   let reason='Cambio de estado operativo';
   if(!isAdmin()){reason=askReason('Explica por qué cambias el estado de este pedido:');if(reason===null)return;}
-  // Sincronizar el estado con Supabase también cuando se entra con usuario local + PIN.
+
+  // El acceso Admin + PIN no crea una sesión Auth de Supabase.
+  // Por eso se valida con la RPC de PIN/hash y no con auth.uid().
   if(SP_DB_ON && o.centralId){
     let result=null;
-    if(currentUser?.central && isAdmin()){
-      result=await SP_DB.rpc('sp_update_order_status',{p_order_id:o.centralId,p_status:status});
-    }else if(currentUser?.role==='admin' && currentUser?.user){
-      const localAdmin=((typeof users!=='undefined'&&Array.isArray(users))
-        ?users.find(x=>String(x.user||'').toLowerCase()===String(currentUser.user||'').toLowerCase())
-        :null)||currentUser;
-      const localPin=localAdmin?.pin||currentUser?.pin;
-      if(!localPin){alert('No se puede validar el PIN para sincronizar el estado central. Cierra sesión y vuelve a entrar con tu usuario y PIN.');return;}
-      result=await SP_DB.rpc('sp_update_order_status_pin',{
-        p_username:currentUser.user,p_pin:localPin,p_order_id:o.centralId,p_status:status
-      });
-    }else if(currentUser?.allowOrders && currentUser?.user && currentUser?.pinHash){
-      result=await SP_DB.rpc('sp_update_order_status_staff_hash',{
-        p_username:currentUser.user,p_pin_sha256:currentUser.pinHash,p_order_id:o.centralId,p_status:status
-      });
+    try{
+      if(currentUser?.central && currentUser?.user && currentUser?.pinHash){
+        result=await SP_DB.rpc('sp_update_order_status_staff_hash',{
+          p_username:currentUser.user,
+          p_pin_sha256:currentUser.pinHash,
+          p_order_id:o.centralId,
+          p_status:status
+        });
+      }else if(currentUser?.role==='admin' && currentUser?.user){
+        const localAdmin=((typeof users!=='undefined'&&Array.isArray(users))
+          ?users.find(x=>String(x.user||'').toLowerCase()===String(currentUser.user||'').toLowerCase())
+          :null)||currentUser;
+        const localPin=localAdmin?.pin||currentUser?.pin;
+        if(!localPin){alert('No se puede validar el PIN para sincronizar el estado central. Cierra sesión y vuelve a entrar con tu usuario y PIN.');return;}
+        result=await SP_DB.rpc('sp_update_order_status_pin',{
+          p_username:currentUser.user,p_pin:localPin,p_order_id:o.centralId,p_status:status
+        });
+      }else if(currentUser?.allowOrders && currentUser?.user && currentUser?.pinHash){
+        result=await SP_DB.rpc('sp_update_order_status_staff_hash',{
+          p_username:currentUser.user,p_pin_sha256:currentUser.pinHash,p_order_id:o.centralId,p_status:status
+        });
+      }else{
+        alert('No se pudo sincronizar el estado: la sesión no tiene credenciales válidas para Supabase. No se guardó el cambio.');return;
+      }
+    }catch(e){
+      alert('No se pudo actualizar el estado central: '+(e?.message||String(e))+' . No se guardó el cambio.');return;
     }
-    if(result?.error){alert('No se pudo actualizar el estado central: '+result.error.message);return;}
-    if(result?.data?.[0]?.status)o.status=result.data[0].status;
+    if(result?.error){alert('No se pudo actualizar el estado central: '+result.error.message+'. No se guardó el cambio.');return;}
+    const centralStatus=result?.data?.[0]?.status;
+    if(!centralStatus){alert('Supabase no confirmó el cambio de estado. No se guardó el cambio local.');return;}
+    o.status=centralStatus;
+  }else if(SP_DB_ON && !o.centralId){
+    alert('Este pedido no tiene identificador central de Supabase. No se cambió su estado.');return;
+  }else{
+    o.status=status;
   }
-  o.status=status;
   o.updated=new Date().toISOString();
   o.statusHistory=o.statusHistory||[];
-  o.statusHistory.unshift({status,date:o.updated,by:currentUser?currentUser.user:'sistema',reason});
+  o.statusHistory.unshift({status:o.status,date:o.updated,by:currentUser?currentUser.user:'sistema',reason});
   localStorage.setItem(ORDERS,JSON.stringify(orders));
   auditLog('Cambio de estado',reason,no);
-  queueStatusNotification(o,status);
+  queueStatusNotification(o,o.status);
   if(stayDetail){trackOrder(no);} else{adminOrders();}
 }
 function registerOrderIncident(no,type){
