@@ -900,6 +900,7 @@ async function sendOrder(){
   const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
   orders.unshift({no,name,phone,type,pay,addr,obs,tableNumber,centralId:window.__lastCentralOrderId||null,total:total(),detail,created:new Date().toISOString(),updated:new Date().toISOString(),status:'recibido',statusHistory:[{status:'recibido',date:new Date().toISOString()}]});
   localStorage.setItem(ORDERS,JSON.stringify(orders));
+  auditLog('Pedido registrado','Pedido creado · '+name+' · '+money(total()),no);
   localStorage.setItem(LAST_ORDER,no);save();queueKitchenOrder(no);
   const url='https://wa.me/'+(settings.whatsapp||ADMIN_WA)+'?text='+encodeURIComponent(msg);cart=[];updateCart();
   const employeeOrder=isEmployeeOrderMode();
