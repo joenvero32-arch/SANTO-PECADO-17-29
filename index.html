@@ -1361,13 +1361,18 @@ async function saveEmployee(id){
   if(pin){u.pin=pin;u.pinHash=await spSha256(pin);}
   localStorage.setItem(USERS,JSON.stringify(users));auditLog('Empleado modificado',u.name+' · permisos actualizados');alert('Permisos guardados.');adminUsers();
 }
-async function deleteEmployee(id){
+async async function deleteEmployee(id){
   if(!isAdmin())return; if(!confirm('¿Desactivar este empleado? Podrás crear otro usuario después sin tocar los demás módulos.'))return;
   const removed=users.find(x=>String(x.id)===String(id)); if(!removed||removed.role==='admin')return;
   if(SP_DB_ON){
     try{
       const pinHash=currentUser.pinHash||await spSha256(currentUser.pin||'');
-      const {error}=await SP_DB.rpc('sp_local_user_deactivate',{p_admin_username:currentUser.user||'admin',p_admin_pin_sha256:pinHash,p_id:removed.id});
+      let error=null;
+      if(String(removed.id||'').match(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)){
+        ({error}=await SP_DB.rpc('sp_local_user_deactivate',{p_admin_username:currentUser.user||'admin',p_admin_pin_sha256:pinHash,p_id:removed.id}));
+      }else{
+        ({error}=await SP_DB.rpc('sp_local_user_deactivate_by_username',{p_admin_username:currentUser.user||'admin',p_admin_pin_sha256:pinHash,p_username:removed.user}));
+      }
       if(error)throw error;
     }catch(e){alert('No se pudo desactivar el usuario en Supabase: '+(e.message||e));return}
   }
