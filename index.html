@@ -992,7 +992,7 @@ function auditCategory(x){
   if(a.includes('pedido')||a.includes('estado'))return 'orders';
   // Las salidas generadas por una venta siguen siendo movimientos de inventario.
   if(a.includes('inventario')||a.includes('stock')||a.includes('topping')||a==='entrada'||a==='salida'||a==='ajuste'||a.includes('salida por venta'))return 'inventory';
-  if(a.includes('caja')||a.includes('venta')||a.includes('gasto')||a.includes('cierre'))return 'cash';
+  if(a.includes('caja')||a.includes('venta')||a.includes('gasto')||a.includes('cierre')||a.includes('pago recibido'))return 'cash';
   return 'changes';
 }
 function auditCategoryLabel(cat){
@@ -2146,25 +2146,57 @@ function adminKitchen(){
     ${a.length?a.map(o=>{const queued=q.find(x=>String(x.no)===String(o.no));return `<div class="order" style="margin-top:12px"><div class="adminTop"><div><b>${esc(o.no)}</b> · ${esc(new Date(o.created).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}))}</div><span>${statusLabel(o)}</span></div><div>👤 ${esc(o.name||'Cliente')} · 📞 ${esc(o.phone||'-')}</div><div>🚚 ${esc(o.type||'-')}${o.addr?' · 📍 '+esc(o.addr):''}</div>${o.type==='Domicilio'&&o.driverName?`<div>🛵 Domiciliario: <b>${esc(o.driverName)}</b>${o.driverPhone?' · '+esc(o.driverPhone):''}</div>`:''}<div class="adminActions"><button class="mini" onclick="printComanda('${esc(o.no)}')">🖨️ ${queued?.printed?'Reimprimir':'Imprimir'} comanda</button>${o.status==='recibido'?`<button class="mini" onclick="setOrderStatus('${esc(o.no)}','preparacion',true)">👨‍🍳 En preparación</button>`:''}${o.status==='preparacion'?`<button class="mini" onclick="setOrderStatus('${esc(o.no)}','listo',true)">📦 Pedido listo</button>`:''}<button class="mini" onclick="adminKitchen()">🔄 Actualizar</button></div></div>`}).join(''):'<div class="empty">No hay pedidos pendientes para cocina.</div>'}`;
   document.getElementById('modal').classList.add('open');
 }
+const SP_PAYMENT_CONFIRMING=new Set();
 async function confirmOrderPayment(no){
-  if(!can('allowOrders')){alert('Tu usuario no tiene permiso para confirmar pagos.');return}
-  const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]'); const o=orders.find(x=>String(x.no)===String(no));
-  if(!o){alert('Pedido no encontrado.');return}
-  if(o.paymentStatus==='pagado'){alert('Este pedido ya aparece como pagado.');return}
-  const method=prompt('Confirma el medio de pago recibido:\n\n1. Efectivo\n2. Nequi\n3. Bancolombia\n4. Tarjeta\n5. Otro',o.pay||'Efectivo');
-  if(method===null||!method.trim())return; const note=prompt('Nota de pago (opcional):','Pago recibido y pedido entregado')||'';
-  if(!confirm('¿Confirmas que el pago fue recibido por '+method.trim()+' y que el pedido '+o.no+' será cerrado como VENTA?'))return;
-  let row=null;
-  if(currentUser?.central){
-    if(!o.centralId){alert('Este pedido no tiene una referencia central válida.');return}
-    const result=await SP_DB.rpc('sp_confirm_order_payment',{p_order_id:o.centralId,p_payment_method:method.trim(),p_notes:note.trim()});
-    if(result.error){alert('No se pudo registrar la venta: '+result.error.message);return}
-    row=result.data?.[0]||null;
+  const key=String(no||'').trim();
+  if(!key)return;
+  if(SP_PAYMENT_CONFIRMING.has(key)){alert('Estamos procesando el pago de este pedido. Espera un momento.');return}
+  SP_PAYMENT_CONFIRMING.add(key);
+  const btns=[...document.querySelectorAll('button[data-no]')].filter(b=>String(b.dataset.no)===key&&String(b.getAttribute('onclick')||'').includes('confirmOrderPayment'));
+  btns.forEach(b=>{b.disabled=true;b.textContent='⏳ Procesando pago…'});
+  try{
+    if(!can('allowOrders')){alert('Tu usuario no tiene permiso para confirmar pagos.');return}
+    const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
+    const o=orders.find(x=>String(x.no)===key);
+    if(!o){alert('Pedido no encontrado.');return}
+    if(String(o.paymentStatus||'').toLowerCase()==='pagado'){
+      alert('Este pedido ya está pagado. No se registrará otro pago.');
+      adminOrders();
+      return;
+    }
+    const method=prompt('Confirma el medio de pago recibido:\n\n1. Efectivo\n2. Nequi\n3. Bancolombia\n4. Tarjeta\n5. Otro',o.pay||'Efectivo');
+    if(method===null||!method.trim())return;
+    const note=prompt('Nota de pago (opcional):','Pago recibido y pedido entregado')||'';
+    if(!confirm('¿Confirmas que el pago fue recibido por '+method.trim()+' y que el pedido '+o.no+' será cerrado como VENTA?'))return;
+    let row=null;
+    if(currentUser?.central){
+      if(!o.centralId){alert('Este pedido no tiene una referencia central válida.');return}
+      const result=await SP_DB.rpc('sp_confirm_order_payment',{p_order_id:o.centralId,p_payment_method:method.trim(),p_notes:note.trim()});
+      if(result.error){alert('No se pudo registrar la venta: '+result.error.message);return}
+      row=result.data?.[0]||null;
+      if(String(row?.payment_status||'').toLowerCase()!=='pagado'){
+        alert('No se confirmó el pago en el sistema central. No se marcará como pagado localmente.');
+        return;
+      }
+    }
+    o.pay=row?.payment_method||method.trim();
+    o.paymentStatus='pagado';
+    o.status=row?.status||'entregado';
+    o.updated=new Date().toISOString();
+    const sale=sales.find(s=>String(s.no)===String(o.no));
+    if(sale){sale.pay=o.pay;sale.paymentStatus='pagado';}
+    localStorage.setItem(ORDERS,JSON.stringify(orders));
+    save();
+    auditLog('Pago recibido','Pedido '+o.no+' · '+o.pay+' · '+money(Number(row?.total??o.total??0))+(note.trim()?' · '+note.trim():''),o.no);
+    alert('✅ VENTA REGISTRADA\n\nPedido: '+o.no+'\nTotal: '+money(Number(row?.total??o.total??0))+'\nPago: '+o.pay+'\nEstado: PAGADO · ENTREGADO');
+    await adminOrders();
+  }catch(e){
+    console.error('Error al confirmar pago:',e);
+    alert('No se pudo completar la confirmación. Verifica el estado del pedido antes de intentarlo otra vez.');
+  }finally{
+    SP_PAYMENT_CONFIRMING.delete(key);
+    btns.forEach(b=>{b.disabled=false});
   }
-  o.pay=row?.payment_method||method.trim(); o.paymentStatus=row?.payment_status||'pagado'; o.status=row?.status||'entregado'; o.updated=new Date().toISOString();
-  const sale=sales.find(s=>String(s.no)===String(o.no)); if(sale){sale.pay=o.pay;sale.paymentStatus='pagado';}
-  save(); auditLog('Pago recibido','Pedido '+o.no+' · '+o.pay+' · '+money(Number(o.total||row?.total||0)),o.no);
-  alert('✅ VENTA REGISTRADA\n\nPedido: '+o.no+'\nTotal: '+money(Number(row?.total||o.total||0))+'\nPago: '+o.pay+'\nEstado: ENTREGADO'); adminOrders();
 }
 async function ensureCentralAdminSession(){
   if(!SP_DB_ON)return false;
