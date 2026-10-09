@@ -1219,7 +1219,10 @@ async function submitLogin(){
       if(central){
         currentUser=central;
         sessionStorage.setItem(SESSION,JSON.stringify(currentUser));
-        if(currentUser.role==='admin') adminProducts();
+        if(currentUser.role==='admin'){
+          try{await spCentralAdminList();}catch(e){console.warn('No se pudo sincronizar la lista de usuarios al entrar:',e)}
+          adminProducts();
+        }
         else if(currentUser.allowOrders) adminOrders();
         else if(currentUser.allowInventory) adminInventory();
         else if(currentUser.allowCash) employeeCash();
@@ -1233,7 +1236,10 @@ async function submitLogin(){
   const pinHash=await spSha256(pin);
   currentUser={...u,pinHash,allowCash:u.allowCash!==false,central:false};
   sessionStorage.setItem(SESSION,JSON.stringify(currentUser));
-  if(u.role==='admin')adminProducts();
+  if(u.role==='admin'){
+    if(SP_DB_ON){try{await spCentralAdminList();}catch(e){console.warn('No se pudo sincronizar la lista central de usuarios:',e)}}
+    adminProducts();
+  }
   else if(u.allowOrders)adminOrders();
   else if(u.allowInventory)adminInventory();
   else if(u.allowCash!==false)employeeCash();
