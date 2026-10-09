@@ -1996,13 +1996,15 @@ async function adminOrders(){
         : null;
       const localPin = localAdmin?.pin || currentUser?.pin;
       const localUser = localAdmin?.user || currentUser?.user;
-      if(currentUser?.central){
-        ({data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders'));
-      }else if(currentUser?.role==='admin' && localUser && localPin){
+      if(currentUser?.role==='admin' && localUser && localPin){
+        // Para el dueño/Admin, el acceso por usuario + PIN es la vía principal.
+        // Así una sesión central antigua o restaurada no puede dejar Pedidos en modo local.
         ({data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders_pin',{
           p_username:localUser,
           p_pin:localPin
         }));
+      }else if(currentUser?.central){
+        ({data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders'));
       }else{
         throw new Error('No hay credenciales de administrador disponibles para sincronizar pedidos.');
       }
