@@ -1278,7 +1278,13 @@ async function submitLogin(){
         else {alert('Este usuario no tiene permisos asignados.');logoutUser();}
         return;
       }
-    }catch(e){console.warn('Acceso central por PIN no disponible; se intenta respaldo local:',e)}
+    }catch(e){
+      console.warn('Acceso central por PIN no disponible:',e);
+      alert('Supabase no pudo validar el inicio de sesión. Por seguridad, no se abrirá una sesión local que luego no pueda sincronizar pedidos. Verifica el acceso central del dueño e inténtalo de nuevo.');
+      return;
+    }
+    alert('Supabase no reconoció esas credenciales del usuario. No se abrió una sesión local porque no podría sincronizar pedidos.');
+    return;
   }
   const u=users.find(x=>String(x.user||'').toLowerCase()===user.toLowerCase() && x.pin===pin && x.active!==false);
   if(!u){alert('Usuario o PIN incorrectos.');return}
