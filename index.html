@@ -953,23 +953,14 @@ async function setOrderStatus(no,status,stayDetail=false){
     let result=null;
     try{
       if(currentUser?.user && currentUser?.pinHash){
-        // El dueño/admin usa la RPC compatible con credenciales locales del propietario.
-        // Los empleados conservan la RPC de hash y permisos de pedidos.
-        if(String(currentUser.role||'').toLowerCase()==='admin'){
-          result=await SP_DB.rpc('sp_update_order_status_pin',{
-            p_username:currentUser.user,
-            p_pin:currentUser.pinHash,
-            p_order_id:o.centralId,
-            p_status:status
-          });
-        }else{
-          result=await SP_DB.rpc('sp_update_order_status_staff_hash',{
-            p_username:currentUser.user,
-            p_pin_sha256:currentUser.pinHash,
-            p_order_id:o.centralId,
-            p_status:status
-          });
-        }
+        // Usar la RPC que acepta el hash de sesión y valida tanto al dueño como
+        // a empleados autorizados. Evita depender de la etiqueta de rol del navegador.
+        result=await SP_DB.rpc('sp_update_order_status_pin',{
+          p_username:currentUser.user,
+          p_pin:currentUser.pinHash,
+          p_order_id:o.centralId,
+          p_status:status
+        });
       }else{
         alert('No se pudo sincronizar el estado: la sesión no tiene credenciales válidas para Supabase. No se guardó el cambio.');return;
       }
