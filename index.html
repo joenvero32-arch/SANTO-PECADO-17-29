@@ -1314,7 +1314,7 @@ async function saveEmployee(id){
   if(!isAdmin())return; const u=users.find(x=>String(x.id)===String(id)); if(!u)return;
   const name=document.getElementById('eu_name').value.trim();
   const pin=document.getElementById('eu_pin').value.trim();
-  if(!name||!pin){alert('Completa nombre y PIN.');return}
+  if(!name){alert('Completa el nombre.');return}
   const allowOrders=document.getElementById('eu_orders').checked;
   const allowInventory=document.getElementById('eu_inventory').checked;
   const allowCash=document.getElementById('eu_cash').checked;
@@ -1322,9 +1322,15 @@ async function saveEmployee(id){
   if(SP_DB_ON){
     try{
       const pinHash=currentUser.pinHash||await spSha256(currentUser.pin||'');
-      const {error}=await SP_DB.rpc('sp_local_user_upsert',{p_admin_username:currentUser.user||'admin',p_admin_pin_sha256:pinHash,p_id:u.id,p_username:u.user,p_full_name:name,p_pin_sha256:await spSha256(pin),p_role:'employee',p_can_manage_orders:allowOrders,p_can_manage_inventory:allowInventory,p_can_manage_cash:allowCash,p_active:true});
+      const {data,error}=await SP_DB.rpc('sp_local_user_upsert',{
+        p_admin_username:currentUser.user||'admin',p_admin_pin_sha256:pinHash,p_id:u.id,
+        p_username:u.user,p_full_name:name,p_pin_sha256:pin?await spSha256(pin):'',
+        p_role:'employee',p_can_manage_orders:allowOrders,p_can_manage_inventory:allowInventory,
+        p_can_manage_cash:allowCash,p_active:true
+      });
       if(error)throw error;
-      u.name=name;u.pin=pin;u.allowOrders=allowOrders;u.allowInventory=allowInventory;u.allowCash=allowCash;u.active=true;u.pinHash=await spSha256(pin);
+      u.name=name;u.allowOrders=allowOrders;u.allowInventory=allowInventory;u.allowCash=allowCash;u.active=true;
+      if(pin){u.pin=pin;u.pinHash=await spSha256(pin);}
       localStorage.setItem(USERS,JSON.stringify(users));
       auditLog('Empleado modificado',u.name+' · permisos actualizados');
       alert('Permisos guardados y sincronizados.');
@@ -1332,7 +1338,8 @@ async function saveEmployee(id){
     }catch(e){alert('No se pudo sincronizar el usuario: '+(e.message||e));}
     return;
   }
-  u.name=name;u.pin=pin;u.allowOrders=allowOrders;u.allowInventory=allowInventory;u.allowCash=allowCash;u.active=true;
+  u.name=name;u.allowOrders=allowOrders;u.allowInventory=allowInventory;u.allowCash=allowCash;u.active=true;
+  if(pin){u.pin=pin;u.pinHash=await spSha256(pin);}
   localStorage.setItem(USERS,JSON.stringify(users));auditLog('Empleado modificado',u.name+' · permisos actualizados');alert('Permisos guardados.');adminUsers();
 }
 async function deleteEmployee(id){
