@@ -419,7 +419,35 @@ function requirePermission(permission){
   syncCurrentUserPermissions();
   if(!can(permission)){alert('Tu usuario no tiene permiso para realizar esta acción.');return false}
   return true
-} function auditLog(action,details,orderNo=''){const entry={date:new Date().toISOString(),action,details,orderNo:orderNo||'',user:currentUser?currentUser.user:'sistema',name:currentUser?currentUser.name:'Sistema',role:currentUser?currentUser.role:'system'};audit.unshift(entry);audit=audit.slice(0,1000);localStorage.setItem(AUDIT,JSON.stringify(audit));try{if(SP_DB_ON&&SP_DB){SP_DB.auth.getUser().then(({data,error})=>{if(error||!data?.user)return;const entityType=/caja|pago|venta|nómina|gasto/i.test(String(action))?'cash_sales':/pedido|orden|entregado/i.test(String(action))?'order':/inventario|stock|salida|entrada|ajuste/i.test(String(action))?'inventory':'system';return SP_DB.from('audit_logs').insert({user_id:data.user.id,action:String(action||'Acción'),entity_type:entityType,entity_id:null,details:{source:'app_auditLog',details:String(details||''),order_number:String(orderNo||''),app_user:entry.user,app_name:entry.name,app_role:entry.role,occurred_at:entry.date}}).then(({error:e})=>{if(e)console.warn('Auditoría central no guardada:',e.message)})}).catch(e=>console.warn('Auditoría central pendiente:',e.message))}}catch(e){console.warn('Auditoría central pendiente:',e.message)}} function askReason(label){const r=prompt(label||'Indica el motivo:');if(r===null)return null;const v=r.trim();if(!v){alert('El motivo es obligatorio. No se realizó el cambio.');return null}return v;}
+} function auditLog(action,details,orderNo=''){
+  const entry={date:new Date().toISOString(),action,details,orderNo:orderNo||'',user:currentUser?currentUser.user:'sistema',name:currentUser?currentUser.name:'Sistema',role:currentUser?currentUser.role:'system'};
+  audit.unshift(entry);audit=audit.slice(0,1000);localStorage.setItem(AUDIT,JSON.stringify(audit));
+  // El acceso por PIN local no crea una sesión auth.uid(); en ese caso se valida el PIN mediante RPC segura.
+  try{
+    if(SP_DB_ON&&SP_DB&&currentUser){
+      const payload={source:'app_auditLog',details:String(details||''),order_number:String(orderNo||''),app_user:entry.user,app_name:entry.name,app_role:entry.role,occurred_at:entry.date};
+      const entityType=/caja|pago|venta|nómina|gasto/i.test(String(action))?'cash_sales':/pedido|orden|entregado/i.test(String(action))?'order':/inventario|stock|salida|entrada|ajuste/i.test(String(action))?'inventory':'system';
+      (async()=>{
+        try{
+          const {data:{user},error}=await SP_DB.auth.getUser();
+          if(!error&&user){
+            const {error:insertError}=await SP_DB.from('audit_logs').insert({user_id:user.id,action:String(action||'Acción'),entity_type:entityType,entity_id:null,details:payload});
+            if(!insertError)return;
+            console.warn('Auditoría auth directa no guardada; se intentará RPC PIN:',insertError.message);
+          }
+        }catch(e){console.warn('Auditoría auth directa no disponible; se intentará RPC PIN.',e.message)}
+        try{
+          let pinHash=currentUser.pinHash||'';
+          if(!pinHash&&currentUser.pin)pinHash=await spSha256(currentUser.pin);
+          if(!pinHash||!currentUser.user){console.warn('Auditoría central pendiente: falta credencial PIN válida para',entry.user);return}
+          const {data,error}=await SP_DB.rpc('sp_log_audit_by_pin',{p_username:String(currentUser.user),p_pin_sha256:String(pinHash),p_action:String(action||'Acción'),p_entity_type:entityType,p_entity_id:null,p_details:payload});
+          if(error)throw error;
+          if(data!==true)console.warn('Auditoría central rechazada: el PIN no se validó para',entry.user);
+        }catch(e){console.warn('Auditoría central no guardada:',e.message||e)}
+      })();
+    }
+  }catch(e){console.warn('Auditoría central pendiente:',e.message||e)}
+} function askReason(label){const r=prompt(label||'Indica el motivo:');if(r===null)return null;const v=r.trim();if(!v){alert('El motivo es obligatorio. No se realizó el cambio.');return null}return v;}
 function startEmployeeOrder(){
   if(!requirePermission('allowOrders')||!requirePermission('allowCash'))return;
   cart=[];
