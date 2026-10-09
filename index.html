@@ -1165,44 +1165,89 @@ async function submitCentralLogin(){
   if(isAdmin()) adminProducts(); else if(currentUser.allowOrders) adminOrders(); else if(currentUser.allowInventory) adminInventory(); else {alert('Este usuario no tiene permisos asignados.');await logoutCentralUser();}
 }
 async function logoutCentralUser(){if(SP_DB_ON) await SP_DB.auth.signOut();logoutUser()}
+async function spSha256(value){
+  const data=new TextEncoder().encode(String(value||''));
+  const hash=await crypto.subtle.digest('SHA-256',data);
+  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function spLocalUserLogin(user,pin){
+  if(!SP_DB_ON)return null;
+  const pinHash=await spSha256(pin);
+  const {data,error}=await SP_DB.rpc('sp_local_user_login',{p_username:user,p_pin_sha256:pinHash});
+  if(error)throw error;
+  const row=Array.isArray(data)?data[0]:data;
+  if(!row)return null;
+  return {...row,user:row.username,name:row.full_name,allowOrders:!!row.can_manage_orders,allowInventory:!!row.can_manage_inventory,allowCash:!!row.can_manage_cash,pinHash,central:true};
+}
+async function spCentralAdminList(){
+  if(!SP_DB_ON||!currentUser)return false;
+  const pinHash=currentUser.pinHash||await spSha256(currentUser.pin||'');
+  if(!pinHash)return false;
+  const {data,error}=await SP_DB.rpc('sp_local_users_list',{p_admin_username:currentUser.user||'admin',p_admin_pin_sha256:pinHash});
+  if(error)throw error;
+  const rows=Array.isArray(data)?data:[];
+  const localEmployees=users.filter(u=>u.role!=='admin' && String(u.user||'').toLowerCase()!=='prueba');
+  const centralHasEmployees=rows.some(u=>u.role==='employee');
+  if(!centralHasEmployees && localEmployees.length){
+    for(const u of localEmployees){
+      const saved=await SP_DB.rpc('sp_local_user_upsert',{
+        p_admin_username:currentUser.user||'admin',p_admin_pin_sha256:pinHash,p_id:null,
+        p_username:u.user,p_full_name:u.name,p_pin_sha256:await spSha256(u.pin||''),
+        p_role:'employee',p_can_manage_orders:!!u.allowOrders,p_can_manage_inventory:!!u.allowInventory,
+        p_can_manage_cash:u.allowCash!==false,p_active:true
+      });
+      if(saved.error)throw saved.error;
+    }
+    const again=await SP_DB.rpc('sp_local_users_list',{p_admin_username:currentUser.user||'admin',p_admin_pin_sha256:pinHash});
+    if(again.error)throw again.error;
+    rows.splice(0,rows.length,...(Array.isArray(again.data)?again.data:[]));
+  }
+  users=rows.map(u=>({id:u.id,user:u.username,name:u.full_name,pin:'',pinHash:'',role:u.role,allowOrders:!!u.can_manage_orders,allowInventory:!!u.can_manage_inventory,allowCash:!!u.can_manage_cash,active:u.active!==false}));
+  users=users.filter(u=>String(u.user||'').toLowerCase()!=='prueba');
+  const admin=users.find(u=>u.role==='admin'&&String(u.user).toLowerCase()==='admin');
+  if(admin){admin.pin=currentUser.pin||'';admin.pinHash=pinHash;}
+  localStorage.setItem(USERS,JSON.stringify(users));
+  return true;
+}
 async function submitLogin(){
   const user=(document.getElementById('login_user')?.value||'').trim();
   const pin=(document.getElementById('login_pin')?.value||'').trim();
   if(!user||!pin){alert('Completa usuario y PIN.');return}
-  const u=users.find(x=>x.user.toLowerCase()===user.toLowerCase() && x.pin===pin);
-  if(!u){alert('Usuario o PIN incorrectos.');return}
-
-  // El PIN local es el acceso de la aplicación. No debe bloquearse porque
-  // la sesión central de Supabase tarde en restaurarse o no esté disponible.
-  // Si existe una sesión central persistida, la recuperamos automáticamente.
-  currentUser={...u,allowCash:u.allowCash!==false,central:false};
-  if(u.role==='admin' && SP_DB_ON){
+  if(SP_DB_ON){
     try{
-      const {data:{session}}=await SP_DB.auth.getSession();
-      if(session?.user?.id){
-        const {data:profile,error}=await SP_DB.from('app_users').select('*').eq('id',session.user.id).maybeSingle();
-        if(!error&&profile&&profile.active!==false&&profile.role==='admin'){
-          currentUser={...currentUser,...profile,user:profile.username||u.user,name:profile.full_name||u.name,allowOrders:true,allowInventory:true,allowCash:true,central:true};
-        }
+      const central=await spLocalUserLogin(user,pin);
+      if(central){
+        currentUser=central;
+        sessionStorage.setItem(SESSION,JSON.stringify(currentUser));
+        if(currentUser.role==='admin') adminProducts();
+        else if(currentUser.allowOrders) adminOrders();
+        else if(currentUser.allowInventory) adminInventory();
+        else if(currentUser.allowCash) employeeCash();
+        else {alert('Este usuario no tiene permisos asignados.');logoutUser();}
+        return;
       }
-    }catch(e){console.warn('No se pudo restaurar la sesión central; se mantiene el acceso por PIN:',e)}
+    }catch(e){console.warn('Acceso central por PIN no disponible; se intenta respaldo local:',e)}
   }
+  const u=users.find(x=>String(x.user||'').toLowerCase()===user.toLowerCase() && x.pin===pin && x.active!==false);
+  if(!u){alert('Usuario o PIN incorrectos.');return}
+  const pinHash=await spSha256(pin);
+  currentUser={...u,pinHash,allowCash:u.allowCash!==false,central:false};
   sessionStorage.setItem(SESSION,JSON.stringify(currentUser));
-
-  if(u.role==='admin'){
-    adminProducts();
-    return;
-  }
-  if(u.allowOrders) adminOrders();
-  else if(u.allowInventory) adminInventory();
-  else if(u.allowCash!==false) employeeCash();
+  if(u.role==='admin')adminProducts();
+  else if(u.allowOrders)adminOrders();
+  else if(u.allowInventory)adminInventory();
+  else if(u.allowCash!==false)employeeCash();
   else {alert('Este usuario no tiene permisos asignados.');logoutUser();}
 }
-function adminUsers(){
+async function adminUsers(){
   if(!isAdmin()){alert('Solo el administrador o dueño puede administrar usuarios.');return}
+  if(SP_DB_ON){
+    try{await spCentralAdminList();}catch(e){console.warn('Usuarios centrales no disponibles; se conserva la lista local:',e)}
+  }
+  users=users.filter(u=>String(u.user||'').toLowerCase()!=='prueba');
   document.getElementById('panel').innerHTML=`
     <div class="panelHead"><h2>👥 Usuarios y permisos</h2><button class="close" onclick="adminProducts()">✕</button></div>
-    <div class="notice" style="margin-top:14px">El administrador o dueño es el único que puede modificar productos, precios, categorías, toppings, configuración y permisos. A cada empleado puedes autorizarle pedidos y/o entradas de inventario.</div>
+    <div class="notice" style="margin-top:14px">Los trabajadores son usuarios transitorios. Tú puedes crear, cambiar permisos o desactivar a quien esté trabajando. Los usuarios operativos se sincronizan con Supabase; <b>Prueba</b> no es operativo.</div>
     ${navTabs('users')}
     <button class="primary" onclick="newEmployee()">＋ Nuevo empleado</button>
     <div style="margin-top:14px">${users.map(u=>`<div class="adminItem"><div class="adminTop"><div class="adminName">${esc(u.name)} </div><span class="muted">${u.role==='admin'?'ADMINISTRADOR / DUEÑO':'EMPLEADO'}</span></div><div class="muted">Usuario: <b>${esc(u.user)}</b> · ${u.role==='admin'?'Acceso total':`Pedidos: ${u.allowOrders?'Sí':'No'} · Inventario: ${u.allowInventory?'Sí':'No'} · Caja: ${u.allowCash!==false?'Sí':'No'}`}</div>${u.role!=='admin'?`<div class="adminActions"><button class="mini" onclick="editEmployee('${u.id}')">✏️ Permisos</button><button class="mini" onclick="deleteEmployee('${u.id}')">🗑️ Eliminar</button></div>`:''}</div>`).join('')}</div>
@@ -1222,18 +1267,32 @@ function newEmployee(){
     <div class="notice" style="margin-top:12px"><b>PERMISOS</b></div>
     <label class="adminItem" style="display:block;cursor:pointer"><input id="un_orders" type="checkbox" style="width:20px;height:20px;vertical-align:middle;margin-right:10px"> 📋 Gestionar pedidos y cambiar estados</label>
     <label class="adminItem" style="display:block;cursor:pointer"><input id="un_inventory" type="checkbox" style="width:20px;height:20px;vertical-align:middle;margin-right:10px"> 📦 Ingresar y gestionar inventario</label>
-    <label class="adminItem" style="display:block;cursor:pointer"><input id="un_cash" type="checkbox" checked style="width:20px;height:20px;vertical-align:middle;margin-right:10px"> 💵 Abrir, operar y cerrar su caja</label>
+    <label class="adminItem" style="display:block;cursor:pointer"><input id="un_cash" type="checkbox" style="width:20px;height:20px;vertical-align:middle;margin-right:10px"> 💵 Abrir, operar y cerrar su caja</label>
     <div class="modalBtns"><button class="primary" onclick="saveNewEmployee()">Guardar empleado</button><button class="secondary" onclick="adminUsers()">Cancelar</button></div>`;
 }
-function saveNewEmployee(){
+async function saveNewEmployee(){
   if(!isAdmin())return;
   const name=document.getElementById('un_name').value.trim();
   const user=document.getElementById('un_user').value.trim();
   const pin=document.getElementById('un_pin').value.trim();
   if(!name||!user||!pin){alert('Completa nombre, usuario y PIN.');return}
-  if(users.some(x=>x.user.toLowerCase()===user.toLowerCase())){alert('Ese usuario ya existe.');return}
-  users.push({id:'u_'+Date.now(),user,name,pin,role:'employee',allowOrders:document.getElementById('un_orders').checked,allowInventory:document.getElementById('un_inventory').checked,allowCash:document.getElementById('un_cash').checked});
-  localStorage.setItem(USERS,JSON.stringify(users)); auditLog('Empleado creado',name+' · usuario '+user); alert('Empleado creado.'); adminUsers();
+  if(String(user).toLowerCase()==='admin'||String(user).toLowerCase()==='prueba'){alert('Ese usuario está reservado y no puede crearse.');return}
+  if(users.some(x=>x.active!==false&&String(x.user).toLowerCase()===user.toLowerCase())){alert('Ese usuario ya existe.');return}
+  const row={user,name,pin,role:'employee',allowOrders:document.getElementById('un_orders').checked,allowInventory:document.getElementById('un_inventory').checked,allowCash:document.getElementById('un_cash').checked,active:true};
+  if(SP_DB_ON){
+    try{
+      const pinHash=currentUser.pinHash||await spSha256(currentUser.pin||'');
+      const {data,error}=await SP_DB.rpc('sp_local_user_upsert',{p_admin_username:currentUser.user||'admin',p_admin_pin_sha256:pinHash,p_id:null,p_username:user,p_full_name:name,p_pin_sha256:await spSha256(pin),p_role:'employee',p_can_manage_orders:row.allowOrders,p_can_manage_inventory:row.allowInventory,p_can_manage_cash:row.allowCash,p_active:true});
+      if(error)throw error;
+      row.id=data?.id||('u_'+Date.now());
+      row.pinHash=await spSha256(pin);
+    }catch(e){alert('No se pudo guardar el usuario en Supabase: '+(e.message||e));return}
+  }else row.id='u_'+Date.now();
+  users.push(row);
+  localStorage.setItem(USERS,JSON.stringify(users));
+  auditLog('Empleado creado',name+' · usuario '+user);
+  alert('Empleado creado y sincronizado.');
+  adminUsers();
 }
 function editEmployee(id){
   if(!isAdmin())return; const u=users.find(x=>x.id===id); if(!u)return;
@@ -1251,17 +1310,47 @@ function editEmployee(id){
     <label class="adminItem" style="display:block;cursor:pointer"><input id="eu_cash" type="checkbox" style="width:20px;height:20px;vertical-align:middle;margin-right:10px" ${u.allowCash!==false?'checked':''}> 💵 Abrir, operar y cerrar su caja</label>
     <div class="modalBtns"><button class="primary" onclick="saveEmployee('${u.id}')">Guardar cambios</button><button class="secondary" onclick="adminUsers()">Cancelar</button></div>`;
 }
-function saveEmployee(id){
-  if(!isAdmin())return; const u=users.find(x=>x.id===id); if(!u)return;
+async function saveEmployee(id){
+  if(!isAdmin())return; const u=users.find(x=>String(x.id)===String(id)); if(!u)return;
   const name=document.getElementById('eu_name').value.trim();
   const pin=document.getElementById('eu_pin').value.trim();
   if(!name||!pin){alert('Completa nombre y PIN.');return}
-  u.name=name; u.pin=pin; u.allowOrders=document.getElementById('eu_orders').checked; u.allowInventory=document.getElementById('eu_inventory').checked; u.allowCash=document.getElementById('eu_cash').checked;
-  localStorage.setItem(USERS,JSON.stringify(users)); auditLog('Empleado modificado',u.name+' · permisos actualizados'); alert('Permisos guardados.'); adminUsers();
+  const allowOrders=document.getElementById('eu_orders').checked;
+  const allowInventory=document.getElementById('eu_inventory').checked;
+  const allowCash=document.getElementById('eu_cash').checked;
+  if(String(u.user).toLowerCase()==='admin'){alert('El administrador se gestiona como dueño y no se puede editar aquí.');return}
+  if(SP_DB_ON){
+    try{
+      const pinHash=currentUser.pinHash||await spSha256(currentUser.pin||'');
+      const {error}=await SP_DB.rpc('sp_local_user_upsert',{p_admin_username:currentUser.user||'admin',p_admin_pin_sha256:pinHash,p_id:u.id,p_username:u.user,p_full_name:name,p_pin_sha256:await spSha256(pin),p_role:'employee',p_can_manage_orders:allowOrders,p_can_manage_inventory:allowInventory,p_can_manage_cash:allowCash,p_active:true});
+      if(error)throw error;
+      u.name=name;u.pin=pin;u.allowOrders=allowOrders;u.allowInventory=allowInventory;u.allowCash=allowCash;u.active=true;u.pinHash=await spSha256(pin);
+      localStorage.setItem(USERS,JSON.stringify(users));
+      auditLog('Empleado modificado',u.name+' · permisos actualizados');
+      alert('Permisos guardados y sincronizados.');
+      adminUsers();
+    }catch(e){alert('No se pudo sincronizar el usuario: '+(e.message||e));}
+    return;
+  }
+  u.name=name;u.pin=pin;u.allowOrders=allowOrders;u.allowInventory=allowInventory;u.allowCash=allowCash;u.active=true;
+  localStorage.setItem(USERS,JSON.stringify(users));auditLog('Empleado modificado',u.name+' · permisos actualizados');alert('Permisos guardados.');adminUsers();
 }
-function deleteEmployee(id){
-  if(!isAdmin())return; if(!confirm('¿Eliminar este empleado?'))return;
-  const removed=users.find(x=>x.id===id); users=users.filter(x=>x.id!==id); localStorage.setItem(USERS,JSON.stringify(users)); auditLog('Empleado eliminado',removed?.name||id); adminUsers();
+async function deleteEmployee(id){
+  if(!isAdmin())return; if(!confirm('¿Desactivar este empleado? Podrás crear otro usuario después sin tocar los demás módulos.'))return;
+  const removed=users.find(x=>String(x.id)===String(id)); if(!removed||removed.role==='admin')return;
+  if(SP_DB_ON){
+    try{
+      const pinHash=currentUser.pinHash||await spSha256(currentUser.pin||'');
+      const {error}=await SP_DB.rpc('sp_local_user_deactivate',{p_admin_username:currentUser.user||'admin',p_admin_pin_sha256:pinHash,p_id:removed.id});
+      if(error)throw error;
+    }catch(e){alert('No se pudo desactivar el usuario en Supabase: '+(e.message||e));return}
+  }
+  removed.active=false;
+  users=users.filter(x=>String(x.id)!==String(id));
+  localStorage.setItem(USERS,JSON.stringify(users));
+  auditLog('Empleado desactivado',removed.name||removed.user);
+  alert('Usuario desactivado.');
+  adminUsers();
 }
 function adminProducts(){
   if(!isAdmin()){alert('Solo el administrador o dueño tiene acceso a esta sección.');return}
