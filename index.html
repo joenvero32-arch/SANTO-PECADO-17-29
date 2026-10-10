@@ -148,9 +148,9 @@ async function spSyncCatalog(){
     const uniqueCats=[...new Map(catRows.map(x=>[x.name.toLowerCase(),x])).values()];
     await spUpsert('categories',uniqueCats);
     const catId={};uniqueCats.forEach(x=>catId[x.name]=x.id);
-    const productRows=(products||[]).map((p,i)=>({id:spMap('prod',p.id),category_id:catId[String(p.cat||'').trim()]||null,name:String(p.name||''),description:String(p.desc||''),price:Number(p.price||0),image_url:String(p.img||''),stock:Number(p.stock||0),minimum_stock:Number(p.minStock||0),active:p.active!==false,sort_order:p.sort_order??i}));
+    const productRows=(products||[]).map((p,i)=>({id:spMap('prod',p.id),category_id:catId[String(p.cat||'').trim()]||null,name:String(p.name||''),description:String(p.desc||''),price:Number(p.price||0),image_url:String(p.img||''),active:p.active!==false,sort_order:p.sort_order??i}));
     await spUpsert('products',productRows);
-    const toppingRows=(toppings||[]).map((t,i)=>({id:spMap('top',t.id),name:String(t.name||''),description:String(t.description||''),price:Number(t.price||0),unit:String(t.unit||'porciones'),consumption_per_addition:Number(t.usage||1),stock:Number(t.stock||0),minimum_stock:Number(t.minStock||0),active:t.active!==false,sort_order:i}));
+    const toppingRows=(toppings||[]).map((t,i)=>({id:spMap('top',t.id),name:String(t.name||''),description:String(t.description||''),price:Number(t.price||0),unit:String(t.unit||'porciones'),consumption_per_addition:Number(t.usage||1),active:t.active!==false,sort_order:i}));
     await spUpsert('toppings',toppingRows);
     SP_DB_LAST=new Date().toISOString();
     localStorage.setItem('sp_central_last_sync',SP_DB_LAST);
@@ -2364,7 +2364,7 @@ async function confirmOrderPayment(no){
     }
     o.pay=row?.payment_method||method.trim();
     o.paymentStatus='pagado';
-    o.status=row?.status||'entregado';
+    o.status=row?.status||o.status||'recibido';
     o.updated=new Date().toISOString();
     const sale=sales.find(s=>String(s.no)===String(o.no));
     if(sale){sale.pay=o.pay;sale.paymentStatus='pagado';}
