@@ -1948,22 +1948,46 @@ function printStatsReport(){
   w.document.close();
   w.onload=()=>{w.focus();setTimeout(()=>{try{w.print()}catch(e){console.warn('No se pudo imprimir Estadísticas:',e)}},300)};
 }
-function adminStats(){
+async function adminStats(){
   if(!isAdmin()){alert('Solo el administrador o dueño puede consultar estadísticas.');return}
+  const panel=document.getElementById('panel');
+  if(panel)panel.innerHTML='<div class="panelHead"><h2>📊 Estadísticas</h2></div><div class="notice">Consultando cifras centrales…</div>';
   const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
-  const period=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-i);const key=dayKey(d),ls=salesForDay(key);return {key,day:d.toLocaleDateString('es-CO',{weekday:'short',day:'2-digit',month:'2-digit'}),count:ls.length,total:ls.reduce((a,o)=>a+Number(o.total||0),0)}}).reverse();
-  const total7=period.reduce((a,x)=>a+x.total,0), count7=period.reduce((a,x)=>a+x.count,0);
-  const map={};sales.forEach(o=>(o.items||[]).forEach(x=>{const k=x.name||x.productName||x.product_name||products.find(p=>String(p.id)===String(x.id))?.name||'Producto';map[k]=(map[k]||0)+Number(x.qty||1)}));
-  const top=Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,10);
-  const periodKeys=new Set(period.map(x=>x.key));
-  const periodSales=sales.filter(o=>periodKeys.has(dayKey(o.date||o.created)));
-  const pay=periodSales.reduce((a,o)=>{const k=o.pay||o.payment_method||o.paymentMethod||'Sin especificar';a[k]=(a[k]||0)+Number(o.total||0);return a},{});
-  const delivered=orders.filter(o=>o.status==='entregado').length, pending=orders.filter(o=>!['entregado','cancelado'].includes(o.status||'recibido')).length;
+  let central=null,centralError='';
+  if(SP_DB_ON&&SP_DB){
+    try{
+      let pinHash=String(currentUser?.pinHash||'');
+      if(!pinHash&&currentUser?.pin)pinHash=await spSha256(currentUser.pin);
+      if(!pinHash||!currentUser?.user)throw new Error('No hay credenciales PIN de administrador para consultar estadísticas centrales.');
+      const {data,error}=await SP_DB.rpc('sp_get_stats_by_pin',{p_username:String(currentUser.user),p_pin_sha256:pinHash,p_days:7});
+      if(error)throw error;
+      if(!data||data.error)throw new Error(data?.error||'La consulta central no devolvió estadísticas.');
+      central=data;
+    }catch(e){centralError=e?.message||'No se pudo consultar la estadística central.';console.warn('Estadísticas centrales:',centralError)}
+  }else centralError='La conexión central no está disponible.';
+  const today=new Date();
+  const period=Array.from({length:7},(_,i)=>{const d=new Date(today);d.setDate(d.getDate()-(6-i));const key=dayKey(d);const row=central?.days?.find(x=>String(x.day).slice(0,10)===key);const ls=salesForDay(key);return {key,day:d.toLocaleDateString('es-CO',{weekday:'short',day:'2-digit',month:'2-digit'}),count:central?Number(row?.count||0):ls.length,total:central?Number(row?.total||0):ls.reduce((a,o)=>a+Number(o.total||0),0)}}); 
+  const total7=central?Number(central.sales_total||0):period.reduce((a,x)=>a+x.total,0);
+  const count7=central?Number(central.sales_count||0):period.reduce((a,x)=>a+x.count,0);
+  const top=central?(central.top_products||[]).map(x=>[x.name,Number(x.quantity||0)]):(()=>{
+    const map={};sales.forEach(o=>(o.items||[]).forEach(x=>{const k=x.name||x.productName||x.product_name||products.find(p=>String(p.id)===String(x.id))?.name||'Producto';map[k]=(map[k]||0)+Number(x.qty||1)}));
+    return Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  })();
+  const pay=central?Object.fromEntries((central.payments||[]).map(x=>[x.method,Number(x.total||0)])):period.reduce((a,x)=>a, Object.create(null));
+  if(!central){
+    const periodKeys=new Set(period.map(x=>x.key));
+    sales.filter(o=>periodKeys.has(dayKey(o.date||o.created))).forEach(o=>{const k=o.pay||o.payment_method||o.paymentMethod||'Sin especificar';pay[k]=(pay[k]||0)+Number(o.total||0)});
+  }
+  const delivered=orders.filter(o=>o.status==='entregado').length,pending=orders.filter(o=>!['entregado','cancelado'].includes(o.status||'recibido')).length;
+  const sourceNotice=central
+    ? '<div class="notice" style="margin:10px 0;border-color:rgba(32,212,122,.4)">✅ Cifras de ventas, productos y pagos consultadas desde Supabase.</div>'
+    : '<div class="notice" style="margin:10px 0;border-color:rgba(255,79,100,.45)">⚠️ No se pudieron consultar las estadísticas centrales. Se muestran cifras locales y no deben tomarse como conciliadas. '+esc(centralError)+'</div>';
   document.getElementById('panel').innerHTML=`<div class="panelHead"><div><div class="dashKicker">INTELIGENCIA DEL NEGOCIO</div><h2>📊 Estadísticas</h2></div><button class="close" onclick="adminDashboard()">✕</button></div>${navTabs('reports')}
-  <div class="statgrid dashGrid"><div class="stat"><small>Ventas · 7 días</small><b>${money(total7)}</b></div><div class="stat"><small>Pedidos · 7 días</small><b>${count7}</b></div><div class="stat"><small>Ticket promedio</small><b>${money(count7?total7/count7:0)}</b></div><div class="stat"><small>Clientes registrados</small><b>${customers.length}</b></div></div>
-  <div class="dashSection"><div class="dashSectionHead"><h3>📈 Ventas de los últimos 7 días</h3></div>${period.map(x=>`<div class="barRow"><span>${esc(x.day)}</span><b>${money(x.total)}</b><i><em style="width:${total7?Math.max(3,x.total/Math.max(...period.map(y=>y.total),1)*100):0}%"></em></i></div>`).join('')}</div>
-  <div class="dashSection"><div class="dashSectionHead"><h3>🔥 Productos más vendidos</h3></div>${top.map(([n,q])=>`<div class="alertRow"><span>${esc(n)}</span><b>${q} und.</b></div>`).join('')||'<div class="empty">Aún no hay ventas.</div>'}</div>
-  <div class="dashSection"><div class="dashSectionHead"><h3>💳 Ventas por medio de pago</h3></div>${Object.entries(pay).map(([k,v])=>`<div class="alertRow"><span>${esc(k)}</span><b>${money(v)}</b></div>`).join('')||'<div class="empty">Sin datos.</div>'}</div>
+  ${sourceNotice}
+  <div class="statgrid dashGrid"><div class="stat"><small>Ventas · 7 días</small><b>${money(total7)}</b></div><div class="stat"><small>Transacciones · 7 días</small><b>${count7}</b></div><div class="stat"><small>Ticket promedio</small><b>${money(count7?total7/count7:0)}</b></div><div class="stat"><small>Clientes registrados</small><b>${customers.length}</b></div></div>
+  <div class="dashSection"><div class="dashSectionHead"><h3>📈 Ventas de los últimos 7 días</h3></div>${period.map(x=>`<div class="barRow"><span>${esc(x.day)}</span><b>${money(x.total)}</b><i><em style="width:${Math.max(...period.map(y=>y.total),1)?Math.max(3,x.total/Math.max(...period.map(y=>y.total),1)*100):0}%"></em></i></div>`).join('')}</div>
+  <div class="dashSection"><div class="dashSectionHead"><h3>🔥 Productos más vendidos</h3></div>${top.map(([n,q])=>`<div class="alertRow"><span>${esc(n)}</span><b>${q} und.</b></div>`).join('')||'<div class="empty">Aún no hay ventas conciliadas para mostrar.</div>'}</div>
+  <div class="dashSection"><div class="dashSectionHead"><h3>💳 Ventas por medio de pago</h3></div>${Object.entries(pay).map(([k,v])=>`<div class="alertRow"><span>${esc(k)}</span><b>${money(v)}</b></div>`).join('')||'<div class="empty">Sin datos de pagos.</div>'}</div>
   <div class="statgrid dashGrid"><div class="stat"><small>Pedidos pendientes</small><b>${pending}</b></div><div class="stat"><small>Pedidos entregados</small><b>${delivered}</b></div><div class="stat"><small>Promociones activas</small><b>${activePromotions().length}</b></div><div class="stat"><small>Stock bajo</small><b>${products.filter(p=>Number(p.stock||0)<=Number(p.minStock||0)).length}</b></div></div>
   <div class="modalBtns"><button class="primary" onclick="printStatsReport()">🖨️ Imprimir estadísticas</button></div>`;
   document.getElementById('modal').classList.add('open');
@@ -2669,6 +2693,6 @@ function saveSettings(){
     }
   }catch(e){console.warn('Sincronización central pendiente.',e)}
 })();
-</script><script src="stats-nav-fix.js?v=20261010-audit-legacy-sync"></script><script src="comanda-fix.js?v=20261005-detail2"></script><script src="audit-inventory-fix.js?v=20261006-audit1"></script>
+</script><script src="stats-nav-fix.js?v=20261010-audit-stats-central"></script><script src="comanda-fix.js?v=20261005-detail2"></script><script src="audit-inventory-fix.js?v=20261006-audit1"></script>
 </body>
 </html>
