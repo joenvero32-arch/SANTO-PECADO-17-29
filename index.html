@@ -1997,8 +1997,20 @@ async function adminDomicilios(search=''){
   let orders=JSON.parse(localStorage.getItem(ORDERS)||'[]'),centralError='';
   if(SP_DB_ON){
     try{
-      if(!currentUser?.central&&!(await ensureCentralAdminSession()))throw new Error('Sesión central de administrador no encontrada.');
-      const {data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders');if(error)throw error;
+      let centralOrders,error;
+      const localAdmin = (!currentUser?.central && currentUser?.role==='admin')
+        ? ((Array.isArray(users)?users.find(x=>String(x.user||'').toLowerCase()===String(currentUser?.user||'').toLowerCase()):null)||currentUser)
+        : null;
+      const localPin = localAdmin?.pin || currentUser?.pin;
+      const localUser = localAdmin?.user || currentUser?.user;
+      if(currentUser?.role==='admin' && localUser && localPin){
+        ({data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders_pin',{p_username:localUser,p_pin:localPin}));
+      }else if(currentUser?.central){
+        ({data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders'));
+      }else{
+        throw new Error('No hay credenciales PIN de administrador para consultar domicilios centrales.');
+      }
+      if(error)throw error;
       const rows=Array.isArray(centralOrders)?centralOrders:[];
       const central=rows.map(o=>({no:o.order_number,centralId:o.id,name:o.customer_name||'',phone:o.customer_phone||'',type:o.order_type==='delivery'?'Domicilio':o.order_type==='pickup'?'Recoger':'Local',pay:o.payment_method||'',paymentStatus:o.payment_status||'pendiente',addr:o.address||'',obs:o.observations||'',total:Number(o.total||0),created:o.created_at,updated:o.updated_at,status:o.status||'recibido',driverId:o.driver_id||null,driverName:o.driver_name||'',driverPhone:o.driver_phone||'',statusHistory:[],detail:o.detail||''}));
       const oldByNo=new Map(orders.map(x=>[String(x.no),x]));orders=central.map(x=>({...oldByNo.get(String(x.no))||{},...x})).sort((a,b)=>new Date(b.created)-new Date(a.created));localStorage.setItem(ORDERS,JSON.stringify(orders));
@@ -2008,7 +2020,16 @@ async function adminDomicilios(search=''){
   const q=String(search||'').trim().toLowerCase();
   const list=all.filter(o=>!q||[o.no,o.name,o.phone,o.addr,o.address,o.driverName,o.status].join(' ').toLowerCase().includes(q));
   let drivers=JSON.parse(localStorage.getItem('sp_premium_drivers_v1')||'[]');
-  if(SP_DB_ON&&!centralError){try{const {data,error}=await SP_DB.rpc('sp_admin_delivery_drivers');if(error)throw error;if(Array.isArray(data)){drivers=data.map(d=>({id:d.id,name:d.name||'',phone:d.phone||'',active:d.active!==false}));localStorage.setItem('sp_premium_drivers_v1',JSON.stringify(drivers))}}catch(e){console.error('Error cargando domiciliarios centrales:',e)}}
+  if(SP_DB_ON&&!centralError){try{
+    let data=null,error=null;
+    if(currentUser?.central){({data,error}=await SP_DB.rpc('sp_admin_delivery_drivers'));}
+    else if(currentUser?.role==='admin'&&localUser&&localPin){
+      // La lista local conserva los domiciliarios ya descargados; el listado de pedidos se consulta por PIN central.
+      data=drivers;
+    }
+    if(error)throw error;
+    if(Array.isArray(data)){drivers=data.map(d=>({id:d.id,name:d.name||'',phone:d.phone||'',active:d.active!==false}));localStorage.setItem('sp_premium_drivers_v1',JSON.stringify(drivers))}
+  }catch(e){console.error('Error cargando domiciliarios centrales:',e)}}
   const unassigned=all.filter(o=>!o.driverId&&o.status!=='entregado').length,onWay=all.filter(o=>o.status==='camino').length,delivered=all.filter(o=>o.status==='entregado').length;
   const driverStats=drivers.map(d=>({d,count:all.filter(o=>o.driverId===d.id).length,del:all.filter(o=>o.driverId===d.id&&o.status==='entregado').length})).filter(x=>x.count).sort((a,b)=>b.count-a.count);
   document.getElementById('panel').innerHTML='<div class="dashGrid"><div class="dashCard"><span>Domicilios</span><b>'+all.length+'</b></div><div class="dashCard"><span>Sin asignar</span><b>'+unassigned+'</b></div><div class="dashCard"><span>En camino</span><b>'+onWay+'</b></div><div class="dashCard"><span>Entregados</span><b>'+delivered+'</b></div></div>'+(centralError?'<div class="empty" style="margin:10px 0;border:1px solid #6b2b2b;padding:10px">⚠️ '+esc(centralError)+'</div>':'')+'<div class="adminToolbar"><input id="domSearch" placeholder="Buscar domicilio..." value="'+esc(search)+'" oninput="adminDomicilios(this.value)"><button class="mini" onclick="newDriver()">＋ Nuevo domiciliario</button></div>'+'<div class="dashSection"><div class="dashSectionHead"><h3>🛵 Domiciliarios</h3><span class="muted">'+drivers.length+'</span></div>'+(drivers.map(d=>'<div class="adminItem"><div class="adminTop"><div><b>'+esc(d.name)+'</b></div><span class="'+(d.active?'ok':'muted')+'">'+(d.active?'Activo':'Inactivo')+'</span></div><div class="muted">📞 '+esc(d.phone||'-')+'</div><div class="adminActions"><button class="mini" onclick="toggleDriver(\''+d.id+'\')">'+(d.active?'Desactivar':'Activar')+'</button></div></div>').join('')||'<div class="empty">No hay domiciliarios registrados.</div>')+'</div>'+'<div class="dashSection"><div class="dashSectionHead"><h3>📦 Pedidos a domicilio</h3><span class="muted">'+list.length+' de '+all.length+'</span></div>'+(list.slice(0,50).map(o=>'<div class="adminItem"><div class="adminTop"><div><b>'+esc(o.no)+'</b> · '+esc(o.name||'Cliente')+'</div><span>'+statusLabel(o)+'</span></div><div class="muted">📞 '+esc(o.phone||'-')+' · 📍 '+esc(o.addr||o.address||'Sin dirección')+'</div><div class="muted">Domiciliario: <b>'+esc(o.driverName||'Sin asignar')+'</b>'+(o.outAt?' · Salió: '+new Date(o.outAt).toLocaleTimeString('es-CO'):'')+(o.deliveredAt?' · Entregado: '+new Date(o.deliveredAt).toLocaleTimeString('es-CO'):'')+'</div><div class="adminActions"><button class="mini" onclick="assignDriver(\''+o.no+'\')">🛵 Asignar</button>'+(o.status!=='camino'&&o.status!=='entregado'?(o.driverId?'<button class="mini" onclick="setOrderStatus(\''+o.no+'\',\'camino\')">🛵 En camino</button>':'<button class="mini" onclick="assignDriver(\''+o.no+'\')">🛵 Asignar primero</button>'):'')+(o.status==='camino'?'<button class="primary" onclick="markDelivered(\''+o.no+'\')">✅ Entregado</button>':'')+'</div></div>').join('')||'<div class="empty">No hay domicilios registrados en la central.</div>')+'</div>';
@@ -2693,6 +2714,6 @@ function saveSettings(){
     }
   }catch(e){console.warn('Sincronización central pendiente.',e)}
 })();
-</script><script src="stats-nav-fix.js?v=20261010-audit-stats-central"></script><script src="comanda-fix.js?v=20261005-detail2"></script><script src="audit-inventory-fix.js?v=20261006-audit1"></script>
+</script><script src="stats-nav-fix.js?v=20261010-domicilios-pin-read"></script><script src="comanda-fix.js?v=20261005-detail2"></script><script src="audit-inventory-fix.js?v=20261006-audit1"></script>
 </body>
 </html>
