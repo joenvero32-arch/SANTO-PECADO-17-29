@@ -1049,12 +1049,37 @@ function auditCategory(x){
 function auditCategoryLabel(cat){
   return {access:'🔐 Acceso',changes:'✏️ Cambio',cash:'💰 Caja/Ventas',orders:'📋 Pedido',inventory:'📦 Inventario'}[cat]||'✏️ Cambio';
 }
-function adminAudit(filter='all',search=''){
+async function syncLegacyAuditToCentral(){
+  try{
+    if(!SP_DB_ON||!SP_DB||!isAdmin()||!Array.isArray(audit)||!audit.length)return;
+    let pinHash=String(currentUser?.pinHash||'');
+    if(!pinHash&&currentUser?.pin)pinHash=await spSha256(currentUser.pin);
+    if(!pinHash||!currentUser?.user)return;
+    const entries=audit.slice(0,1000).map(x=>({
+      date:x?.date||'',
+      action:String(x?.action||'Acción'),
+      details:String(x?.details||''),
+      orderNo:String(x?.orderNo||''),
+      user:String(x?.user||'sistema'),
+      name:String(x?.name||'Sistema'),
+      role:String(x?.role||'system')
+    }));
+    const {data,error}=await SP_DB.rpc('sp_sync_legacy_audit_by_pin',{
+      p_username:String(currentUser.user),
+      p_pin_sha256:pinHash,
+      p_entries:entries
+    });
+    if(error)throw error;
+    console.info('Auditoría histórica sincronizada; nuevos registros centrales:',Number(data||0));
+  }catch(e){console.warn('No se pudo sincronizar el historial local de auditoría:',e?.message||e)}
+}
+async function adminAudit(filter='all',search=''){
   if(!isAdmin()){alert('Solo el administrador o dueño puede consultar Auditoría.');return}
   if(!sessionStorage.getItem('SP_AUDIT_VIEW_LOGGED')){sessionStorage.setItem('SP_AUDIT_VIEW_LOGGED','1');auditLog('Auditoría consultada','El administrador abrió el módulo de Auditoría');}
   // Al salir de Pedidos hacia Auditoría, cancelar la actualización automática pendiente
   // para evitar que el temporizador vuelva a dibujar Pedidos sobre esta pantalla.
   if(SP_ADMIN_ORDERS_REFRESH_TIMER){clearTimeout(SP_ADMIN_ORDERS_REFRESH_TIMER);SP_ADMIN_ORDERS_REFRESH_TIMER=null;}
+  await syncLegacyAuditToCentral();
   const all=Array.isArray(audit)?audit:[];
   const q=String(search||'').trim().toLowerCase();
   const list=all.filter(x=>{
@@ -2644,6 +2669,6 @@ function saveSettings(){
     }
   }catch(e){console.warn('Sincronización central pendiente.',e)}
 })();
-</script><script src="stats-nav-fix.js?v=20261010-audit-pin-rpc"></script><script src="comanda-fix.js?v=20261005-detail2"></script><script src="audit-inventory-fix.js?v=20261006-audit1"></script>
+</script><script src="stats-nav-fix.js?v=20261010-audit-legacy-sync"></script><script src="comanda-fix.js?v=20261005-detail2"></script><script src="audit-inventory-fix.js?v=20261006-audit1"></script>
 </body>
 </html>
