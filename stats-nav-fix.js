@@ -8,7 +8,7 @@
   let db=null, cache=[];
   const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   async function getDb(){if(db)return db;if(!window.supabase)return null;db=window.supabase.createClient(URL,KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});return db}
-  async function logAction(action,type,id){try{const d=await getDb();if(!d)return;const {data:{user}}=await d.auth.getUser();if(!user)return;await d.from('audit_logs').insert({user_id:user.id,action,entity_type:type||null,entity_id:id||null,details:{source:'administracion'}})}catch(e){console.warn('Auditoría:',e)}}
+  async function logAction(action,type,id){try{const d=await getDb();if(!d)return;let session=null;try{session=JSON.parse(sessionStorage.getItem('sp_premium_session_v1')||'null')}catch(_){}const details={source:'administracion',app_username:session?.user||'',app_name:session?.name||'',app_role:session?.role||'',record_id:id??null};if(session?.user&&session?.pinHash){const {data,error}=await d.rpc('sp_log_audit_by_pin',{p_username:String(session.user),p_pin_sha256:String(session.pinHash),p_action:String(action||'Acción'),p_entity_type:type||'administracion',p_entity_id:null,p_details:details});if(error)throw error;if(data!==true)console.warn('Auditoría central rechazada para',session.user);return}const {data:{user}}=await d.auth.getUser();if(!user)return;const {error}=await d.from('audit_logs').insert({user_id:user.id,action,entity_type:type||null,entity_id:null,details});if(error)throw error}catch(e){console.warn('Auditoría central:',e?.message||e)}}
   window.spAuditCentralLog=logAction;
   function wrap(){
     if(!window.SPAdmin||window.SPAdmin.__auditWrapped)return;
@@ -42,7 +42,7 @@
     const search=(document.getElementById('spAuditSearch')?.value||'').trim().toLowerCase();
     const action=document.getElementById('spAuditAction')?.value||'';
     const rows=cache.filter(x=>{
-      const user=x.app_users?.full_name||x.app_users?.username||'Usuario';
+      const user=x.app_users?.full_name||x.app_users?.username||x.details?.app_full_name||x.details?.app_name||x.details?.app_username||'Usuario';
       const hay=[x.action,moduleName(x.entity_type),user,JSON.stringify(x.details||{})].join(' ').toLowerCase();
       return (!type||x.entity_type===type)&&(!action||x.action===action)&&(!search||hay.includes(search));
     });
@@ -53,7 +53,7 @@
     if(summary)summary.innerHTML='<div class="spAuditStat"><small>Registros</small><br><b>'+cache.length+'</b></div><div class="spAuditStat"><small>Hoy</small><br><b>'+todayCount+'</b></div><div class="spAuditStat"><small>Módulos</small><br><b>'+modules+'</b></div>';
     if(!rows.length){body.innerHTML='<div class="spAuditEmpty">🔎 No hay registros que coincidan con los filtros.</div>';return}
     body.innerHTML='<div class="spAuditCount">Mostrando '+rows.length+' de '+cache.length+' registros</div>'+rows.map(x=>{
-      const u=x.app_users?.full_name||x.app_users?.username||'Usuario';
+      const u=x.app_users?.full_name||x.app_users?.username||x.details?.app_full_name||x.details?.app_name||x.details?.app_username||'Usuario';
       const m=moduleName(x.entity_type);
       const d=x.details&&typeof x.details==='object'?x.details:{};
       const detail=Object.entries(d).filter(([k])=>k!=='source').map(([k,v])=>esc(k)+': '+esc(typeof v==='object'?JSON.stringify(v):v)).join(' · ');
