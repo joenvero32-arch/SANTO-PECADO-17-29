@@ -163,7 +163,7 @@ async function spSyncCustomers(){
     await spUpsert('customers',rows);
   }catch(e){console.warn('Clientes aún no sincronizados:',e.message||e)}
 }
-window.SantoPecadoCentral={get connected(){return SP_DB_ON},get lastSync(){return SP_DB_LAST||localStorage.getItem('sp_central_last_sync')||''},sync:async()=>{await spSyncCatalog();await spSyncCustomers()}};
+window.SantoPecadoCentral={get db(){return SP_DB},get connected(){return SP_DB_ON&&!!SP_DB},get lastSync(){return SP_DB_LAST||localStorage.getItem('sp_central_last_sync')||''},rpc:async(name,args)=>{if(!SP_DB_ON||!SP_DB)throw new Error('Conexión central Supabase no disponible');return await SP_DB.rpc(name,args)},from:(table)=>{if(!SP_DB_ON||!SP_DB)throw new Error('Conexión central Supabase no disponible');return SP_DB.from(table)},sync:async()=>{await spSyncCatalog();await spSyncCustomers()}};
 window.loadPublicCatalog=async function(){
   try{
     let payload=null;
@@ -2718,6 +2718,6 @@ function saveSettings(){
     }
   }catch(e){console.warn('Sincronización central pendiente.',e)}
 })();
-</script><script src="stats-nav-fix.js?v=20261010-payment-daviplata-safe"></script><script src="comanda-fix.js?v=20261005-detail2"></script><script src="audit-inventory-fix.js?v=20261006-audit1"></script>
+</script><script src="stats-nav-fix.js?v=20261010-central-core1"></script><script src="comanda-fix.js?v=20261010-central-core1"></script><script src="audit-inventory-fix.js?v=20261010-central-core1"></script>
 </body>
 </html>
