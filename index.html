@@ -1998,12 +1998,13 @@ async function adminDomicilios(search=''){
   if(SP_DB_ON){
     try{
       let centralOrders,error;
-      const localAdmin = (!currentUser?.central && currentUser?.role==='admin')
+      const localAdmin = (currentUser?.role==='admin' || isAdmin())
         ? ((Array.isArray(users)?users.find(x=>String(x.user||'').toLowerCase()===String(currentUser?.user||'').toLowerCase()):null)||currentUser)
         : null;
       localPin = localAdmin?.pin || currentUser?.pin || '';
       localUser = localAdmin?.user || currentUser?.user || '';
-      if(currentUser?.role==='admin' && localUser && localPin){
+      // Priorizar siempre el PIN local validado, incluso si la sesión conserva la marca "central".
+      if(localUser && localPin && (isAdmin() || currentUser?.role==='admin')){
         ({data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders_pin',{p_username:localUser,p_pin:localPin}));
       }else if(currentUser?.central){
         ({data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders'));
@@ -2714,6 +2715,6 @@ function saveSettings(){
     }
   }catch(e){console.warn('Sincronización central pendiente.',e)}
 })();
-</script><script src="stats-nav-fix.js?v=20261010-domicilios-pin-read"></script><script src="comanda-fix.js?v=20261005-detail2"></script><script src="audit-inventory-fix.js?v=20261006-audit1"></script>
+</script><script src="stats-nav-fix.js?v=20261010-domicilios-pin-priority"></script><script src="comanda-fix.js?v=20261005-detail2"></script><script src="audit-inventory-fix.js?v=20261006-audit1"></script>
 </body>
 </html>
