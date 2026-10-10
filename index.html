@@ -2316,10 +2316,10 @@ async function confirmOrderPayment(no){
       adminOrders();
       return;
     }
-    const method=prompt('Confirma el medio de pago recibido:\n\n1. Efectivo\n2. Nequi\n3. Bancolombia\n4. Tarjeta\n5. Otro',o.pay||'Efectivo');
+    const method=prompt('Confirma el medio de pago recibido:\n\n1. Efectivo\n2. Nequi\n3. Bancolombia\n4. Daviplata / transferencia\n5. Tarjeta\n6. Otro',o.pay||'Efectivo');
     if(method===null||!method.trim())return;
     const note=prompt('Nota de pago (opcional):','Pago recibido y pedido entregado')||'';
-    if(!confirm('¿Confirmas que el pago fue recibido por '+method.trim()+' y que el pedido '+o.no+' será cerrado como VENTA?'))return;
+    if(!confirm('¿Confirmas que el pago del pedido '+o.no+' fue recibido por '+method.trim()+'? Se registrará una sola venta y se conservará el estado actual de preparación/entrega.'))return;
     let row=null;
     if(SP_DB_ON){
       if(!o.centralId){alert('Este pedido no tiene una referencia central válida. No se registrará el pago localmente.');return}
@@ -2372,7 +2372,7 @@ async function confirmOrderPayment(no){
     save();
     auditLog('Pago recibido','Pedido '+o.no+' · '+o.pay+' · '+money(Number(row?.total??o.total??0))+(note.trim()?' · '+note.trim():''),o.no);
     localStorage.setItem(paymentAuditKey,'1');
-    alert('✅ VENTA REGISTRADA\n\nPedido: '+o.no+'\nTotal: '+money(Number(row?.total??o.total??0))+'\nPago: '+o.pay+'\nEstado: PAGADO · ENTREGADO');
+    alert('✅ PAGO REGISTRADO\n\nPedido: '+o.no+'\nTotal: '+money(Number(row?.total??o.total??0))+'\nPago: '+o.pay+'\nPago: PAGADO\nEstado del pedido: '+(row?.status||o.status||'recibido'));
     await adminOrders();
   }catch(e){
     console.error('Error al confirmar pago:',e);
@@ -2718,6 +2718,6 @@ function saveSettings(){
     }
   }catch(e){console.warn('Sincronización central pendiente.',e)}
 })();
-</script><script src="stats-nav-fix.js?v=20261010-domicilios-exit-hash"></script><script src="comanda-fix.js?v=20261005-detail2"></script><script src="audit-inventory-fix.js?v=20261006-audit1"></script>
+</script><script src="stats-nav-fix.js?v=20261010-payment-daviplata-safe"></script><script src="comanda-fix.js?v=20261005-detail2"></script><script src="audit-inventory-fix.js?v=20261006-audit1"></script>
 </body>
 </html>
