@@ -64,7 +64,7 @@
     const d=await getDb(),body=document.getElementById('spAuditBody');
     if(!d){if(body)body.innerHTML='<div class="spAuditEmpty">No se pudo conectar con Supabase.</div>';return}
     if(body)body.innerHTML='<div class="spAuditEmpty">Cargando auditoría…</div>';
-    let session=null;try{session=JSON.parse(sessionStorage.getItem('sp_premium_session_v1')||'null')}catch(_){}if(!session?.user||!session?.pinHash){if(body)body.innerHTML='<div class="spAuditEmpty">La sesión administrativa no tiene credenciales PIN para consultar la auditoría central.</div>';return}const {data,error}=await d.rpc('sp_list_audit_by_pin',{p_username:String(session.user),p_pin_sha256:String(session.pinHash),p_limit:200});
+    let session=null;try{session=JSON.parse(sessionStorage.getItem('sp_premium_session_v1')||'null')}catch(_){}if(!session?.user||!session?.pinHash){if(body)body.innerHTML='<div class="spAuditEmpty">La sesión administrativa no tiene credenciales PIN para consultar la auditoría central.</div>';return}const {data,error}=await d.rpc('sp_list_audit_by_pin',{p_username:String(session.user),p_pin_sha256:String(session.pinHash),p_limit:500});
     if(error){if(body)body.innerHTML='<div class="spAuditEmpty">No se pudo cargar la auditoría: '+esc(error.message)+'</div>';return}
     cache=data||[];
     const sel=document.getElementById('spAuditAction');
