@@ -1051,6 +1051,7 @@ function auditCategoryLabel(cat){
 }
 function adminAudit(filter='all',search=''){
   if(!isAdmin()){alert('Solo el administrador o dueño puede consultar Auditoría.');return}
+  if(!sessionStorage.getItem('SP_AUDIT_VIEW_LOGGED')){sessionStorage.setItem('SP_AUDIT_VIEW_LOGGED','1');auditLog('Auditoría consultada','El administrador abrió el módulo de Auditoría');}
   // Al salir de Pedidos hacia Auditoría, cancelar la actualización automática pendiente
   // para evitar que el temporizador vuelva a dibujar Pedidos sobre esta pantalla.
   if(SP_ADMIN_ORDERS_REFRESH_TIMER){clearTimeout(SP_ADMIN_ORDERS_REFRESH_TIMER);SP_ADMIN_ORDERS_REFRESH_TIMER=null;}
