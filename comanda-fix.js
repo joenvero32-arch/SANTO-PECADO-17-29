@@ -16,16 +16,8 @@
     try{
       // Fuente de verdad para la comanda: RPC seguro que devuelve productos
       // y cantidades reales de toppings, sin depender de RLS del navegador.
-      if(!window.supabase){
-        await new Promise((resolve,reject)=>{
-          const sc=document.createElement('script');
-          sc.src=CDN;
-          sc.onload=resolve;
-          sc.onerror=reject;
-          document.head.appendChild(sc);
-        });
-      }
-      const db=window.supabase.createClient(URL,KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+      const db=window.SantoPecadoCentral?.db;
+      if(!db) throw new Error('Conexión central de Supabase no disponible');
       const {data,error}=await db.rpc('sp_get_kitchen_detail',{p_order_number:String(o.no)});
       if(!error && Array.isArray(data) && data.length){
         const grouped=new Map();
@@ -60,17 +52,8 @@
         if(error) console.warn('sp_get_kitchen_order:',error);
       }
 
-      if(!window.supabase){
-        await new Promise((resolve,reject)=>{
-          const sc=document.createElement('script');
-          sc.src=CDN;
-          sc.onload=resolve;
-          sc.onerror=reject;
-          document.head.appendChild(sc);
-        });
-      }
-
-      const db=window.supabase.createClient(URL,KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+      const db=window.SantoPecadoCentral?.db;
+      if(!db) throw new Error('Conexión central de Supabase no disponible');
       const {data,error}=await db.rpc('sp_get_kitchen_order',{p_order_number:String(no)});
       if(!error && Array.isArray(data) && data[0]) return data[0];
 
