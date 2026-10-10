@@ -7,7 +7,7 @@
   const KEY='sb_publishable_chFTmgoaIVvJSdpgTTuUSQ_fBNEq4WJ';
   let db=null, cache=[];
   const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  async function getDb(){if(db)return db;if(!window.supabase)return null;db=window.supabase.createClient(URL,KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});return db}
+  async function getDb(){const central=window.SantoPecadoCentral?.db;if(central){db=central;return central}console.warn('Conexión central de Supabase no disponible');return null}
   async function logAction(action,type,id){try{const d=await getDb();if(!d)return;let session=null;try{session=JSON.parse(sessionStorage.getItem('sp_premium_session_v1')||'null')}catch(_){}const details={source:'administracion',app_username:session?.user||'',app_name:session?.name||'',app_role:session?.role||'',record_id:id??null};if(session?.user&&session?.pinHash){const {data,error}=await d.rpc('sp_log_audit_by_pin',{p_username:String(session.user),p_pin_sha256:String(session.pinHash),p_action:String(action||'Acción'),p_entity_type:type||'administracion',p_entity_id:null,p_details:details});if(error)throw error;if(data!==true)console.warn('Auditoría central rechazada para',session.user);return}const {data:{user}}=await d.auth.getUser();if(!user)return;const {error}=await d.from('audit_logs').insert({user_id:user.id,action,entity_type:type||null,entity_id:null,details});if(error)throw error}catch(e){console.warn('Auditoría central:',e?.message||e)}}
   window.spAuditCentralLog=logAction;
   function wrap(){
