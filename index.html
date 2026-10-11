@@ -2294,6 +2294,7 @@ function adminInventory(){
     <div class="panelHead"><h2>📦 Inventario</h2><button type="button" class="close" onclick="event.stopPropagation();closeModal()">✕</button></div>
     <div class="notice" style="margin:12px 0">Cada venta descuenta 1 unidad del producto terminado. Los extras descuentan solamente el inventario del topping agregado. Los ingredientes incluidos en la receta NO se descuentan por separado.</div>
     ${navTabs('inventory')}
+    ${isAdmin()?'<button class="mini" style="margin:8px 0 12px" onclick="adminInventoryHistory()">📋 Movimientos centrales</button>':''}
     ${products.map(p=>`<div class="adminItem"><div class="adminTop"><b>${esc(p.name)}</b><b class="${p.stock<=p.minStock?'low':''}">${Number(p.stock||0)} und.</b></div><span class="muted">Mínimo: ${Number(p.minStock||0)} · ${esc(p.cat)}</span>
       <div class="adminActions"><button class="mini" onclick="stockMove('${p.id}',1)">＋ Entrada</button>${isAdmin()?`<button class="mini" onclick="stockMove('${p.id}',-1)">− Salida</button><button class="mini" onclick="stockSet('${p.id}')">✏️ Ajustar</button>`:''}</div></div>`).join('')}`;
   document.getElementById('modal').classList.add('open');
@@ -2304,6 +2305,7 @@ function adminToppingInventory(){
     <div class="panelHead"><h2>🧀 Inventario de toppings</h2><button type="button" class="close" onclick="event.stopPropagation();closeModal()">✕</button></div>
     <div class="notice" style="margin:12px 0">Activa el control de existencias de cada topping desde “Configurar”. Si un cliente lo agrega, se descuenta la cantidad por adición × cantidad de productos vendidos.</div>
     ${navTabs('inventory')}
+    ${isAdmin()?'<button class="mini" style="margin:8px 0 12px" onclick="adminInventoryHistory()">📋 Movimientos centrales</button>':''}
     ${toppings.map(t=>`<div class="adminItem"><div class="adminTop"><b>${esc(t.name)}</b><b class="${t.tracked&&Number(t.stock)<=Number(t.minStock)?'low':''}">${t.tracked?Number(t.stock)+' '+esc(t.unit):'Sin control'}</b></div>
       <span class="muted">${t.tracked?'Consumo por adición: '+Number(t.usage)+' '+esc(t.unit)+' · Mínimo: '+Number(t.minStock):'Configura sus existencias para empezar a descontarlas automáticamente.'}</span>
       <div class="adminActions">${isAdmin()?`<button class="mini" onclick="configureTopping('${t.id}')">⚙️ Configurar</button>`:''}<button class="mini" onclick="toppingMove('${t.id}',1)">＋ Entrada</button>${isAdmin()?`<button class="mini" onclick="toppingMove('${t.id}',-1)">− Salida</button><button class="mini" onclick="toppingSet('${t.id}')">✏️ Ajustar</button>`:''}</div></div>`).join('')}`;
@@ -2363,11 +2365,29 @@ async function toppingSet(id){
     save();adminToppingInventory();
   }catch(e){alert('No se cambió el inventario del topping. Supabase rechazó el ajuste: '+(e.message||e));}
 }
-function adminInventoryHistory(){
-  document.getElementById('panel').innerHTML=`<div class="panelHead"><h2>📋 Movimientos de inventario</h2><button class="close" onclick="adminProducts()">✕</button></div>
+async function adminInventoryHistory(){
+  if(!isAdmin()){alert('Solo el administrador o dueño puede consultar los movimientos centrales.');return}
+  const panel=document.getElementById('panel');
+  panel.innerHTML=`<div class="panelHead"><h2>📋 Movimientos de inventario</h2><button class="close" onclick="adminInventory()">✕</button></div>
     <div class="adminTabs"><button class="tab" onclick="adminInventory()">Productos terminados</button><button class="tab" onclick="adminToppingInventory()">Inventario toppings</button><button class="tab active" onclick="adminInventoryHistory()">Movimientos</button></div>
-    ${movements.length?movements.slice(0,150).map(m=>`<div class="adminItem"><b>${esc(m.product)}</b> · ${esc(m.type)}<br><span class="muted">${new Date(m.date).toLocaleString('es-CO')} · ${Number(m.qty)>0?'+':''}${Number(m.qty)} ${esc(m.unit||'und.')} · Quedan: ${Number(m.stock)} ${esc(m.unit||'und.')}</span></div>`).join(''):'<div class="empty">Aún no hay movimientos.</div>'}`;
+    <div class="notice">Consultando el historial central de Supabase…</div>`;
   document.getElementById('modal').classList.add('open');
+  try{
+    if(!SP_DB_ON)throw new Error('No hay conexión con Supabase.');
+    const pinHash=currentUser?.pinHash||await spSha256(currentUser?.pin||'');
+    if(!pinHash||!currentUser?.user)throw new Error('No se encontró la credencial del administrador en esta sesión.');
+    const {data,error}=await SP_DB.rpc('sp_admin_inventory_history_by_pin',{
+      p_username:String(currentUser.user),p_pin_sha256:String(pinHash),p_limit:150
+    });
+    if(error)throw error;
+    const rows=Array.isArray(data)?data:[];
+    panel.innerHTML=`<div class="panelHead"><h2>📋 Movimientos de inventario</h2><button class="close" onclick="adminInventory()">✕</button></div>
+      <div class="adminTabs"><button class="tab" onclick="adminInventory()">Productos terminados</button><button class="tab" onclick="adminToppingInventory()">Inventario toppings</button><button class="tab active" onclick="adminInventoryHistory()">Movimientos</button></div>
+      ${rows.length?rows.map(m=>{const qty=Number(m.quantity||0);const label=({entrada:'Entrada',salida:'Salida',ajuste:'Ajuste'})[String(m.movement_type||'').toLowerCase()]||String(m.movement_type||'Movimiento');return `<div class="adminItem"><b>${esc(m.item_name||'Producto')}</b> · ${esc(label)}<br><span class="muted">${new Date(m.created_at).toLocaleString('es-CO')} · ${qty>0?'+':''}${qty} ${esc(m.unit||'und.')}<br>Motivo: ${esc(m.reason||'Sin motivo registrado')}</span></div>`}).join(''):'<div class="empty">No hay movimientos centrales registrados.</div>'}`;
+  }catch(e){
+    panel.innerHTML=`<div class="panelHead"><h2>📋 Movimientos de inventario</h2><button class="close" onclick="adminInventory()">✕</button></div>
+      <div class="notice">No se pudo consultar el historial central: ${esc(e.message||e)}. No se modificaron existencias.</div>`;
+  }
 }
 async function adminInventoryMoveCentral(kind,item,movement,quantity,reason){
   if(!SP_DB_ON)throw new Error('Conexión central no disponible. No se cambió el inventario.');
