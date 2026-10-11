@@ -1389,6 +1389,9 @@ async function submitLogin(){
       if(central){
         currentUser=central;
         sessionStorage.setItem(SESSION,JSON.stringify(currentUser));
+        // Registrar el acceso PIN solo después de que Supabase valide usuario y hash.
+        // No depende de auth.uid(): auditLog usa la RPC segura por PIN.
+        auditLog('Inicio de sesión por PIN','Acceso central validado mediante PIN');
         if(currentUser.role==='admin'){
           try{await spCentralAdminList();}catch(e){console.warn('No se pudo sincronizar la lista de usuarios al entrar:',e)}
           adminProducts();
