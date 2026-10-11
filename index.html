@@ -1391,7 +1391,19 @@ async function submitLogin(){
       if(central){
         currentUser=central;
         sessionStorage.setItem(SESSION,JSON.stringify(currentUser));
-        // El registro central del acceso se genera en la ruta administrativa; no duplicarlo con auditLog.
+        // Registrar el acceso central una sola vez mediante RPC validada por PIN.
+        // No usar auditLog aquí: esa función excluye este evento para evitar duplicados.
+        try{
+          const {data:auditSaved,error:auditError}=await SP_DB.rpc('sp_log_audit_by_pin',{
+            p_username:String(currentUser.user||user),
+            p_pin_sha256:String(currentUser.pinHash||await spSha256(pin)),
+            p_action:'Inicio de sesión por PIN',
+            p_entity_type:'system',
+            p_entity_id:null,
+            p_details:{source:'administracion',details:'Acceso central validado mediante PIN',authenticated_via:'local_pin'}
+          });
+          if(auditError||auditSaved!==true)console.warn('No se pudo registrar el acceso PIN en Auditoría central:',auditError||'RPC no confirmó el registro');
+        }catch(auditErr){console.warn('No se pudo registrar el acceso PIN en Auditoría central:',auditErr);}
         if(currentUser.role==='admin'){
           try{await spCentralAdminList();}catch(e){console.warn('No se pudo sincronizar la lista de usuarios al entrar:',e)}
           adminProducts();
