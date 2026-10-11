@@ -36,8 +36,8 @@ jobs:
           import os
           tag='<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="admin-finish.js?v='+os.environ.get("GITHUB_SHA","latest")+'"></script>'
           import re
-          s=re.sub(r'<script[^>]+admin-finish\\.js(?:\\?[^>]*)?>\\s*</script>', '', s)
-          s=re.sub(r'<script[^>]+stats-nav-fix\\.js(?:\\?[^>]*)?>\\s*</script>', '', s)
+          s=re.sub(r'<script[^>]+admin-finish\.js(?:\?[^>]*)?>\s*</script>', '', s)
+          s=re.sub(r'<script[^>]+stats-nav-fix\.js(?:\?[^>]*)?>\s*</script>', '', s)
           if '</body>' in s:
               head,tail=s.rsplit('</body>',1)
               s=head+tag+'\n<script src="stats-nav-fix.js?v='+os.environ.get("GITHUB_SHA","latest")+'"></script>\n<script src="stats-print-fix.js?v='+os.environ.get("GITHUB_SHA","latest")+'"></script>\n</body>'+tail
