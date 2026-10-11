@@ -2915,10 +2915,10 @@ function saveSettings(){
   }catch(e){console.warn('Catálogo central pendiente; se mantiene el catálogo local.',e)}
   try{
     if(window.SantoPecadoCentral?.connected){
-      const {data}=await SP_DB.auth.getSession();
-      if(data?.session) await window.SantoPecadoCentral.sync();
+      await spSyncCustomers();
+      await spSyncPromotions();
     }
-  }catch(e){console.warn('Sincronización central pendiente.',e)}
+  }catch(e){console.warn('Sincronización central de clientes/promociones pendiente.',e)}
 })();
 </script><script src="stats-nav-fix.js?v=20261010-central-core2"></script><script src="comanda-fix.js?v=20261010-central-core1"></script><script src="audit-inventory-fix.js?v=20261010-central-core1"></script>
 </body>
