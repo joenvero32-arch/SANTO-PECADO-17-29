@@ -64,9 +64,31 @@
     const d=await getDb(),body=document.getElementById('spAuditBody');
     if(!d){if(body)body.innerHTML='<div class="spAuditEmpty">No se pudo conectar con Supabase.</div>';return}
     if(body)body.innerHTML='<div class="spAuditEmpty">Cargando auditoría…</div>';
-    let session=null;try{session=JSON.parse(sessionStorage.getItem('sp_premium_session_v1')||'null')}catch(_){}if(!session?.user||!session?.pinHash){if(body)body.innerHTML='<div class="spAuditEmpty">La sesión administrativa no tiene credenciales PIN para consultar la auditoría central.</div>';return}const {data,error}=await d.rpc('sp_list_audit_by_pin',{p_username:String(session.user),p_pin_sha256:String(session.pinHash),p_limit:500});
-    if(error){if(body)body.innerHTML='<div class="spAuditEmpty">No se pudo cargar la auditoría: '+esc(error.message)+'</div>';return}
-    cache=data||[];
+    let session=null;try{session=JSON.parse(sessionStorage.getItem('sp_premium_session_v1')||'null')}catch(_){}
+    let loaded=false,loadError=null;
+    // Admite al dueño autenticado en Supabase sin exigir un PIN local duplicado.
+    try{
+      const {data:authData}=await d.auth.getSession();
+      const authUser=authData?.session?.user;
+      if(authUser?.id){
+        const {data:profile,error:profileError}=await d.from('app_users').select('role,active').eq('id',authUser.id).maybeSingle();
+        if(!profileError&&profile?.role==='admin'&&profile.active===true){
+          const direct=await d.from('audit_logs').select('id,action,entity_type,entity_id,details,created_at,user_id').order('created_at',{ascending:false}).limit(500);
+          if(!direct.error){cache=(direct.data||[]).map(x=>({...x,app_users:{full_name:x.details?.app_full_name||x.details?.app_name||x.details?.app_username||'Usuario',username:x.details?.app_username||''}}));loaded=true}
+          else loadError=direct.error;
+        }
+      }
+    }catch(e){loadError=e}
+    // Los usuarios que entran por PIN siguen usando la RPC que valida sus credenciales.
+    if(!loaded){
+      if(!session?.user||!session?.pinHash){
+        if(body)body.innerHTML='<div class="spAuditEmpty">'+(loadError?'No se pudo cargar la auditoría: '+esc(loadError.message||loadError):'La sesión administrativa no tiene credenciales válidas para consultar la auditoría central.')+'</div>';
+        return
+      }
+      const {data,error}=await d.rpc('sp_list_audit_by_pin',{p_username:String(session.user),p_pin_sha256:String(session.pinHash),p_limit:500});
+      if(error){if(body)body.innerHTML='<div class="spAuditEmpty">No se pudo cargar la auditoría: '+esc(error.message)+'</div>';return}
+      cache=data||[];
+    }
     const sel=document.getElementById('spAuditAction');
     if(sel){const current=sel.value;const acts=[...new Set(cache.map(x=>x.action).filter(Boolean))];sel.innerHTML='<option value="">Todas las acciones</option>'+acts.map(x=>'<option>'+esc(x)+'</option>').join('');sel.value=acts.includes(current)?current:''}
     render()
