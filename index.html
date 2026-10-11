@@ -2103,6 +2103,8 @@ async function adminDomicilios(search=''){
       const oldByNo=new Map(orders.map(x=>[String(x.no),x]));orders=central.map(x=>({...oldByNo.get(String(x.no))||{},...x})).sort((a,b)=>new Date(b.created)-new Date(a.created));localStorage.setItem(ORDERS,JSON.stringify(orders));
     }catch(e){centralError='No se pudieron cargar los pedidos centrales: '+(e?.message||e);console.error(centralError,e)}
   }
+  // Si la consulta central falla, no mostrar ni operar con una copia local potencialmente desactualizada.
+  if(SP_DB_ON&&centralError)orders=[];
   const all=orders.filter(o=>String(o.type||o.deliveryType||o.tipoEntrega||'').toLowerCase().includes('domic')||o.delivery===true);
   const q=String(search||'').trim().toLowerCase();
   const list=all.filter(o=>!q||[o.no,o.name,o.phone,o.addr,o.address,o.driverName,o.status].join(' ').toLowerCase().includes(q));
