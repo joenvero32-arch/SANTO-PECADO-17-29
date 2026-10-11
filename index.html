@@ -1073,6 +1073,18 @@ async function syncLegacyAuditToCentral(){
     console.info('Auditoría histórica sincronizada; nuevos registros centrales:',Number(data||0));
   }catch(e){console.warn('No se pudo sincronizar el historial local de auditoría:',e?.message||e)}
 }
+function formatAuditDetails(value){
+  const raw=String(value??'').trim();
+  if(!raw)return 'Sin detalles adicionales';
+  try{
+    const parsed=JSON.parse(raw);
+    if(!parsed||typeof parsed!=='object')return raw;
+    const labels={source:'Origen',app_name:'Nombre',app_full_name:'Nombre',app_username:'Usuario',app_role:'Rol',record_id:'Registro',orderNo:'Pedido',order_no:'Pedido',details:'Detalle',authenticated_via:'Autenticación',reason:'Motivo',entity_type:'Tipo',status:'Estado',amount:'Valor',payment_method:'Medio de pago'};
+    const entries=Object.entries(parsed).filter(([k,v])=>v!==null&&v!==undefined&&v!=='');
+    if(!entries.length)return 'Sin detalles adicionales';
+    return entries.map(([k,v])=>{const label=labels[k]||k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());const valueText=typeof v==='object'?JSON.stringify(v):String(v);return label+': '+valueText;}).join(' · ');
+  }catch(_){return raw;}
+}
 async function adminAudit(filter='all',search=''){
   if(!isAdmin()){alert('Solo el administrador o dueño puede consultar Auditoría.');return}
   if(!sessionStorage.getItem('SP_AUDIT_VIEW_LOGGED')){sessionStorage.setItem('SP_AUDIT_VIEW_LOGGED','1');auditLog('Auditoría consultada','El administrador abrió el módulo de Auditoría');}
@@ -1149,7 +1161,7 @@ async function adminAudit(filter='all',search=''){
     </select>
   </div>
   <div class="muted" style="margin:10px 0">Mostrando ${list.length} de ${all.length} registros</div>
-  ${list.length?list.map(x=>{const cat=auditCategory(x);return `<div class="adminItem"><div class="adminTop"><b>${esc(x.action)}</b><span class="muted">${auditCategoryLabel(cat)}</span></div>${x.orderNo?'<div class="muted">Pedido: '+esc(x.orderNo)+'</div>':''}<span class="muted">👤 ${esc(x.name)} (${esc(x.user)}) · 📅 ${new Date(x.date).toLocaleString('es-CO')}</span><br><span>📝 ${esc(x.details)}</span></div>`}).join(''):'<div class="empty">🔎 No hay movimientos para este filtro.</div>'}`;
+  ${list.length?list.map(x=>{const cat=auditCategory(x);return `<div class="adminItem"><div class="adminTop"><b>${esc(x.action)}</b><span class="muted">${auditCategoryLabel(cat)}</span></div>${x.orderNo?'<div class="muted">Pedido: '+esc(x.orderNo)+'</div>':''}<span class="muted">👤 ${esc(x.name)} (${esc(x.user)}) · 📅 ${new Date(x.date).toLocaleString('es-CO')}</span><br><div class="auditDetail" style="margin-top:8px;max-width:100%;min-width:0;overflow-wrap:anywhere;word-break:break-word;white-space:pre-wrap;line-height:1.45">📝 ${esc(formatAuditDetails(x.details))}</div></div>`}).join(''):'<div class="empty">🔎 No hay movimientos para este filtro.</div>'}`;
   document.getElementById('modal').classList.add('open');
 }
 function normalizeWhatsAppPhone(phone){
