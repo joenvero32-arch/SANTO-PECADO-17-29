@@ -2329,9 +2329,9 @@ function configureTopping(id){
 async function toppingMove(id,dir){
   if(!requirePermission('allowInventory'))return;
   if(!isAdmin() && dir<0){alert('El empleado solo puede registrar entradas de inventario.');return}
-  const t=toppings.find(x=>x.id===id);if(!t.tracked){alert('Primero pulsa Configurar para activar el inventario.');return}
-  const q=numberAsk('Cantidad en '+t.unit,1,false);if(q===null)return;
-  if(dir<0&&q>Number(t.stock)){alert('No puedes retirar más de lo disponible.');return}
+  const t=toppings.find(x=>x.id===id);if(!t)return;
+  if(!t.tracked){alert('Primero pulsa Configurar para activar el inventario.');return}
+  const q=numberAsk('Cantidad en '+t.unit,1,false);if(q===null||q<=0)return;
   if(!isAdmin() && dir>0){
     try{
       const row=await employeeInventoryEntryToppingCentral(t,q);
@@ -2341,14 +2341,27 @@ async function toppingMove(id,dir){
     }catch(e){alert('La entrada no se pudo registrar en Supabase: '+(e.message||e));}
     return;
   }
-  t.stock=Number(t.stock)+dir*q;
-  movements.unshift({date:new Date().toISOString(),kind:'topping',product:t.name,type:dir>0?'Entrada':'Salida manual',qty:dir*q,unit:t.unit,stock:t.stock});save();syncToppingCentral(t).catch(e=>alert('Inventario del topping actualizado localmente, pero no se pudo sincronizar: '+(e.message||e)));adminToppingInventory();
+  const reason=askReason(dir>0?'Motivo de la entrada del topping:':'Motivo de la salida del topping:');if(reason===null)return;
+  try{
+    const result=await adminInventoryMoveCentral('topping',t,dir>0?'entrada':'salida',q,reason);
+    t.stock=Number(result.stock);
+    movements.unshift({date:new Date().toISOString(),kind:'topping',product:t.name,type:dir>0?'Entrada':'Salida',qty:dir>0?q:-q,unit:t.unit,stock:t.stock,reason});
+    save();adminToppingInventory();
+  }catch(e){alert('No se cambió el inventario del topping. Supabase rechazó el movimiento: '+(e.message||e));}
 }
-function toppingSet(id){
+async function toppingSet(id){
   if(!isAdmin()){alert('Solo el administrador o dueño puede ajustar inventario.');return}
-  const t=toppings.find(x=>x.id===id);if(!t.tracked){alert('Primero pulsa Configurar para activar el inventario.');return;}
-  const q=numberAsk('Nuevo inventario de '+t.name+' ('+t.unit+')',t.stock);if(q===null)return;
-  movements.unshift({date:new Date().toISOString(),kind:'topping',product:t.name,type:'Ajuste',qty:q-Number(t.stock),unit:t.unit,stock:q});t.stock=q;save();syncToppingCentral(t).catch(e=>alert('Inventario del topping actualizado localmente, pero no se pudo sincronizar: '+(e.message||e)));adminToppingInventory();
+  const t=toppings.find(x=>x.id===id);if(!t)return;
+  if(!t.tracked){alert('Primero pulsa Configurar para activar el inventario.');return;}
+  const q=numberAsk('Nuevo inventario de '+t.name+' ('+t.unit+')',t.stock);if(q===null||q<0)return;
+  const reason=askReason('Motivo del ajuste de inventario del topping:');if(reason===null)return;
+  try{
+    const result=await adminInventoryMoveCentral('topping',t,'ajuste',q,reason);
+    const delta=Number(result.delta);
+    t.stock=Number(result.stock);
+    movements.unshift({date:new Date().toISOString(),kind:'topping',product:t.name,type:'Ajuste',qty:delta,unit:t.unit,stock:t.stock,reason});
+    save();adminToppingInventory();
+  }catch(e){alert('No se cambió el inventario del topping. Supabase rechazó el ajuste: '+(e.message||e));}
 }
 function adminInventoryHistory(){
   document.getElementById('panel').innerHTML=`<div class="panelHead"><h2>📋 Movimientos de inventario</h2><button class="close" onclick="adminProducts()">✕</button></div>
@@ -2356,11 +2369,25 @@ function adminInventoryHistory(){
     ${movements.length?movements.slice(0,150).map(m=>`<div class="adminItem"><b>${esc(m.product)}</b> · ${esc(m.type)}<br><span class="muted">${new Date(m.date).toLocaleString('es-CO')} · ${Number(m.qty)>0?'+':''}${Number(m.qty)} ${esc(m.unit||'und.')} · Quedan: ${Number(m.stock)} ${esc(m.unit||'und.')}</span></div>`).join(''):'<div class="empty">Aún no hay movimientos.</div>'}`;
   document.getElementById('modal').classList.add('open');
 }
+async function adminInventoryMoveCentral(kind,item,movement,quantity,reason){
+  if(!SP_DB_ON)throw new Error('Conexión central no disponible. No se cambió el inventario.');
+  const pinHash=currentUser?.pinHash||await spSha256(currentUser?.pin||'');
+  if(!pinHash||!currentUser?.user)throw new Error('No se encontró la credencial PIN de la sesión. No se cambió el inventario.');
+  const {data,error}=await SP_DB.rpc('sp_admin_inventory_move_by_pin',{
+    p_username:String(currentUser.user),p_pin_sha256:String(pinHash),
+    p_item_type:kind,p_item_id:spMap(kind==='product'?'prod':'top',item.id),
+    p_movement_type:movement,p_quantity:Number(quantity),p_reason:String(reason||'').trim()
+  });
+  if(error)throw error;
+  if(!data||!data.item||!Number.isFinite(Number(data.stock)))throw new Error('Supabase no confirmó el movimiento. No se cambió el inventario local.');
+  return data;
+}
 async function stockMove(id,dir){
   if(!requirePermission('allowInventory'))return;
   if(!isAdmin() && dir<0){alert('El empleado solo puede registrar entradas de inventario.');return}
-  const p=products.find(x=>String(x.id)===String(id)),q=Number(prompt('Cantidad','1'));
-  if(!p||!q||q<0)return;
+  const p=products.find(x=>String(x.id)===String(id));if(!p)return;
+  const q=Number(prompt('Cantidad','1'));
+  if(!Number.isFinite(q)||q<=0)return;
   if(!isAdmin() && dir>0){
     try{
       const row=await employeeInventoryEntryProductCentral(p,q);
@@ -2370,16 +2397,27 @@ async function stockMove(id,dir){
     }catch(e){alert('La entrada no se pudo registrar en Supabase: '+(e.message||e));}
     return;
   }
-  p.stock=Math.max(0,Number(p.stock||0)+dir*q);
-  movements.unshift({date:new Date().toISOString(),product:p.name,type:dir>0?'Entrada':'Salida',qty:dir*q,stock:p.stock});
-  save();syncProductStockCentral(p).catch(e=>alert('Inventario local actualizado, pero no se pudo sincronizar con Supabase: '+(e.message||e)));adminInventory();
+  const reason=askReason(dir>0?'Motivo de la entrada de inventario:':'Motivo de la salida de inventario:');if(reason===null)return;
+  try{
+    const result=await adminInventoryMoveCentral('product',p,dir>0?'entrada':'salida',q,reason);
+    p.stock=Number(result.stock);
+    movements.unshift({date:new Date().toISOString(),product:p.name,type:dir>0?'Entrada':'Salida',qty:dir>0?q:-q,stock:p.stock,reason});
+    save();adminInventory();
+  }catch(e){alert('No se cambió el inventario. Supabase rechazó el movimiento: '+(e.message||e));}
 }
-function stockSet(id){
+async function stockSet(id){
   if(!isAdmin()){alert('Solo el administrador o dueño puede ajustar inventario.');return}
-  const p=products.find(x=>String(x.id)===String(id)),q=Number(prompt('Nuevo stock',p.stock));
-  if(isNaN(q)||q<0)return;
-  movements.unshift({date:new Date().toISOString(),product:p.name,type:'Ajuste',qty:q-p.stock,stock:q});
-  p.stock=q;save();syncProductStockCentral(p).catch(e=>alert('Inventario local actualizado, pero no se pudo sincronizar con Supabase: '+(e.message||e)));adminInventory();
+  const p=products.find(x=>String(x.id)===String(id));if(!p)return;
+  const q=Number(prompt('Nuevo stock',p.stock));
+  if(!Number.isFinite(q)||q<0)return;
+  const reason=askReason('Motivo del ajuste de inventario:');if(reason===null)return;
+  try{
+    const result=await adminInventoryMoveCentral('product',p,'ajuste',q,reason);
+    const delta=Number(result.delta);
+    p.stock=Number(result.stock);
+    movements.unshift({date:new Date().toISOString(),product:p.name,type:'Ajuste',qty:delta,stock:p.stock,reason});
+    save();adminInventory();
+  }catch(e){alert('No se cambió el inventario. Supabase rechazó el ajuste: '+(e.message||e));}
 }
 function adminToppings(){
   if(!isAdmin()){alert('Solo el administrador o dueño tiene acceso a esta sección.');return}
