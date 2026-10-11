@@ -1080,14 +1080,27 @@ function formatAuditDetails(value){
   const prefix=brace>0?raw.slice(0,brace).replace(/[·|\s]+$/,'').trim():'';
   const jsonText=brace>=0?raw.slice(brace):raw;
   try{
-    const parsed=JSON.parse(jsonText);
-    if(!parsed||typeof parsed!=='object')return raw;
-    const labels={source:'Origen',app_name:'Nombre',app_full_name:'Nombre',app_username:'Usuario',app_role:'Rol',record_id:'Registro',orderNo:'Pedido',order_no:'Pedido',order_number:'Número de pedido',details:'Detalle',authenticated_via:'Autenticación',reason:'Motivo',entity_type:'Tipo',status:'Estado',amount:'Valor',payment_method:'Medio de pago',occurred_at:'Fecha del evento'};
-    const omit=new Set(['app_user','app_full_name','app_name','app_username','app_role','occurred_at','record_id','order_number']);
-    const entries=Object.entries(parsed).filter(([k,v])=>v!==null&&v!==undefined&&v!==''&&!omit.has(k));
-    if(!entries.length)return prefix||'Sin detalles adicionales';
-    const formatted=entries.map(([k,v])=>{const label=labels[k]||k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());const valueText=typeof v==='object'?JSON.stringify(v):String(v);return label+': '+valueText;}).join(' · ');
-    return prefix?prefix+' · '+formatted:formatted;
+    const data=JSON.parse(jsonText);
+    if(!data||typeof data!=='object')return raw;
+    const source=String(data.source||'');
+    const detail=String(data.details||data.reason||'').trim();
+    const parts=[];
+    if(detail)parts.push(detail);
+    const order=String(data.order_number||data.orderNo||data.order_no||'').trim();
+    if(order)parts.push('Pedido: '+order);
+    if(data.status)parts.push('Estado: '+String(data.status));
+    if(data.payment_method)parts.push('Pago: '+String(data.payment_method));
+    if(data.amount!==undefined&&data.amount!==null&&data.amount!=='')parts.push('Valor: '+String(data.amount));
+    if(data.authenticated_via&&!detail){parts.push(data.authenticated_via==='local_pin'?'Acceso mediante PIN':'Método de acceso: '+String(data.authenticated_via));}
+    if(!parts.length){
+      if(source==='administracion')return 'Acción registrada desde el panel administrativo.';
+      if(source==='legacy_local_history')return 'Registro histórico importado del historial anterior.';
+      if(source==='app_auditLog')return 'Evento registrado por la aplicación.';
+      const ignored=new Set(['source','app_user','app_name','app_full_name','app_username','app_role','occurred_at','record_id','legacy_key','authenticated_via','order_number','orderNo','order_no']);
+      for(const [key,val] of Object.entries(data))if(!ignored.has(key)&&val!==null&&val!==undefined&&val!=='')parts.push(key.replace(/_/g,' ')+': '+(typeof val==='object'?JSON.stringify(val):String(val)));
+    }
+    if(prefix&&prefix!=='system'&&prefix!=='operacion')parts.unshift(prefix);
+    return parts.length?parts.join(' · '):'Sin detalles adicionales';
   }catch(_){return raw;}
 }
 async function adminAudit(filter='all',search=''){
