@@ -159,11 +159,20 @@ async function spSyncCatalog(){
 async function spSyncCustomers(){
   if(!SP_DB_ON||!(customers||[]).length)return;
   try{
-    const rows=customers.map(c=>({id:spMap('customer',c.id||c.phone||c.name),name:String(c.name||''),phone:String(c.phone||''),email:String(c.email||''),address:String(c.address||''),neighborhood:String(c.neighborhood||''),notes:String(c.notes||''),total_orders:Number(c.orders||c.totalOrders||0),total_spent:Number(c.total||c.totalSpent||0),last_purchase:c.lastPurchase||null}));
+    const rows=customers.map(c=>({id:spMap('customer',c.id||c.phone||c.name),name:String(c.name||'Cliente'),phone:String(c.phone||''),email:String(c.email||''),address:String(c.address||''),neighborhood:String(c.neighborhood||''),notes:String(c.notes||''),total_orders:Number(c.orders||c.totalOrders||0),total_spent:Number(c.total||c.totalSpent||0),last_order_at:c.lastOrder||c.lastPurchase||null}));
     await spUpsert('customers',rows);
-  }catch(e){console.warn('Clientes aún no sincronizados:',e.message||e)}
+    SP_DB_LAST=new Date().toISOString();localStorage.setItem('sp_central_last_sync',SP_DB_LAST);
+  }catch(e){console.warn('Clientes aún no sincronizados:',e.message||e);SP_DB_LAST='ERROR'}
 }
-window.SantoPecadoCentral={get db(){return SP_DB},get connected(){return SP_DB_ON&&!!SP_DB},get lastSync(){return SP_DB_LAST||localStorage.getItem('sp_central_last_sync')||''},rpc:async(name,args)=>{if(!SP_DB_ON||!SP_DB)throw new Error('Conexión central Supabase no disponible');return await SP_DB.rpc(name,args)},from:(table)=>{if(!SP_DB_ON||!SP_DB)throw new Error('Conexión central Supabase no disponible');return SP_DB.from(table)},sync:async()=>{await spSyncCatalog();await spSyncCustomers()}};
+async function spSyncPromotions(){
+  if(!SP_DB_ON)return;
+  try{
+    const rows=(promotions||[]).map(p=>({id:spMap('promotion',p.id),name:String(p.title||'Promoción'),description:String(p.description||''),product_id:p.productId?spMap('prod',p.productId):null,offer_type:String(p.offer||'Oferta especial'),discount_percent:null,special_price:null,image_url:String(p.image||''),starts_at:p.start?new Date(p.start).toISOString():null,ends_at:p.end?new Date(p.end).toISOString():null,active:p.active!==false}));
+    await spUpsert('promotions',rows);
+    SP_DB_LAST=new Date().toISOString();localStorage.setItem('sp_central_last_sync',SP_DB_LAST);
+  }catch(e){console.warn('Promociones aún no sincronizadas:',e.message||e);SP_DB_LAST='ERROR'}
+}
+window.SantoPecadoCentral={get db(){return SP_DB},get connected(){return SP_DB_ON&&!!SP_DB},get lastSync(){return SP_DB_LAST||localStorage.getItem('sp_central_last_sync')||''},rpc:async(name,args)=>{if(!SP_DB_ON||!SP_DB)throw new Error('Conexión central Supabase no disponible');return await SP_DB.rpc(name,args)},from:(table)=>{if(!SP_DB_ON||!SP_DB)throw new Error('Conexión central Supabase no disponible');return SP_DB.from(table)},sync:async()=>{await spSyncCatalog();await spSyncCustomers();await spSyncPromotions()}};
 window.loadPublicCatalog=async function(){
   try{
     let payload=null;
@@ -587,7 +596,7 @@ function save(){
   localStorage.setItem(PROMO_NOTIFY,JSON.stringify(promoNotifications));
   localStorage.setItem(CASH,JSON.stringify(cashClosures));
   localStorage.setItem('sp_premium_cart_v2',JSON.stringify(cart));
-  if(window.SantoPecadoCentral?.connected) { spSyncCatalog(); spSyncCustomers(); }
+  if(window.SantoPecadoCentral?.connected) { spSyncCatalog(); spSyncCustomers(); spSyncPromotions(); }
 }
 function total(){
   return cart.reduce((s,x)=>{
@@ -2780,7 +2789,7 @@ function adminCustomers(){
   const totalSpent=customers.reduce((a,c)=>a+Number(c.total||0),0);
   const repeat=customers.filter(c=>Number(c.orders||0)>1).length;
   const rows=customers.slice().sort((a,b)=>Number(b.total||0)-Number(a.total||0));
-  document.getElementById('panel').innerHTML=`<div class="panelHead"><div><div class="dashKicker">RELACIÓN CON CLIENTES</div><h2>👥 Base de clientes</h2></div><button class="close" onclick="adminDashboard()">✕</button></div>${navTabs('customers')}<div class="notice" style="margin:12px 0">Cada pedido actualiza automáticamente esta ficha. Aquí puedes buscar clientes, consultar su historial y preparar futuras campañas. La sincronización entre dispositivos llegará con la centralización.</div><div class="statgrid dashGrid"><div class="stat"><small>Clientes</small><b>${customers.length}</b></div><div class="stat"><small>Clientes frecuentes</small><b>${repeat}</b></div><div class="stat"><small>Compras registradas</small><b>${customers.reduce((a,c)=>a+Number(c.orders||0),0)}</b></div><div class="stat"><small>Valor acumulado</small><b>${money(totalSpent)}</b></div></div><div class="field"><label>🔎 BUSCAR CLIENTE POR NOMBRE O TELÉFONO</label><input id="customerSearch" placeholder="Ej. 3116637215 o Jorge" oninput="filterCustomers()"></div><div class="modalBtns" style="margin:10px 0"><button class="secondary" onclick="printCustomers()">🖨️ Imprimir clientes</button><button class="secondary" onclick="exportCustomers()">⬇️ Exportar CSV</button></div><div id="customerList">${customerRows(rows)}</div>`;
+  document.getElementById('panel').innerHTML=`<div class="panelHead"><div><div class="dashKicker">RELACIÓN CON CLIENTES</div><h2>👥 Base de clientes</h2></div><button class="close" onclick="adminDashboard()">✕</button></div>${navTabs('customers')}<div class="notice" style="margin:12px 0">Los datos de clientes se sincronizan con Supabase cuando hay conexión. Las promociones también se guardan en la base central; los avisos locales del navegador no equivalen a un envío por WhatsApp.</div><div class="statgrid dashGrid"><div class="stat"><small>Clientes</small><b>${customers.length}</b></div><div class="stat"><small>Clientes frecuentes</small><b>${repeat}</b></div><div class="stat"><small>Compras registradas</small><b>${customers.reduce((a,c)=>a+Number(c.orders||0),0)}</b></div><div class="stat"><small>Valor acumulado</small><b>${money(totalSpent)}</b></div></div><div class="field"><label>🔎 BUSCAR CLIENTE POR NOMBRE O TELÉFONO</label><input id="customerSearch" placeholder="Ej. 3116637215 o Jorge" oninput="filterCustomers()"></div><div class="modalBtns" style="margin:10px 0"><button class="secondary" onclick="printCustomers()">🖨️ Imprimir clientes</button><button class="secondary" onclick="exportCustomers()">⬇️ Exportar CSV</button></div><div id="customerList">${customerRows(rows)}</div>`;
   document.getElementById('modal').classList.add('open');
 }
 function customerRows(rows){return rows.map(c=>`<div class="adminItem customerRow" data-search="${esc((c.name||'')+' '+(c.phone||''))}"><div class="adminTop"><div><b>${esc(c.name||'Cliente')}</b><div class="muted">📞 ${esc(c.phone||'-')}</div></div><span>${money(c.total||0)}</span></div><div class="muted">🛒 ${c.orders||0} pedidos · Última compra: ${c.lastOrder?new Date(c.lastOrder).toLocaleString('es-CO'):'-'}</div>${c.addresses?.length?`<div class="muted" style="margin-top:5px">📍 ${esc(c.addresses[0])}</div>`:''}<div class="adminActions"><button class="mini" onclick="viewCustomer(${c.id})">👁️ Ver ficha</button></div></div>`).join('')||'<div class="empty">Todavía no hay clientes registrados.</div>'}
@@ -2793,7 +2802,7 @@ function adminPromotions(){
   const active=promotions.filter(p=>p.active&&(!p.start||new Date(p.start)<=new Date())&&(!p.end||new Date(p.end)>=new Date())).length;
   document.getElementById('panel').innerHTML=`<div class="panelHead"><h2>🎁 Promociones</h2><button class="close" onclick="adminProducts()">✕</button></div>${navTabs('promotions')}
   <div class="statGrid" style="margin:12px 0"><div class="statCard"><span>Activas ahora</span><b>${active}</b></div><div class="statCard"><span>Total creadas</span><b>${promotions.length}</b></div><div class="statCard"><span>Avisos preparados</span><b>${promoNotifications.length}</b></div></div>
-  <div class="notice" style="margin:12px 0"><b>Centro de promociones.</b> Las promociones vigentes aparecen destacadas para los clientes. Las notificaciones del navegador funcionan en el equipo que las autorice; el envío a teléfonos de clientes se conectará con WhatsApp/servicio de notificaciones cuando centralicemos la aplicación.</div>
+  <div class="notice" style="margin:12px 0"><b>Centro de promociones.</b> Las promociones vigentes aparecen en el catálogo y se sincronizan con Supabase. Los avisos del navegador solo funcionan en este equipo; para que lleguen a los teléfonos por WhatsApp hace falta conectar y autorizar un proveedor de envío.</div>
   <div class="modalBtns"><button class="primary" onclick="newPromotion()">＋ Nueva promoción</button><button class="secondary" onclick="requestPromoNotifications()">🔔 Autorizar avisos</button></div>
   ${promotions.length?promotions.slice().sort((a,b)=>Number(b.id)-Number(a.id)).map(p=>{const now=new Date(),vig=p.active&&(!p.start||new Date(p.start)<=now)&&(!p.end||new Date(p.end)>=now);return `<div class="adminItem" style="border-left:3px solid ${vig?'#f7b928':'rgba(255,255,255,.12)'}"><div class="adminTop"><b>🎁 ${esc(p.title)}</b><span>${vig?'🟢 VIGENTE':p.active?'🟡 PROGRAMADA':'⚪ INACTIVA'}</span></div>${p.offer?`<div style="font-size:18px;font-weight:800;margin:6px 0">${esc(p.offer)}</div>`:''}<div class="muted">${esc(p.description||'')}</div><div class="muted">${p.productId?'Producto: '+esc((products.find(x=>x.id===p.productId)||{}).name||'Producto'):''}${p.start?' · Desde '+new Date(p.start).toLocaleString('es-CO'):''}${p.end?' · Hasta '+new Date(p.end).toLocaleString('es-CO'):''}</div><div class="adminActions"><button class="mini" onclick="togglePromotion(${p.id})">${p.active?'⏸️ Desactivar':'▶️ Activar'}</button><button class="mini" onclick="editPromotion(${p.id})">✏️ Editar</button><button class="mini" onclick="deletePromotion(${p.id})">🗑️ Eliminar</button></div></div>`}).join(''):'<div class="empty">No hay promociones creadas.</div>'}`;
   document.getElementById('modal').classList.add('open');
