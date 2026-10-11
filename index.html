@@ -2157,8 +2157,8 @@ async function assignDriver(no){
     }catch(e){alert('No se pudieron cargar los domiciliarios centrales: '+(e?.message||e));return}
   }
   if(!drivers.length){alert('Primero registra un domiciliario activo.');return}
-  const menu=drivers.map((d,i)=>`${i+1}. ${d.name} ${d.phone?'· '+d.phone:''}`).join('\\n');
-  const pick=prompt('Selecciona el domiciliario escribiendo el número:\\n'+menu,'1');
+  const menu=drivers.map((d,i)=>`${i+1}. ${d.name} ${d.phone?'· '+d.phone:''}`).join('\n');
+  const pick=prompt('Selecciona el domiciliario escribiendo el número:\n'+menu,'1');
   if(pick===null)return;
   const d=drivers[Number(pick)-1];
   if(!d)return;
