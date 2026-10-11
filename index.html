@@ -1080,7 +1080,41 @@ async function adminAudit(filter='all',search=''){
   // para evitar que el temporizador vuelva a dibujar Pedidos sobre esta pantalla.
   if(SP_ADMIN_ORDERS_REFRESH_TIMER){clearTimeout(SP_ADMIN_ORDERS_REFRESH_TIMER);SP_ADMIN_ORDERS_REFRESH_TIMER=null;}
   await syncLegacyAuditToCentral();
-  const all=Array.isArray(audit)?audit:[];
+  // La pantalla principal debe contar el historial central, no solo localStorage.
+  // Se conserva intacto el historial local; esta lista se usa únicamente para mostrar.
+  let all=Array.isArray(audit)?audit:[];
+  try{
+    if(SP_DB_ON&&SP_DB&&currentUser?.user){
+      let pinHash=String(currentUser?.pinHash||'');
+      if(!pinHash&&currentUser?.pin)pinHash=await spSha256(currentUser.pin);
+      if(pinHash){
+        const {data:centralRows,error:centralError}=await SP_DB.rpc('sp_list_audit_by_pin',{
+          p_username:String(currentUser.user),
+          p_pin_sha256:pinHash,
+          p_limit:1000
+        });
+        if(centralError)throw centralError;
+        if(Array.isArray(centralRows)){
+          all=centralRows.map(x=>{
+            const d=x?.details&&typeof x.details==='object'?x.details:{};
+            const appUser=x?.app_users&&typeof x.app_users==='object'?x.app_users:{};
+            return {
+              date:x?.created_at||'',
+              action:String(x?.action||'Acción'),
+              details:[x?.entity_type,JSON.stringify(d)].filter(Boolean).join(' · '),
+              orderNo:String(d.orderNo||d.order_no||d.record_id||x?.entity_id||''),
+              user:String(appUser.username||d.app_username||'sistema'),
+              name:String(appUser.full_name||d.app_name||d.app_full_name||'Sistema'),
+              role:String(d.app_role||'system')
+            };
+          });
+          console.info('Auditoría mostrada desde Supabase central:',all.length,'registros');
+        }
+      }
+    }
+  }catch(e){
+    console.warn('No se pudo cargar la auditoría central; se conserva la vista local:',e?.message||e);
+  }
   const q=String(search||'').trim().toLowerCase();
   const list=all.filter(x=>{
     const cat=auditCategory(x);
