@@ -2326,12 +2326,7 @@ async function adminCash(){
   let list=salesForDay(today).filter(o=>!lastCloseAt||new Date(o.date||o.created||0).getTime()>lastCloseAt);
   if(SP_DB_ON){
     try{
-      if(!currentUser?.central){
-        const ok=await ensureCentralAdminSession();
-        if(!ok) throw new Error('Sesión central de administrador no disponible.');
-      }
-      const {data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders');
-      if(error) throw error;
+      const centralOrders=await spGetFinanceOrders();
       if(Array.isArray(centralOrders)){
         list=centralOrders
           .filter(o=>String(o.payment_status||'').toLowerCase()==='pagado')
@@ -2345,13 +2340,14 @@ async function adminCash(){
             pay:o.payment_method||'',
             paymentStatus:o.payment_status||'pagado',
             total:Number(o.total||0),
-            status:o.status||'entregado'
+            status:o.status||'recibido'
           }))
           .filter(o=>dayKey(o.date||o.created)===today)
           .filter(o=>!lastCloseAt||new Date(o.date||o.created||0).getTime()>lastCloseAt);
       }
     }catch(e){
       console.warn('Caja: no se pudieron cargar ventas centrales:',e);
+      alert('No se pudieron consultar las ventas centrales de Caja: '+(e?.message||e));
     }
   }
   const pay=paymentTotals(list);
@@ -2667,16 +2663,39 @@ function adminReports(){
     <div class="modalBtns"><button class="primary" onclick="window.print()">🖨️ Imprimir reporte</button></div>`;
   document.getElementById('modal').classList.add('open');
 }
+async function spGetFinanceOrders(){
+  if(!SP_DB_ON||!SP_DB) return null;
+  let data,error;
+  let authAdmin=false;
+  try{
+    const {data:{session}}=await SP_DB.auth.getSession();
+    if(session?.user?.id){
+      const {data:profile,error:profileError}=await SP_DB.from('app_users').select('role,active').eq('id',session.user.id).maybeSingle();
+      authAdmin=!profileError&&!!profile&&profile.active!==false&&profile.role==='admin';
+    }
+  }catch(_){authAdmin=false}
+  if(authAdmin){
+    ({data,error}=await SP_DB.rpc('sp_get_admin_orders'));
+  }else{
+    const localAdmin=((typeof users!=='undefined'&&Array.isArray(users))?users.find(x=>String(x.user||'').toLowerCase()===String(currentUser?.user||'').toLowerCase()):null)||currentUser;
+    const username=localAdmin?.user||currentUser?.user;
+    const pin=localAdmin?.pin||currentUser?.pin;
+    if(!username||!pin) throw new Error('No se encontraron las credenciales del administrador para consultar ventas centrales.');
+    ({data,error}=await SP_DB.rpc('sp_get_admin_orders_pin',{p_username:String(username),p_pin:String(pin)}));
+  }
+  if(error) throw error;
+  if(typeof data==='string'){try{data=JSON.parse(data)}catch(_){throw new Error('La respuesta central de pedidos no tiene un formato válido.')}}
+  if(!Array.isArray(data)) throw new Error('Supabase no devolvió una lista válida de pedidos.');
+  return data;
+}
 async function adminSales(){
   if(!isAdmin()){alert('Solo el administrador o dueño tiene acceso a esta sección.');return}
   let list=Array.isArray(sales)?sales.slice():[];
   if(SP_DB_ON){
     try{
-      if(!currentUser?.central&&!await ensureCentralAdminSession()) throw new Error('Sesión central no disponible');
-      const {data,error}=await SP_DB.rpc('sp_get_admin_orders');
-      if(error) throw error;
+      const data=await spGetFinanceOrders();
       if(Array.isArray(data)) list=data.filter(o=>String(o.payment_status||'').trim().toLowerCase()==='pagado').map(o=>({no:o.order_number,date:o.updated_at||o.created_at,name:o.customer_name||'',pay:o.payment_method||'',total:Number(o.total||0)})).sort((x,y)=>new Date(y.date||0)-new Date(x.date||0));
-    }catch(e){console.warn('Registro de ventas central no disponible:',e)}
+    }catch(e){console.warn('Registro de ventas central no disponible:',e);alert('No se pudieron consultar las ventas centrales: '+(e?.message||e))}
   }
   const totalSales=list.reduce((a,o)=>a+Number(o.total||0),0);
   document.getElementById('panel').innerHTML=`
@@ -2685,14 +2704,20 @@ async function adminSales(){
     ${list.length?list.slice(0,100).map(o=>`<div class="adminItem"><b>${esc(o.no||'Venta')}</b> · <b>${money(o.total)}</b><br><span class="muted">${new Date(o.date||0).toLocaleString('es-CO')} · ${esc(o.name||'')} · ${esc(o.pay||'')}</span></div>`).join(''):'<div class="empty">No hay ventas registradas todavía.</div>'}`;
   document.getElementById('modal').classList.add('open');
 }
-function adminTodaySales(){
+async function adminTodaySales(){
   if(!isAdmin()){alert('Solo el administrador o dueño puede consultar las ventas del día.');return}
   const today=dayKey(new Date());
-  const list=salesForDay(today).sort((a,b)=>new Date(b.date||b.created||0)-new Date(a.date||a.created||0));
+  let list=salesForDay(today).slice();
+  if(SP_DB_ON){
+    try{
+      const data=await spGetFinanceOrders();
+      if(Array.isArray(data)) list=data.filter(o=>String(o.payment_status||'').trim().toLowerCase()==='pagado').map(o=>({no:o.order_number,date:o.updated_at||o.created_at,created:o.created_at,name:o.customer_name||'',pay:o.payment_method||'',total:Number(o.total||0)})).filter(o=>dayKey(o.date||o.created)===today).sort((a,b)=>new Date(b.date||b.created||0)-new Date(a.date||a.created||0));
+    }catch(e){console.warn('Ventas del día centrales:',e);alert('No se pudieron consultar las ventas del día: '+(e?.message||e))}
+  }
   const total=list.reduce((a,o)=>a+Number(o.total||0),0);
   let html='<div class="panelHead"><div><div class="dashKicker">CONTROL FINANCIERO</div><h2>🧾 Ventas del día</h2></div><button class="close" onclick="adminCash()">✕</button></div>'+navTabs('cash');
   html+='<div class="cashHero"><span>VENTAS DE HOY · '+new Date().toLocaleDateString('es-CO')+'</span><b>'+money(total)+'</b><small>'+list.length+' venta(s) registrada(s)</small></div>';
-  html+=list.length?list.map(o=>'<div class="adminItem"><div class="adminTop"><b>'+esc(o.no||'Venta')+'</b><b>'+money(o.total)+'</b></div><span class="muted">'+new Date(o.date||o.created).toLocaleString('es-CO')+' · '+esc(o.name||'')+' · '+esc(o.pay||'')+'</span></div>').join(''):'<div class="empty">No hay ventas registradas hoy.</div>';
+  html+=list.length?list.map(o=>'<div class="adminItem"><div class="adminTop"><b>'+esc(o.no||'Venta')+'</b><b>'+money(o.total)+'</b></div><span class="muted">'+new Date(o.date||o.created||0).toLocaleString('es-CO')+' · '+esc(o.name||'')+' · '+esc(o.pay||'')+'</span></div>').join(''):'<div class="empty">No hay ventas registradas en el día.</div>';
   document.getElementById('panel').innerHTML=html;
   document.getElementById('modal').classList.add('open');
 }
@@ -3470,5 +3495,6 @@ function saveSettings(){
   else start();
 })();
 </script>
+<script src="dashboard-sales-fix.js?v=20261012-finance-pin"></script>
 </body>
 </html>
