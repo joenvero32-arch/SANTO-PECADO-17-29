@@ -170,7 +170,16 @@ async function spSyncPromotions(){
     if(!currentUser||currentUser.role!=='admin')return;
     const adminPinHash=currentUser.pinHash||(currentUser.pin?await spSha256(currentUser.pin):'');
     if(!adminPinHash||!currentUser.user)throw new Error('Falta validar el PIN del administrador.');
-    const rows=(promotions||[]).map(p=>{const offer=String(p.offer||'').trim();const pctMatch=offer.match(/(\d+(?:[.,]\d+)?)\s*%/);const pct=pctMatch?Number(pctMatch[1].replace(',','.')):null;const type=/2\s*[x×]\s*1|dos\s+por\s+uno|segunda\s+gratis/i.test(offer)?'2x1':(/precio\s+especial/i.test(offer)?'precio_especial':'descuento');return {id:spMap('promotion',p.id),name:String(p.title||'Promoción'),description:String(p.description||''),product_id:p.productId?spMap('prod',p.productId):null,offer_type:type,discount_percent:type==='descuento'&&pct!==null?pct:null,special_price:null,image_url:String(p.image||''),starts_at:p.start?new Date(p.start).toISOString():null,ends_at:p.end?new Date(p.end).toISOString():null,active:p.active!==false};});
+    const {data:dbCats,error:catError}=await SP_DB.from('categories').select('id,name');
+    if(catError)throw catError;
+    const catByName={};(dbCats||[]).forEach(c=>{catByName[String(c.name||'').trim().toLowerCase()]=c.id});
+    const rows=(promotions||[]).filter(p=>!String(p.id).startsWith('central-')).map(p=>{
+      const offer=String(p.offer||'').trim(),pctMatch=offer.match(/(\d+(?:[.,]\d+)?)\s*%/);
+      const pct=pctMatch?Number(pctMatch[1].replace(',','.')):null;
+      const benefit=String(p.benefitType||(/2\s*[x×]\s*1|dos\s+por\s+uno/i.test(offer)?'2x1':/segunda.*mitad|mitad.*segunda/i.test(offer)?'segunda_mitad':/regalo|gratis/i.test(offer)?'regalo':/precio\s+especial/i.test(offer)?'precio_especial':'descuento_porcentaje'));
+      const type=benefit==='2x1'?'2x1':benefit==='precio_especial'?'precio_especial':benefit==='regalo'?'regalo':benefit==='combo'?'combo':'descuento';
+      return {id:spMap('promotion',p.id),name:String(p.title||'Promoción'),description:String(p.description||''),product_id:p.productId?spMap('prod',p.productId):null,offer_type:type,discount_percent:['descuento_porcentaje','segunda_mitad'].includes(benefit)?Number(p.benefitValue||pct||50):null,special_price:['precio_especial','combo'].includes(benefit)?Number(p.bundlePrice||p.benefitValue||0)||null:null,image_url:String(p.image||''),starts_at:p.start?new Date(p.start).toISOString():null,ends_at:p.end?new Date(p.end).toISOString():null,active:p.active!==false,scope_type:['producto','categoria','productos_seleccionados','general'].includes(p.scopeType)?p.scopeType:'producto',category_id:p.category?catByName[String(p.category).trim().toLowerCase()]||null:null,selected_product_ids:(p.selectedProductIds||[]).map(id=>spMap('prod',id)),min_quantity:Math.max(1,Number(p.minQuantity||1)),buy_quantity:Math.max(1,Number(p.buyQuantity||1)),pay_quantity:Math.max(0,Number(p.payQuantity??1)),benefit_type:['descuento_porcentaje','segunda_mitad','2x1','regalo','precio_especial','combo'].includes(benefit)?benefit:'descuento_porcentaje',benefit_value:Number(p.benefitValue||pct||0)||null,gift_product_id:p.giftProductId?spMap('prod',p.giftProductId):null,gift_quantity:Math.max(1,Number(p.giftQuantity||1)),bundle_price:Number(p.bundlePrice||0)||null};
+    });
     const {error}=await SP_DB.rpc('sp_admin_sync_promotions_by_pin',{p_admin_username:String(currentUser.user),p_admin_pin_sha256:String(adminPinHash),p_promotions:rows});
     if(error)throw error;
     SP_DB_LAST=new Date().toISOString();localStorage.setItem('sp_central_last_sync',SP_DB_LAST);
@@ -2884,46 +2893,65 @@ function adminPromotions(){
 }
 function newPromotion(){
   if(!isAdmin()){alert('Solo el administrador puede crear promociones.');return}
-  const activeProducts=products.filter(p=>p.active);
-  const options=activeProducts.map(p=>'<option value="'+esc(p.id)+'">'+esc(p.name)+' — '+money(p.price)+'</option>').join('');
+  const activeProducts=products.filter(p=>p.active),options=activeProducts.map(p=>'<option value="'+esc(p.id)+'">'+esc(p.name)+' — '+money(p.price)+'</option>').join('');
+  const catOptions=(categories||[]).map(c=>'<option value="'+esc(c)+'">'+esc(c)+'</option>').join('');
   document.getElementById('panel').innerHTML=`
     <div class="panelHead"><h2>🎁 Nueva promoción</h2><button class="close" onclick="adminPromotions()">✕</button></div>
-    <div class="notice" style="margin:12px 0">Completa los datos en una sola pantalla. La promoción se guardará y se sincronizará con Supabase si la conexión está disponible.</div>
+    <div class="notice" style="margin:12px 0"><b>Configúrala a tu manera.</b> Elige productos, beneficio y vigencia. Los regalos deben descontarse del inventario al confirmar el pedido.</div>
     <div class="formGrid" style="margin-top:12px">
-      <div class="field full"><label>NOMBRE DE LA PROMOCIÓN *</label><input id="promo_title" maxlength="90" placeholder="Ej. Martes de tentación"></div>
-      <div class="field full"><label>DESCRIPCIÓN</label><textarea id="promo_description" rows="3" maxlength="500" placeholder="Explica brevemente la promoción para tus clientes"></textarea></div>
-      <div class="field full"><label>PRODUCTO RELACIONADO</label><select id="promo_product"><option value="">Promoción general (sin producto específico)</option>${options}</select></div>
-      <div class="field full"><label>OFERTA O BENEFICIO *</label><input id="promo_offer" maxlength="140" placeholder="Ej. Segunda hamburguesa al 50%"></div>
-      <div class="field"><label>INICIO (OPCIONAL)</label><input id="promo_start" type="datetime-local"></div>
-      <div class="field"><label>FINALIZACIÓN (OPCIONAL)</label><input id="promo_end" type="datetime-local"></div>
+      <div class="field full"><label>NOMBRE DE LA PROMOCIÓN *</label><input id="promo_title" maxlength="90" placeholder="Ej. Perro Hereje + gaseosa gratis"></div>
+      <div class="field full"><label>DESCRIPCIÓN PARA EL CLIENTE</label><textarea id="promo_description" rows="3" maxlength="500" placeholder="Explica brevemente la promoción"></textarea></div>
+      <div class="field full"><label>¿A QUÉ APLICA?</label><select id="promo_scope" onchange="promoScopeChanged()"><option value="producto">Un producto específico</option><option value="categoria">Una categoría completa</option><option value="productos_seleccionados">Varios productos elegidos</option><option value="general">Toda la compra</option></select></div>
+      <div class="field full" id="promo_product_wrap"><label>PRODUCTO PRINCIPAL</label><select id="promo_product"><option value="">Selecciona producto</option>${options}</select></div>
+      <div class="field full" id="promo_category_wrap" style="display:none"><label>CATEGORÍA</label><select id="promo_category"><option value="">Selecciona categoría</option>${catOptions}</select></div>
+      <div class="field full" id="promo_selected_wrap" style="display:none"><label>PRODUCTOS PARTICIPANTES (puedes elegir varios)</label><select id="promo_selected_products" multiple size="5" style="min-height:120px">${options}</select><small>Selecciona todos los productos que deben participar.</small></div>
+      <div class="field full"><label>TIPO DE BENEFICIO</label><select id="promo_benefit" onchange="promoBenefitChanged()"><option value="descuento_porcentaje">Descuento porcentual</option><option value="segunda_mitad">Segunda unidad a mitad de precio</option><option value="2x1">2x1 (lleva dos y paga uno)</option><option value="regalo">Regalar otro producto</option><option value="precio_especial">Precio especial por unidad</option><option value="combo">Combo a precio fijo</option></select></div>
+      <div class="field full" id="promo_value_wrap"><label id="promo_value_label">PORCENTAJE DE DESCUENTO</label><input id="promo_value" type="number" min="0" max="100" step="0.01" value="50"></div>
+      <div class="field full" id="promo_gift_wrap" style="display:none"><label>PRODUCTO DE REGALO (se descuenta del inventario)</label><select id="promo_gift_product"><option value="">Selecciona el regalo</option>${options}</select><label style="margin-top:8px">CANTIDAD DE REGALOS POR PROMOCIÓN</label><input id="promo_gift_quantity" type="number" min="1" step="1" value="1"></div>
+      <div class="field"><label>SE ACTIVA AL COMPRAR (UNIDADES)</label><input id="promo_buy_qty" type="number" min="1" step="1" value="1"></div>
+      <div class="field"><label>UNIDADES QUE SE COBRAN</label><input id="promo_pay_qty" type="number" min="0" step="1" value="1"></div>
+      <div class="field full"><label>CANTIDAD MÍNIMA DE COMPRA</label><input id="promo_min_qty" type="number" min="1" step="1" value="1"></div>
+      <div class="field"><label>INICIO (OPCIONAL)</label><input id="promo_start" type="datetime-local"></div><div class="field"><label>FINALIZACIÓN (OPCIONAL)</label><input id="promo_end" type="datetime-local"></div>
       <div class="field full"><label>URL DE IMAGEN (OPCIONAL)</label><input id="promo_image" type="url" placeholder="https://..."></div>
     </div>
     <div id="promo_form_error" class="notice" style="display:none;margin-top:12px;border-color:#b84c4c;color:#ffd1d1"></div>
     <div class="modalBtns" style="margin-top:16px"><button class="primary" onclick="saveNewPromotion()">💾 Guardar promoción</button><button class="secondary" onclick="adminPromotions()">Cancelar</button></div>`;
   document.getElementById('modal').classList.add('open');
 }
+function promoScopeChanged(){
+ const scope=document.getElementById('promo_scope')?.value||'producto';
+ const show=(id,on)=>{const el=document.getElementById(id);if(el)el.style.display=on?'':'none'};
+ show('promo_product_wrap',scope==='producto');show('promo_category_wrap',scope==='categoria');show('promo_selected_wrap',scope==='productos_seleccionados');
+}
+function promoBenefitChanged(){
+ const type=document.getElementById('promo_benefit')?.value||'descuento_porcentaje';
+ const showValue=['descuento_porcentaje','precio_especial','combo'].includes(type),gift=type==='regalo';
+ const wrap=document.getElementById('promo_value_wrap');if(wrap)wrap.style.display=showValue?'':'none';
+ const label=document.getElementById('promo_value_label');if(label)label.textContent=type==='descuento_porcentaje'?'PORCENTAJE DE DESCUENTO':type==='precio_especial'?'PRECIO POR UNIDAD (COP)':'PRECIO TOTAL DEL COMBO (COP)';
+ const gw=document.getElementById('promo_gift_wrap');if(gw)gw.style.display=gift?'':'none';
+}
 function saveNewPromotion(){
-  if(!isAdmin()){alert('Solo el administrador puede crear promociones.');return}
-  const title=(document.getElementById('promo_title')?.value||'').trim();
-  const description=(document.getElementById('promo_description')?.value||'').trim();
-  const productId=document.getElementById('promo_product')?.value||'';
-  const offer=(document.getElementById('promo_offer')?.value||'').trim();
-  const start=(document.getElementById('promo_start')?.value||'').trim();
-  const end=(document.getElementById('promo_end')?.value||'').trim();
-  const image=(document.getElementById('promo_image')?.value||'').trim();
-  const err=document.getElementById('promo_form_error');
-  const fail=msg=>{if(err){err.textContent=msg;err.style.display='block'}};
-  if(!title){fail('Escribe el nombre de la promoción.');return}
-  if(!offer){fail('Escribe la oferta o el beneficio.');return}
-  if(start&&end&&new Date(end)<new Date(start)){fail('La fecha de finalización debe ser posterior al inicio.');return}
-  if(image){try{const u=new URL(image);if(!['http:','https:'].includes(u.protocol))throw new Error();}catch(e){fail('La imagen debe tener una dirección URL válida que comience por https:// o http://.');return}}
-  const p={id:Date.now(),title,description,offer,productId,active:true,start:start?new Date(start).toISOString():'',end:end?new Date(end).toISOString():'',image};
-  promotions.push(p);
-  announcePromotion(p);
-  auditLog('Promoción creada',p.title);
-  renderPromotions();
-  if(window.SantoPecadoCentral?.connected)spSyncPromotions();
-  adminPromotions();
+ if(!isAdmin()){alert('Solo el administrador puede crear promociones.');return}
+ const get=id=>document.getElementById(id),title=(get('promo_title')?.value||'').trim(),description=(get('promo_description')?.value||'').trim();
+ const scopeType=get('promo_scope')?.value||'producto',productId=get('promo_product')?.value||'',category=get('promo_category')?.value||'';
+ const selectedProductIds=Array.from(get('promo_selected_products')?.selectedOptions||[]).map(o=>o.value);
+ const benefitType=get('promo_benefit')?.value||'descuento_porcentaje',benefitValue=Number(get('promo_value')?.value||0);
+ const giftProductId=get('promo_gift_product')?.value||'',giftQuantity=Math.max(1,Number(get('promo_gift_quantity')?.value||1));
+ const buyQuantity=Math.max(1,Number(get('promo_buy_qty')?.value||1)),payQuantity=Math.max(0,Number(get('promo_pay_qty')?.value||1)),minQuantity=Math.max(1,Number(get('promo_min_qty')?.value||1));
+ const start=(get('promo_start')?.value||'').trim(),end=(get('promo_end')?.value||'').trim(),image=(get('promo_image')?.value||'').trim(),err=get('promo_form_error');
+ const fail=msg=>{if(err){err.textContent=msg;err.style.display='block'}};
+ if(!title){fail('Escribe el nombre de la promoción.');return}
+ if(scopeType==='producto'&&!productId){fail('Selecciona el producto al que aplica.');return}
+ if(scopeType==='categoria'&&!category){fail('Selecciona la categoría.');return}
+ if(scopeType==='productos_seleccionados'&&!selectedProductIds.length){fail('Selecciona al menos un producto participante.');return}
+ if(benefitType==='regalo'&&!giftProductId){fail('Selecciona el producto que se entregará como regalo.');return}
+ if(benefitType==='descuento_porcentaje'&&(benefitValue<=0||benefitValue>100)){fail('El descuento debe ser mayor que 0 y máximo 100%.');return}
+ if(['precio_especial','combo'].includes(benefitType)&&benefitValue<0){fail('El precio no puede ser negativo.');return}
+ if(start&&end&&new Date(end)<new Date(start)){fail('La fecha de finalización debe ser posterior al inicio.');return}
+ if(image){try{const u=new URL(image);if(!['http:','https:'].includes(u.protocol))throw new Error()}catch(e){fail('La imagen debe tener una URL válida http:// o https://.');return}}
+ const offer=benefitType==='descuento_porcentaje'?benefitValue+'% de descuento':benefitType==='segunda_mitad'?'Segunda unidad al 50%':benefitType==='2x1'?'2x1':benefitType==='regalo'?'Producto de regalo':benefitType==='precio_especial'?'Precio especial: '+money(benefitValue):'Combo a '+money(benefitValue);
+ const p={id:Date.now(),title,description,offer,productId,scopeType,category,selectedProductIds,benefitType,benefitValue,giftProductId,giftQuantity,buyQuantity,payQuantity,minQuantity,bundlePrice:['precio_especial','combo'].includes(benefitType)?benefitValue:null,active:true,start:start?new Date(start).toISOString():'',end:end?new Date(end).toISOString():'',image};
+ promotions.push(p);save();announcePromotion(p);auditLog('Promoción creada',p.title);renderPromotions();if(window.SantoPecadoCentral?.connected)spSyncPromotions();adminPromotions();
 }
 function editPromotion(id){
   if(!isAdmin())return;const p=promotions.find(x=>x.id===id);if(!p)return;
