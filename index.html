@@ -500,6 +500,21 @@ window.loadPublicCatalog=async function(){
  #modal #panel .sp-top-price{font-size:11px!important}
 }
 </style>
+<style id="sp-toppings-header-fix-v4">
+/* Corrección puntual tras validar en móvil: título más compacto y filas proporcionadas */
+@media(max-width:600px){
+ #modal #panel .sp-top-panel-head{display:flex!important;align-items:flex-start!important;gap:8px!important;margin-bottom:5px!important;padding-bottom:2px!important}
+ #modal #panel .sp-top-panel-head>div{flex:1 1 auto!important;min-width:0!important}
+ #modal #panel .sp-top-panel-head h2{font-size:clamp(19px,5vw,24px)!important;line-height:1.08!important;letter-spacing:-.035em!important;margin:2px 0 0!important;max-width:100%!important;overflow-wrap:anywhere!important}
+ #modal #panel .sp-top-panel-head .close{flex:0 0 38px!important;width:38px!important;min-width:38px!important;height:38px!important;margin:0!important}
+ #modal #panel .sp-top-eyebrow{font-size:9px!important;letter-spacing:.1em!important;line-height:1.2!important}
+ #modal #panel .sp-top-notice{margin:5px 0 7px!important;padding:6px 8px!important}
+ #modal #panel .sp-top-notice p{font-size:10px!important;line-height:1.25!important}
+ #modal #panel .sp-top-legend{grid-template-columns:minmax(0,1fr) 72px 52px!important}
+ #modal #panel .sp-top-row{grid-template-columns:18px minmax(0,1fr) 72px 52px!important;gap:5px!important}
+ #modal #panel .sp-top-qty{grid-template-columns:20px minmax(16px,1fr) 20px!important}
+}
+</style>
 </head>
 <body>
 
