@@ -1,4 +1,4 @@
-/* Caja: sincronización de la apertura local vigente con Supabase. */
+/* Caja: sincronización segura de la apertura vigente con Supabase. */
 (function(){
  let credentials=null, inFlight=false, lastAttemptId='';
  function latestOpen(){
@@ -24,8 +24,10 @@
    }
    const result=await SP_DB.rpc('sp_open_cash_session_by_pin',{p_username:credentials.username,p_pin:credentials.pin,p_local_session_id:String(rec.id),p_opening_amount:Number(rec.opening||0),p_opened_at:rec.date||new Date().toISOString()});
    if(result.error)throw result.error;
-   console.info('Caja: sincronización central confirmada',result.data);
-   alert('Apertura de Caja sincronizada con Supabase.');
+   const rows=Array.isArray(result.data)?result.data:(result.data?[result.data]:[]);
+   if(!rows.length||!rows[0].id)throw Error('Supabase no devolvió confirmación de la sesión de Caja');
+   console.info('Caja: respuesta central confirmada',rows[0]);
+   alert('Supabase confirmó la sesión de Caja. Estado: '+String(rows[0].status||'open')+'.');
   }catch(e){
    lastAttemptId='';
    credentials=null;
@@ -34,15 +36,15 @@
   }finally{inFlight=false;}
  }
  function install(){
-  let installed=false;
   ['adminCash','employeeCash'].forEach(function(name){
    if(typeof window[name]==='function'&&!window[name].__spCashWrapped){
     const original=window[name];
     const wrapped=function(){const result=original.apply(this,arguments);setTimeout(syncCurrent,0);return result;};
-    wrapped.__spCashWrapped=true;window[name]=wrapped;installed=true;
+    wrapped.__spCashWrapped=true;window[name]=wrapped;
    }
   });
-  if(!installed&&!window.__spCashHookWaiting)setTimeout(install,500);
+  if(!window.__spCashOpeningSyncAll) setTimeout(install,800);
+  window.__spCashOpeningSyncAll=true;
  }
  install();
 })();
