@@ -2956,8 +2956,8 @@ function saveSettings(){
 /* Botón de retorno situado debajo de los estados; conserva el acceso seguro a Administración. */
 (function(){
   function adminReturnClick(){
-    /* Detener el sondeo de estado antes de cambiar el contenido del modal.
-       Si sigue activo, la próxima respuesta de Supabase reemplaza el acceso por la tarjeta del pedido. */
+    /* Invalidar también cualquier consulta de estado que siga en curso. */
+    try{if(typeof spTrackRequestId!=='undefined')spTrackRequestId++;}catch(e){}
     try{if(typeof spStatusPollTimer!=='undefined'&&spStatusPollTimer){clearInterval(spStatusPollTimer);spStatusPollTimer=null;}}catch(e){}
     try{
       if(typeof currentUser!=='undefined'&&currentUser&&currentUser.role==='admin'&&typeof adminProducts==='function'){
