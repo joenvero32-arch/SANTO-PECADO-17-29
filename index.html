@@ -2839,18 +2839,47 @@ function adminPromotions(){
   document.getElementById('modal').classList.add('open');
 }
 function newPromotion(){
-  if(!isAdmin())return;
-  const title=prompt('Nombre de la promoción','Promoción especial');if(title===null||!title.trim())return;
-  const productOptions=products.filter(p=>p.active).map((p,i)=>`${i+1}. ${p.name} — ${money(p.price)}`).join('\n');
-  const pick=prompt('Producto relacionado (opcional). Escribe el número:\n'+productOptions,'');
-  let productId='';if(pick&&/^\\d+$/.test(pick.trim())){const arr=products.filter(p=>p.active);const idx=Number(pick)-1;if(arr[idx])productId=arr[idx].id;}
-  const description=prompt('Descripción de la promoción','Disfruta esta promoción en Santo Pecado 17-29')||'';
-  const offer=prompt('Oferta o beneficio','2x1 / 20% de descuento / Precio especial')||'';
-  const start=prompt('Inicio (opcional). Formato: 2026-09-29 12:00','')||'';
-  const end=prompt('Final (opcional). Formato: 2026-10-05 23:59','')||'';
-  const image=prompt('URL de imagen de la promoción (opcional)','')||'';
-  const p={id:Date.now(),title:title.trim(),description:description.trim(),offer:offer.trim(),productId,active:true,start:start.trim()?start.trim().replace(' ','T'):'',end:end.trim()?end.trim().replace(' ','T'):'',image:image.trim()};
-  promotions.push(p);announcePromotion(p);save();auditLog('Promoción creada',p.title);renderPromotions();adminPromotions();
+  if(!isAdmin()){alert('Solo el administrador puede crear promociones.');return}
+  const activeProducts=products.filter(p=>p.active);
+  const options=activeProducts.map(p=>'<option value="'+esc(p.id)+'">'+esc(p.name)+' — '+money(p.price)+'</option>').join('');
+  document.getElementById('panel').innerHTML=`
+    <div class="panelHead"><h2>🎁 Nueva promoción</h2><button class="close" onclick="adminPromotions()">✕</button></div>
+    <div class="notice" style="margin:12px 0">Completa los datos en una sola pantalla. La promoción se guardará y se sincronizará con Supabase si la conexión está disponible.</div>
+    <div class="formGrid" style="margin-top:12px">
+      <div class="field full"><label>NOMBRE DE LA PROMOCIÓN *</label><input id="promo_title" maxlength="90" placeholder="Ej. Martes de tentación"></div>
+      <div class="field full"><label>DESCRIPCIÓN</label><textarea id="promo_description" rows="3" maxlength="500" placeholder="Explica brevemente la promoción para tus clientes"></textarea></div>
+      <div class="field full"><label>PRODUCTO RELACIONADO</label><select id="promo_product"><option value="">Promoción general (sin producto específico)</option>${options}</select></div>
+      <div class="field full"><label>OFERTA O BENEFICIO *</label><input id="promo_offer" maxlength="140" placeholder="Ej. Segunda hamburguesa al 50%"></div>
+      <div class="field"><label>INICIO (OPCIONAL)</label><input id="promo_start" type="datetime-local"></div>
+      <div class="field"><label>FINALIZACIÓN (OPCIONAL)</label><input id="promo_end" type="datetime-local"></div>
+      <div class="field full"><label>URL DE IMAGEN (OPCIONAL)</label><input id="promo_image" type="url" placeholder="https://..."></div>
+    </div>
+    <div id="promo_form_error" class="notice" style="display:none;margin-top:12px;border-color:#b84c4c;color:#ffd1d1"></div>
+    <div class="modalBtns" style="margin-top:16px"><button class="primary" onclick="saveNewPromotion()">💾 Guardar promoción</button><button class="secondary" onclick="adminPromotions()">Cancelar</button></div>`;
+  document.getElementById('modal').classList.add('open');
+}
+function saveNewPromotion(){
+  if(!isAdmin()){alert('Solo el administrador puede crear promociones.');return}
+  const title=(document.getElementById('promo_title')?.value||'').trim();
+  const description=(document.getElementById('promo_description')?.value||'').trim();
+  const productId=document.getElementById('promo_product')?.value||'';
+  const offer=(document.getElementById('promo_offer')?.value||'').trim();
+  const start=(document.getElementById('promo_start')?.value||'').trim();
+  const end=(document.getElementById('promo_end')?.value||'').trim();
+  const image=(document.getElementById('promo_image')?.value||'').trim();
+  const err=document.getElementById('promo_form_error');
+  const fail=msg=>{if(err){err.textContent=msg;err.style.display='block'}};
+  if(!title){fail('Escribe el nombre de la promoción.');return}
+  if(!offer){fail('Escribe la oferta o el beneficio.');return}
+  if(start&&end&&new Date(end)<new Date(start)){fail('La fecha de finalización debe ser posterior al inicio.');return}
+  if(image){try{const u=new URL(image);if(!['http:','https:'].includes(u.protocol))throw new Error();}catch(e){fail('La imagen debe tener una dirección URL válida que comience por https:// o http://.');return}}
+  const p={id:Date.now(),title,description,offer,productId,active:true,start:start?new Date(start).toISOString():'',end:end?new Date(end).toISOString():'',image};
+  promotions.push(p);
+  save();
+  auditLog('Promoción creada',p.title);
+  renderPromotions();
+  if(window.SantoPecadoCentral?.connected)spSyncPromotions();
+  adminPromotions();
 }
 function editPromotion(id){
   if(!isAdmin())return;const p=promotions.find(x=>x.id===id);if(!p)return;
