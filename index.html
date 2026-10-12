@@ -1257,11 +1257,20 @@ async function trackOrder(noFromButton){
     noFromButton=localStorage.getItem(LAST_ORDER)||'';
     if(!noFromButton){const entered=prompt('Escribe tu número de pedido (ej. SP-123456):');if(entered===null||!entered.trim())return;noFromButton=entered.trim().toUpperCase();}
   }
-  if(noFromButton && SP_DB_ON && !can('allowOrders')){
+  if(noFromButton && SP_DB_ON){
     const load=async()=>{
       const {data,error}=await SP_DB.rpc('sp_get_order_receipt',{p_order_number:String(noFromButton).trim()});
-      if(error){console.warn('Consulta central de estado:',error.message);return}
-      if(!data?.length)return;
+      if(error){
+        console.warn('Consulta central de estado:',error.message);
+        document.getElementById('panel').innerHTML='<div class="panelHead"><h2>📍 Estado del pedido</h2><button class="close" onclick="closeModal()">✕</button></div><div class="notice" style="margin-top:14px">No pudimos consultar el pedido en este momento. Comprueba la conexión e inténtalo de nuevo.</div>';
+        document.getElementById('modal').classList.add('open');
+        return;
+      }
+      if(!data?.length){
+        document.getElementById('panel').innerHTML='<div class="panelHead"><h2>📍 Estado del pedido</h2><button class="close" onclick="closeModal()">✕</button></div><div class="notice" style="margin-top:14px">No encontramos ese número en el registro central de pedidos. Verifica el número e inténtalo de nuevo.</div>';
+        document.getElementById('modal').classList.add('open');
+        return;
+      }
       const central=data[0];
       let detail='';
       try{
