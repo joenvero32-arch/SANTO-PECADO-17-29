@@ -1250,16 +1250,29 @@ function openStatusWhatsAppFromOrder(no,status){
   const phone=normalizeWhatsAppPhone(o.phone);if(!phone){alert('Este pedido no tiene un teléfono válido.');return;}
   window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(statusNotificationText(o,status)),'_blank');
 }
+let spTrackRequestId=0;
+let spTrackPromptActive=false;
 async function trackOrder(noFromButton){
+  const requestId=++spTrackRequestId;
   if(spStatusPollTimer){clearInterval(spStatusPollTimer);spStatusPollTimer=null}
   const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
   if(!noFromButton){
     noFromButton=localStorage.getItem(LAST_ORDER)||'';
-    if(!noFromButton){const entered=prompt('Escribe tu número de pedido (ej. SP-123456):');if(entered===null||!entered.trim())return;noFromButton=entered.trim().toUpperCase();}
+    if(!noFromButton){
+      if(spTrackPromptActive)return;
+      spTrackPromptActive=true;
+      let entered;
+      try{entered=prompt('Escribe tu número de pedido (ej. SP-123456):');}
+      finally{spTrackPromptActive=false;}
+      if(entered===null||!entered.trim())return;
+      noFromButton=entered.trim().toUpperCase();
+    }
   }
   if(noFromButton && SP_DB_ON){
     const load=async()=>{
+      if(requestId!==spTrackRequestId)return;
       const {data,error}=await SP_DB.rpc('sp_get_order_receipt',{p_order_number:String(noFromButton).trim()});
+      if(requestId!==spTrackRequestId)return;
       if(error){
         console.warn('Consulta central de estado:',error.message);
         document.getElementById('panel').innerHTML='<div class="panelHead"><h2>📍 Estado del pedido</h2><button class="close" onclick="closeModal()">✕</button></div><div class="notice" style="margin-top:14px">No pudimos consultar el pedido en este momento. Comprueba la conexión e inténtalo de nuevo.</div>';
@@ -1277,6 +1290,7 @@ async function trackOrder(noFromButton){
         const {data:detailData,error:detailError}=await SP_DB.rpc('sp_get_public_order_detail',{p_order_number:String(central.order_number).trim()});
         if(!detailError&&detailData?.[0]) detail=String(detailData[0].detail||'');
       }catch(e){console.warn('Detalle público del pedido:',e)}
+      if(requestId!==spTrackRequestId)return;
       const detailHtml=detail ? '<div style="margin:14px 0"><div style="font-weight:900;margin-bottom:8px">🛒 LO QUE PEDISTE</div><div style="white-space:pre-wrap;line-height:1.65">'+esc(detail)+'</div></div>' : '<div class="empty" style="margin:14px 0">No hay detalle disponible.</div>';
       document.getElementById('panel').innerHTML=`
         <div class="panelHead"><h2>📍 Estado del pedido</h2><button class="close" onclick="closeModal()">✕</button></div>
@@ -1289,7 +1303,15 @@ async function trackOrder(noFromButton){
       document.getElementById('modal').classList.add('open');
     };
     await load();
-    spStatusPollTimer=setInterval(load,3000);
+    if(requestId===spTrackRequestId && document.getElementById('modal')?.classList.contains('open')){
+      spStatusPollTimer=setInterval(()=>{
+        const title=document.querySelector('#panel .panelHead h2')?.textContent||'';
+        if(requestId!==spTrackRequestId||!title.includes('Estado del pedido')){
+          clearInterval(spStatusPollTimer);spStatusPollTimer=null;return;
+        }
+        load();
+      },5000);
+    }
     return;
   }
   if(!noFromButton){
