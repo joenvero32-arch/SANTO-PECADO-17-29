@@ -545,6 +545,38 @@ window.loadPublicCatalog=async function(){
 #modal #panel .sp-admin-group-grid .tab{min-height:42px!important;padding:9px 10px!important;font-size:13px!important}
 @media(min-width:600px){#modal #panel .sp-admin-group-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
 </style>
+<style id="sp-track-order-modern-v1">
+#modal #panel:has(.sp-track-form){padding:clamp(18px,4vw,28px)!important;background:radial-gradient(ellipse at 100% 0%,#33220d55,transparent 45%),linear-gradient(145deg,#151515,#0d0d0d)!important;border:1px solid #34302a!important;border-radius:24px!important;box-shadow:0 24px 70px #000b!important}
+#modal #panel .sp-track-head{display:flex!important;align-items:flex-start!important;gap:14px!important;margin:0 0 22px!important}
+#modal #panel .sp-track-head>div{flex:1;min-width:0}
+#modal #panel .sp-track-kicker{display:block;color:#eac34b;font-size:10px;font-weight:850;letter-spacing:.15em;margin:0 0 9px}
+#modal #panel .sp-track-head h2{margin:0!important;font-size:clamp(23px,5.5vw,30px)!important;line-height:1.1!important;letter-spacing:-.035em!important;color:#fff!important}
+#modal #panel .sp-track-head p{margin:9px 0 0!important;color:#a9a9a9!important;font-size:13px!important;line-height:1.45!important}
+#modal #panel .sp-track-head .close{flex:0 0 40px!important;width:40px!important;height:40px!important;margin:0!important;border-radius:12px!important}
+#modal #panel .sp-track-form{padding:18px!important;border:1px solid #302d27!important;border-radius:17px!important;background:#111!important}
+#modal #panel .sp-track-form label{display:block;margin:0 0 9px!important;color:#eee!important;font-size:13px!important;font-weight:750!important}
+#modal #panel .sp-track-input-wrap{display:flex!important;align-items:center!important;gap:8px!important;min-height:54px!important;padding:0 14px!important;border:1px solid #45413a!important;border-radius:12px!important;background:#1b1b1b!important;box-sizing:border-box!important}
+#modal #panel .sp-track-input-wrap:focus-within{border-color:#e9bf3d!important;box-shadow:0 0 0 3px #e9bf3d20!important}
+#modal #panel .sp-track-input-wrap>span{color:#e9bf3d!important;font-weight:850!important}
+#modal #panel .sp-track-input-wrap input{width:100%!important;min-width:0!important;border:0!important;outline:0!important;background:transparent!important;color:#fff!important;font-size:16px!important;box-shadow:none!important}
+#modal #panel .sp-track-input-wrap input::placeholder{color:#777!important}
+#modal #panel .sp-track-help{margin:9px 0 0!important;color:#888!important;font-size:11px!important;line-height:1.45!important}
+#modal #panel .sp-track-actions{display:flex!important;gap:9px!important;margin-top:20px!important}
+#modal #panel .sp-track-actions button{min-height:46px!important;border-radius:12px!important;font-size:13px!important;font-weight:800!important}
+#modal #panel .sp-track-cancel{flex:0 0 auto!important;padding:0 15px!important;border:1px solid #343434!important;background:#191919!important;color:#ccc!important}
+#modal #panel .sp-track-submit{flex:1!important;padding:0 15px!important;border:0!important;background:linear-gradient(135deg,#ffdc63,#f5b91e)!important;color:#17120a!important;box-shadow:0 5px 18px #f3b71e20!important}
+@media(max-width:360px){#modal #panel .sp-track-form{padding:13px!important}#modal #panel .sp-track-actions{gap:6px!important}#modal #panel .sp-track-cancel{padding:0 10px!important}}
+</style>
+<script>
+function submitTrackOrderPrompt(event){
+  if(event)event.preventDefault();
+  const input=document.getElementById('spTrackOrderNumber');
+  const value=String(input?.value||'').trim().toUpperCase();
+  if(!value){input?.focus();return}
+  closeModal();
+  trackOrder(value);
+}
+</script>
 </head>
 <body>
 
@@ -1587,11 +1619,18 @@ async function trackOrder(noFromButton){
     if(!noFromButton){
       if(spTrackPromptActive)return;
       spTrackPromptActive=true;
-      let entered;
-      try{entered=prompt('Escribe tu número de pedido (ej. SP-123456):');}
-      finally{spTrackPromptActive=false;}
-      if(entered===null||!entered.trim())return;
-      noFromButton=entered.trim().toUpperCase();
+      spTrackPromptActive=false;
+      document.getElementById('panel').innerHTML=`
+        <div class="panelHead sp-track-head"><div><span class="sp-track-kicker">SANTO PECADO 17-29 · PEDIDOS</span><h2>📍 Rastrear mi pedido</h2><p>Consulta el estado de tu pedido en tiempo real.</p></div><button class="close" type="button" onclick="closeModal()" aria-label="Cerrar">✕</button></div>
+        <form class="sp-track-form" onsubmit="submitTrackOrderPrompt(event)">
+          <label for="spTrackOrderNumber">Número de pedido</label>
+          <div class="sp-track-input-wrap"><span>SP-</span><input id="spTrackOrderNumber" name="orderNumber" type="text" inputmode="text" autocomplete="off" placeholder="Ej. SP-123456" maxlength="30" required /></div>
+          <p class="sp-track-help">Encontrarás el código en la confirmación de tu compra.</p>
+          <div class="sp-track-actions"><button type="button" class="sp-track-cancel" onclick="closeModal()">Cancelar</button><button type="submit" class="sp-track-submit">Consultar pedido <span>→</span></button></div>
+        </form>`;
+      document.getElementById('modal').classList.add('open');
+      setTimeout(()=>document.getElementById('spTrackOrderNumber')?.focus(),80);
+      return;
     }
   }
   if(noFromButton && SP_DB_ON){
