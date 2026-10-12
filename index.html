@@ -360,6 +360,44 @@ window.loadPublicCatalog=async function(){
  .sp-top-price{font-size:11px}
 }
 </style>
+
+<style id="sp-toppings-compact-v2">
+/* Refinamiento móvil: menos altura y más espacio útil */
+#panel .sp-top-panel-head{padding-bottom:8px!important}
+#panel .sp-top-panel-head h2{font-size:clamp(23px,5.8vw,30px)!important}
+#panel .sp-top-notice{padding:10px 12px!important;gap:9px!important;border-radius:13px!important}
+#panel .sp-top-notice-icon{flex-basis:28px;height:28px;font-size:16px}
+#panel .sp-top-notice strong{font-size:12px;margin-bottom:2px}
+#panel .sp-top-notice p{font-size:12px;line-height:1.35}
+#panel .sp-top-legend{padding:0 6px;font-size:9px}
+#panel #toppingList{gap:10px}
+#panel .sp-top-section{border-radius:13px}
+#panel .sp-top-section-head{padding:10px 12px}
+#panel .sp-top-section-head h3{font-size:13px}
+#panel .sp-top-section-head p{font-size:10px}
+#panel .sp-top-section-head>span{min-width:23px;height:23px;border-radius:7px}
+#panel .sp-top-row{min-height:55px;padding:7px 1px}
+#panel .sp-top-rows{padding:0 9px}
+#panel .sp-top-name{font-size:13px;line-height:1.22}
+#panel .sp-top-qty{height:31px}
+#panel .sp-top-qty button{height:29px}
+#panel .sp-top-qty input.topQty{height:29px!important}
+#panel .sp-top-price{font-size:11px}
+#panel .sp-top-price small{font-size:9px}
+#panel .sp-top-observation{margin-top:12px!important}
+#panel .sp-top-observation textarea{min-height:68px}
+#panel .sp-top-modal-btns{gap:7px!important}
+@media(max-width:420px){
+ #panel .sp-top-legend{grid-template-columns:minmax(0,1fr) 84px 58px;gap:5px}
+ #panel .sp-top-row{grid-template-columns:20px minmax(0,1fr) 84px 58px;gap:6px;min-height:52px}
+ #panel .sp-top-rows{padding:0 7px}
+ #panel .sp-top-name{font-size:12px}
+ #panel .sp-top-qty{grid-template-columns:23px minmax(18px,1fr) 23px;height:29px}
+ #panel .sp-top-qty button{height:27px;font-size:16px}
+ #panel .sp-top-qty input.topQty{height:27px!important;font-size:12px!important}
+ #panel .sp-top-price{font-size:10px}
+}
+</style>
 </head>
 <body>
 
