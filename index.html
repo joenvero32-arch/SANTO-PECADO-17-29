@@ -2834,6 +2834,7 @@ function printCustomers(){if(!isAdmin())return;const rows=customers.map(c=>`<tr>
 function exportCustomers(){if(!isAdmin())return;const csv='Nombre,Telefono,Pedidos,Total,Ultima compra\n'+customers.map(c=>[c.name,c.phone,c.orders||0,c.total||0,c.lastOrder||''].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='clientes_santo_pecado_17_29.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 function adminPromotions(){
   if(!isAdmin()){alert('Solo el administrador o dueño puede administrar promociones.');return}
+  if(SP_DB_ON)spSyncPromotions();
   const active=promotions.filter(p=>p.active&&(!p.start||new Date(p.start)<=new Date())&&(!p.end||new Date(p.end)>=new Date())).length;
   document.getElementById('panel').innerHTML=`<div class="panelHead"><h2>🎁 Promociones</h2><button class="close" onclick="adminProducts()">✕</button></div>${navTabs('promotions')}
   <div class="statGrid" style="margin:12px 0"><div class="statCard"><span>Activas ahora</span><b>${active}</b></div><div class="statCard"><span>Total creadas</span><b>${promotions.length}</b></div><div class="statCard"><span>Avisos preparados</span><b>${promoNotifications.length}</b></div></div>
