@@ -330,6 +330,10 @@ window.loadPublicCatalog=async function(){
     </div>
   </section>
 
+  <section id="publicPromotions" aria-label="Promociones vigentes" style="max-width:1180px;margin:0 auto;padding:0 22px">
+    <div id="promoBanner"></div>
+  </section>
+
   <section id="menu">
     <div class="sectionTitle">
       <div><h2>Explora el menú</h2><p>Productos, precios y fotos en un solo lugar.</p></div>
@@ -583,7 +587,23 @@ let currentCat='Todos';
 
 function money(n){return new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(Number(n)||0)}
 function activePromotions(){const now=new Date();return promotions.filter(p=>p.active&&(!p.start||new Date(p.start)<=now)&&(!p.end||new Date(p.end)>=now));}
-function renderPromotions(){const el=document.getElementById('promoBanner');if(!el)return;const a=activePromotions();if(!a.length){el.innerHTML='';return}el.innerHTML=a.map(p=>`<div class="notice" style="margin-bottom:10px;border:1px solid rgba(247,185,40,.35);background:linear-gradient(135deg,rgba(247,185,40,.12),rgba(139,44,255,.10));display:flex;justify-content:space-between;gap:12px;align-items:center"><div><b style="font-size:18px">🎁 ${esc(p.title)}</b><div class="muted" style="margin-top:4px">${esc(p.description||'Promoción disponible ahora')}</div>${p.offer?`<div style="margin-top:6px;color:#ffd66d;font-weight:900">${esc(p.offer)}</div>`:''}</div><span style="font-size:28px">🔥</span></div>`).join('');}
+async function spLoadPublicPromotions(){
+  if(!SP_DB_ON||!SP_DB?.rpc)return;
+  const {data,error}=await SP_DB.rpc('sp_get_public_promotions');
+  if(error)throw error;
+  const rows=Array.isArray(data)?data:[];
+  const central=rows.map(p=>({
+    id:'central-'+String(p.id),centralId:String(p.id),
+    title:String(p.name||'Promoción'),description:String(p.description||''),
+    offer:p.offer_type==='descuento'?(p.discount_percent!=null?String(p.discount_percent)+'% de descuento':'Descuento especial'):p.offer_type==='2x1'?'2x1':p.offer_type==='precio_especial'?(p.special_price!=null?'Precio especial: '+money(p.special_price):'Precio especial'):String(p.offer_type||'Promoción'),
+    active:p.active===true,start:p.starts_at||'',end:p.ends_at||'',image:p.image_url||''
+  }));
+  if(currentUser&&currentUser.role==='admin'){
+    const localIds=new Set((promotions||[]).map(p=>String(p.id)));
+    promotions=[...(promotions||[]),...central.filter(p=>!localIds.has(String(p.id)))];
+  }else promotions=central;
+}
+function renderPromotions(){const el=document.getElementById('promoBanner');if(!el)return;const a=activePromotions();if(!a.length){el.innerHTML='';return}el.innerHTML='<h2 style="margin:8px 0 12px;color:#ffd66d">🎁 Promociones vigentes</h2>'+a.map(p=>`<div class="notice" style="margin-bottom:10px;border:1px solid rgba(247,185,40,.35);background:linear-gradient(135deg,rgba(247,185,40,.12),rgba(139,44,255,.10));display:flex;justify-content:space-between;gap:12px;align-items:center"><div><b style="font-size:18px">🎁 ${esc(p.title)}</b><div class="muted" style="margin-top:4px">${esc(p.description||'Promoción disponible ahora')}</div>${p.offer?`<div style="margin-top:6px;color:#ffd66d;font-weight:900">${esc(p.offer)}</div>`:''}</div><span style="font-size:28px">🔥</span></div>`).join('');}
 function requestPromoNotifications(){if('Notification' in window&&Notification.permission==='default'){Notification.requestPermission().catch(()=>{})}}
 function announcePromotion(p){const now=new Date().toISOString();promoNotifications.unshift({id:Date.now(),promotionId:p.id,title:p.title,created:now,sent:false});promoNotifications=promoNotifications.slice(0,500);if('Notification' in window&&Notification.permission==='granted'){customers.forEach(c=>{try{new Notification('🎁 Santo Pecado 17-29',{body:p.title+' · '+(p.offer||p.description||'Promoción disponible')})}catch(e){}})}save()}
 
@@ -2964,6 +2984,10 @@ function saveSettings(){
   // Mostrar inmediatamente el catálogo local/semilla para que la página nunca quede en blanco.
   render();
   renderPromotions();
+  try{
+    await spLoadPublicPromotions();
+    renderPromotions();
+  }catch(e){console.warn('Promociones públicas pendientes:',e)}
   try{
     await window.loadPublicCatalog?.();
     render();
