@@ -79,13 +79,14 @@
     catch(firstError) {
       const msg=String(firstError?.message||firstError||'');
       if(!/no se encontraron las credenciales del administrador/i.test(msg)) throw firstError;
-      const list=(typeof users!=='undefined'&&Array.isArray(users))?users:[];
       const active=(typeof currentUser!=='undefined'&&currentUser)?currentUser:null;
-      let local=list.find(u=>u&&String(u.user||'').toLowerCase()===String(active?.user||'').toLowerCase()&&u.role==='admin'&&String(u.pin||'').trim());
-      if(!local) local=list.find(u=>u&&u.role==='admin'&&String(u.pin||'').trim());
-      if(!local) throw new Error('No se encontró un usuario administrador local con PIN guardado. No se modificó ningún dato.');
+      let username=String(active?.user||active?.username||'').trim();
+      if(!username) username=String(prompt('Usuario administrador para consultar Caja/Ventas:')||'').trim();
+      if(!username) throw new Error('Consulta cancelada: falta el usuario administrador.');
+      const pin=prompt('Ingresa el PIN del administrador para consultar Caja/Ventas centrales. No se guardará.');
+      if(pin===null||!String(pin).trim()) throw new Error('Consulta cancelada: no se ingresó el PIN.');
       if(typeof SP_DB==='undefined'||!SP_DB||typeof SP_DB.rpc!=='function') throw new Error('La conexión central de Supabase no está disponible.');
-      const result=await SP_DB.rpc('sp_get_admin_orders_pin',{p_username:String(local.user),p_pin:String(local.pin)});
+      const result=await SP_DB.rpc('sp_get_admin_orders_pin',{p_username:username,p_pin:String(pin).trim()});
       if(result.error) throw result.error;
       let data=result.data;
       if(typeof data==='string'){try{data=JSON.parse(data)}catch(_){throw new Error('La respuesta de Supabase no tiene un formato válido.');}}
