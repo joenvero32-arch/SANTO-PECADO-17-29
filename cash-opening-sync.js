@@ -57,14 +57,8 @@
    const wrapped=function(){const result=original.apply(this,arguments);setTimeout(syncCurrent,0);return result;};
    wrapped.__spCashWrapped=true;window.openCash=wrapped;
   }
-  // También permite reintentar una apertura local pendiente al entrar a Caja.
-  ['adminCash','employeeCash'].forEach(function(name){
-   if(typeof window[name]==='function'&&!window[name].__spCashWrapped){
-    const original=window[name];
-    const wrapped=function(){const result=original.apply(this,arguments);setTimeout(syncCurrent,0);return result;};
-    wrapped.__spCashWrapped=true;window[name]=wrapped;
-   }
-  });
+  // No sincronizar al entrar o cambiar de pantalla: puede ocurrir durante el inicio de sesión de otro empleado.
+  // La sincronización automática solo se ejecuta después de una apertura real mediante openCash.
   if(typeof window.openCash!=='function'||!window.openCash.__spCashWrapped)setTimeout(install,500);
  }
  install();
