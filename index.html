@@ -2931,29 +2931,44 @@ function saveSettings(){
 })();
 </script><script src="stats-nav-fix.js?v=20261010-central-core2"></script><script src="comanda-fix.js?v=20261010-central-core1"></script><script src="audit-inventory-fix.js?v=20261010-central-core1"></script>
 <script>
-/* Acceso rápido de retorno a Administración; no conserva una sesión borrada ni omite el inicio de sesión. */
+/* Botón de retorno situado debajo de los estados; conserva el acceso seguro a Administración. */
 (function(){
-  function addAdminReturn(){
-    if(document.getElementById('spAdminReturn'))return;
-    const b=document.createElement('button');
-    b.id='spAdminReturn';
-    b.type='button';
-    b.textContent='⚙️ Volver a Administración';
-    b.setAttribute('aria-label','Volver a Administración');
-    b.style.cssText='position:fixed;left:12px;bottom:14px;z-index:99980;border:0;border-radius:999px;padding:12px 16px;background:linear-gradient(135deg,#ffdf54,#f7b928);color:#17120a;font-weight:900;box-shadow:0 6px 22px #0008;cursor:pointer;touch-action:manipulation;';
-    b.addEventListener('click',function(){
-      try{
-        if(typeof currentUser!=='undefined'&&currentUser&&currentUser.role==='admin'){
-          if(typeof adminProducts==='function'){adminProducts();return;}
-        }
-      }catch(e){}
-      if(typeof openAdmin==='function')openAdmin();
-      else document.querySelector('.adminBtn')?.click();
-    });
-    document.body.appendChild(b);
+  function adminReturnClick(){
+    try{
+      if(typeof currentUser!=='undefined'&&currentUser&&currentUser.role==='admin'&&typeof adminProducts==='function'){
+        adminProducts();return;
+      }
+    }catch(e){}
+    if(typeof openAdmin==='function')openAdmin();
+    else document.querySelector('.adminBtn')?.click();
   }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',addAdminReturn,{once:true});
-  else addAdminReturn();
+  function placeAdminReturn(){
+    const panel=document.getElementById('panel');
+    if(!panel)return;
+    const status=panel.querySelector('.statusHero');
+    let b=document.getElementById('spAdminReturn');
+    if(!status){
+      if(b)b.remove();
+      return;
+    }
+    if(!b){
+      b=document.createElement('button');
+      b.id='spAdminReturn';
+      b.type='button';
+      b.textContent='⚙️ Volver a Administración';
+      b.setAttribute('aria-label','Volver a Administración');
+      b.style.cssText='display:block;width:100%;box-sizing:border-box;margin:12px 0 4px;border:0;border-radius:16px;padding:14px 16px;background:linear-gradient(135deg,#ffdf54,#f7b928);color:#17120a;font-weight:900;font-size:16px;box-shadow:0 6px 22px #0005;cursor:pointer;touch-action:manipulation;';
+      b.addEventListener('click',adminReturnClick);
+    }
+    if(status.nextElementSibling!==b)status.insertAdjacentElement('afterend',b);
+  }
+  function start(){
+    placeAdminReturn();
+    const panel=document.getElementById('panel');
+    if(panel)new MutationObserver(placeAdminReturn).observe(panel,{childList:true,subtree:true});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});
+  else start();
 })();
 </script>
 </body>
