@@ -2875,7 +2875,7 @@ function saveNewPromotion(){
   if(image){try{const u=new URL(image);if(!['http:','https:'].includes(u.protocol))throw new Error();}catch(e){fail('La imagen debe tener una dirección URL válida que comience por https:// o http://.');return}}
   const p={id:Date.now(),title,description,offer,productId,active:true,start:start?new Date(start).toISOString():'',end:end?new Date(end).toISOString():'',image};
   promotions.push(p);
-  save();
+  announcePromotion(p);
   auditLog('Promoción creada',p.title);
   renderPromotions();
   if(window.SantoPecadoCentral?.connected)spSyncPromotions();
