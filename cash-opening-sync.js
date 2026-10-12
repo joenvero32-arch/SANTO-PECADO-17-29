@@ -43,8 +43,8 @@
     wrapped.__spCashWrapped=true;window[name]=wrapped;
    }
   });
-  if(!window.__spCashOpeningSyncAll) setTimeout(install,800);
-  window.__spCashOpeningSyncAll=true;
+  const ready=['adminCash','employeeCash'].every(function(name){return typeof window[name]==='function'&&window[name].__spCashWrapped;});
+  if(!ready)setTimeout(install,800);
  }
  install();
 })();
