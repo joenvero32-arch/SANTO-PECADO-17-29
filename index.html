@@ -436,6 +436,36 @@ window.loadPublicCatalog=async function(){
  #panel .sp-top-price{font-size:10px}
 }
 </style>
+<style id="sp-toppings-mobile-polish-v2">
+/* Ajuste fino para móviles: menos altura y mejor espacio para el nombre del producto */
+@media(max-width:600px){
+ .sp-top-panel-head{align-items:flex-start!important;gap:10px!important;padding-bottom:2px}
+ .sp-top-panel-head>div{min-width:0;flex:1}
+ .sp-top-panel-head h2{font-size:clamp(21px,5.2vw,27px)!important;line-height:1.12!important;letter-spacing:-.045em!important;overflow-wrap:anywhere}
+ .sp-top-panel-head .close{flex:0 0 44px;width:44px!important;height:44px!important;min-width:44px!important;margin-top:18px}
+ .sp-top-notice{padding:10px 12px!important;gap:9px!important;border-radius:13px!important}
+ .sp-top-notice-icon{flex-basis:28px;height:28px;font-size:17px}
+ .sp-top-notice strong{font-size:13px;margin-bottom:2px}
+ .sp-top-notice p{font-size:12px;line-height:1.35}
+ #toppingList{gap:10px}
+ .sp-top-section{border-radius:13px}
+ .sp-top-section-head{padding:10px 12px}
+ .sp-top-section-head h3{font-size:13px}
+ .sp-top-section-head p{font-size:10px}
+ .sp-top-section-head>span{min-width:23px;height:23px}
+ .sp-top-legend{padding:0 6px;font-size:9px}
+ .sp-top-row{min-height:54px;padding:7px 1px;gap:7px}
+ .sp-top-rows{padding:0 9px}
+ .sp-top-name{font-size:12px;line-height:1.25}
+ .sp-top-qty{height:30px}
+ .sp-top-qty button{height:28px;font-size:16px}
+ .sp-top-qty input.topQty{height:28px!important;font-size:12px!important}
+ .sp-top-price{font-size:10px}
+ .sp-top-price small{font-size:8px}
+ .sp-top-observation{margin-top:12px!important}
+}
+</style>
+
 </head>
 <body>
 
