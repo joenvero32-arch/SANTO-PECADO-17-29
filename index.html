@@ -577,6 +577,20 @@ function submitTrackOrderPrompt(event){
   trackOrder(value);
 }
 </script>
+<style id="sp-promo-edit-modern-v1">
+#modal #panel:has(.sp-promo-edit-form){background:radial-gradient(ellipse at 100% 0%,#3a2b1050,transparent 45%),linear-gradient(145deg,#151515,#0d0d0d)!important}
+#modal #panel .sp-promo-kicker{display:block;margin-bottom:7px;color:#e9c34b;font-size:9px;font-weight:850;letter-spacing:.13em}
+#modal #panel .sp-promo-notice{padding:12px 14px!important;border-color:#393224!important;background:#171612!important;color:#c7c3b8!important;font-size:12px!important;line-height:1.5!important}
+#modal #panel .sp-promo-edit-form{gap:12px!important}
+#modal #panel .sp-promo-edit-form .field{min-width:0!important}
+#modal #panel .sp-promo-edit-form label{display:block;margin-bottom:7px!important;color:#d7cba8!important;font-size:10px!important;font-weight:800!important;letter-spacing:.06em!important}
+#modal #panel .sp-promo-edit-form input,#modal #panel .sp-promo-edit-form textarea{box-sizing:border-box!important;width:100%!important;min-height:46px!important;padding:12px!important;border:1px solid #383838!important;border-radius:11px!important;background:#1a1a1a!important;color:#f6f6f6!important;font-size:14px!important;outline:none!important}
+#modal #panel .sp-promo-edit-form textarea{min-height:88px!important;resize:vertical!important}
+#modal #panel .sp-promo-edit-form input:focus,#modal #panel .sp-promo-edit-form textarea:focus{border-color:#e9c34b!important;box-shadow:0 0 0 3px #e9c34b1c!important}
+#modal #panel .sp-promo-error{display:block;margin-top:10px!important;border-color:#8e3939!important;background:#261414!important;color:#ffd4d4!important}
+#modal #panel .sp-promo-edit-actions{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,.65fr)!important;gap:8px!important;margin-top:16px!important}
+#modal #panel .sp-promo-edit-actions button{min-width:0!important;min-height:46px!important;margin:0!important;padding:10px!important;border-radius:11px!important;font-size:13px!important}
+</style>
 </head>
 <body>
 
@@ -3267,8 +3281,50 @@ function saveNewPromotion(){
  promotions.push(p);save();announcePromotion(p);auditLog('Promoción creada',p.title);renderPromotions();if(window.SantoPecadoCentral?.connected)spSyncPromotions();adminPromotions();
 }
 function editPromotion(id){
-  if(!isAdmin())return;const p=promotions.find(x=>x.id===id);if(!p)return;
-  const oldTitle=p.title; const title=prompt('Nombre',p.title);if(title===null)return;p.title=title.trim();p.description=prompt('Descripción',p.description)||'';p.offer=prompt('Oferta o beneficio',p.offer)||'';p.start=prompt('Inicio (AAAA-MM-DD HH:MM)',p.start?p.start.replace('T',' '):'')||'';p.end=prompt('Final (AAAA-MM-DD HH:MM)',p.end?p.end.replace('T',' '):'')||'';p.start=p.start.trim()?p.start.trim().replace(' ','T'):'';p.end=p.end.trim()?p.end.trim().replace(' ','T'):'';p.image=prompt('URL de imagen (opcional)',p.image||'')||'';save();auditLog('Promoción modificada',oldTitle+' → '+p.title);renderPromotions();adminPromotions();
+  if(!isAdmin())return;
+  const p=promotions.find(x=>String(x.id)===String(id));if(!p)return;
+  const localDateValue=value=>{
+    if(!value)return '';
+    const d=new Date(value);if(Number.isNaN(d.getTime()))return String(value).replace(' ','T').slice(0,16);
+    const pad=n=>String(n).padStart(2,'0');
+    return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes());
+  };
+  document.getElementById('panel').innerHTML=`
+    <div class="panelHead"><div><span class="sp-promo-kicker">CENTRO COMERCIAL · SANTO PECADO 17-29</span><h2>✏️ Editar promoción</h2></div><button class="close" onclick="adminPromotions()" aria-label="Cerrar">✕</button></div>
+    <div class="notice sp-promo-notice">Actualiza la información de esta promoción. Los cambios se guardarán en el registro existente.</div>
+    <div class="formGrid sp-promo-edit-form">
+      <div class="field full"><label for="edit_promo_title">NOMBRE DE LA PROMOCIÓN *</label><input id="edit_promo_title" maxlength="90" value="${esc(p.title||'')}" required placeholder="Nombre de la promoción"></div>
+      <div class="field full"><label for="edit_promo_description">DESCRIPCIÓN PARA EL CLIENTE</label><textarea id="edit_promo_description" rows="3" maxlength="500" placeholder="Describe la promoción">${esc(p.description||'')}</textarea></div>
+      <div class="field full"><label for="edit_promo_offer">OFERTA O BENEFICIO</label><input id="edit_promo_offer" maxlength="180" value="${esc(p.offer||'')}" placeholder="Ej. 50% de descuento en la segunda unidad"></div>
+      <div class="field"><label for="edit_promo_start">INICIO (OPCIONAL)</label><input id="edit_promo_start" type="datetime-local" value="${localDateValue(p.start)}"></div>
+      <div class="field"><label for="edit_promo_end">FINALIZACIÓN (OPCIONAL)</label><input id="edit_promo_end" type="datetime-local" value="${localDateValue(p.end)}"></div>
+      <div class="field full"><label for="edit_promo_image">URL DE IMAGEN (OPCIONAL)</label><input id="edit_promo_image" type="url" value="${esc(p.image||'')}" placeholder="https://..."></div>
+    </div>
+    <div id="edit_promo_error" class="notice sp-promo-error" style="display:none"></div>
+    <div class="modalBtns sp-promo-edit-actions"><button class="primary" onclick="saveEditedPromotion('${String(p.id).replace(/'/g,'')}')">💾 Guardar cambios</button><button class="secondary" onclick="adminPromotions()">Cancelar</button></div>`;
+  document.getElementById('modal').classList.add('open');
+}
+function saveEditedPromotion(id){
+  if(!isAdmin())return;
+  const p=promotions.find(x=>String(x.id)===String(id));if(!p)return;
+  const get=id=>document.getElementById(id);
+  const title=(get('edit_promo_title')?.value||'').trim();
+  const err=get('edit_promo_error');
+  if(!title){if(err){err.textContent='Escribe el nombre de la promoción.';err.style.display='block'}get('edit_promo_title')?.focus();return}
+  const oldTitle=p.title;
+  const asIso=id=>{const v=(get(id)?.value||'').trim();return v?new Date(v).toISOString():''};
+  try{
+    const startValue=asIso('edit_promo_start'),endValue=asIso('edit_promo_end');
+    if(startValue&&endValue&&new Date(endValue)<new Date(startValue)){if(err){err.textContent='La fecha de finalización debe ser posterior al inicio.';err.style.display='block'}return}
+    p.title=title;
+    p.description=(get('edit_promo_description')?.value||'').trim();
+    p.offer=(get('edit_promo_offer')?.value||'').trim();
+    p.start=startValue;p.end=endValue;
+    p.image=(get('edit_promo_image')?.value||'').trim();
+    save();auditLog('Promoción modificada',oldTitle+' → '+p.title);renderPromotions();
+    if(window.SantoPecadoCentral?.connected)spSyncPromotions();
+    adminPromotions();
+  }catch(e){if(err){err.textContent='No se pudieron guardar los cambios. Revisa las fechas e inténtalo de nuevo.';err.style.display='block'}console.error('Error editando promoción:',e)}
 }
 function togglePromotion(id){if(!isAdmin())return;const p=promotions.find(x=>x.id===id);if(!p)return;p.active=!p.active;save();auditLog(p.active?'Promoción activada':'Promoción desactivada',p.title);renderPromotions();adminPromotions();}
 function deletePromotion(id){if(!isAdmin())return;const p=promotions.find(x=>x.id===id);if(!p)return;if(!confirm('¿Eliminar esta promoción?'))return;const reason=askReason('Indica el motivo para eliminar la promoción:');if(reason===null)return;promotions=promotions.filter(x=>x.id!==id);save();auditLog('Promoción eliminada',p.title+' · '+reason);renderPromotions();adminPromotions();}
