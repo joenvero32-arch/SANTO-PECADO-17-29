@@ -64,3 +64,33 @@
   }
   hook();
 })();
+
+/* Recuperación de credenciales locales para consultas financieras; no confirma pagos ni modifica datos. */
+(function(){
+  if(window.__spFinanceCredentialRecovery) return;
+  window.__spFinanceCredentialRecovery=true;
+  const original=window.spGetFinanceOrders;
+  if(typeof original!=='function') {
+    console.warn('Recuperación financiera: la función original no está disponible.');
+    return;
+  }
+  window.spGetFinanceOrders=async function(){
+    try { return await original(); }
+    catch(firstError) {
+      const msg=String(firstError?.message||firstError||'');
+      if(!/no se encontraron las credenciales del administrador/i.test(msg)) throw firstError;
+      const list=(typeof users!=='undefined'&&Array.isArray(users))?users:[];
+      const active=(typeof currentUser!=='undefined'&&currentUser)?currentUser:null;
+      let local=list.find(u=>u&&String(u.user||'').toLowerCase()===String(active?.user||'').toLowerCase()&&u.role==='admin'&&String(u.pin||'').trim());
+      if(!local) local=list.find(u=>u&&u.role==='admin'&&String(u.pin||'').trim());
+      if(!local) throw new Error('No se encontró un usuario administrador local con PIN guardado. No se modificó ningún dato.');
+      if(typeof SP_DB==='undefined'||!SP_DB||typeof SP_DB.rpc!=='function') throw new Error('La conexión central de Supabase no está disponible.');
+      const result=await SP_DB.rpc('sp_get_admin_orders_pin',{p_username:String(local.user),p_pin:String(local.pin)});
+      if(result.error) throw result.error;
+      let data=result.data;
+      if(typeof data==='string'){try{data=JSON.parse(data)}catch(_){throw new Error('La respuesta de Supabase no tiene un formato válido.');}}
+      if(!Array.isArray(data)) throw new Error('Supabase no devolvió una lista válida de pedidos.');
+      return data;
+    }
+  };
+})();
