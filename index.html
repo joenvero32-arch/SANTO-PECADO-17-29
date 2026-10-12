@@ -2323,7 +2323,7 @@ async function adminCash(){
   const apertures=cashClosures.filter(c=>c.day===today&&c.type==='apertura'&&(!lastCloseAt||new Date(c.date).getTime()>lastCloseAt)).sort((a,b)=>new Date(b.date)-new Date(a.date));
   const openingRecord=apertures[0]||null;
   const opening=openingRecord?Number(openingRecord.opening||0):0;
-  let list=salesForDay(today).filter(o=>!lastCloseAt||new Date(o.date||o.created||0).getTime()>lastCloseAt);
+  let list=SP_DB_ON?[]:salesForDay(today).filter(o=>!lastCloseAt||new Date(o.date||o.created||0).getTime()>lastCloseAt);
   if(SP_DB_ON){
     try{
       const centralOrders=await spGetFinanceOrders();
@@ -2707,7 +2707,7 @@ async function adminSales(){
 async function adminTodaySales(){
   if(!isAdmin()){alert('Solo el administrador o dueño puede consultar las ventas del día.');return}
   const today=dayKey(new Date());
-  let list=salesForDay(today).slice();
+  let list=SP_DB_ON?[]:salesForDay(today).slice();
   if(SP_DB_ON){
     try{
       const data=await spGetFinanceOrders();
