@@ -2930,5 +2930,31 @@ function saveSettings(){
   }catch(e){console.warn('Sincronización central de clientes/promociones pendiente.',e)}
 })();
 </script><script src="stats-nav-fix.js?v=20261010-central-core2"></script><script src="comanda-fix.js?v=20261010-central-core1"></script><script src="audit-inventory-fix.js?v=20261010-central-core1"></script>
+<script>
+/* Acceso rápido de retorno a Administración; no conserva una sesión borrada ni omite el inicio de sesión. */
+(function(){
+  function addAdminReturn(){
+    if(document.getElementById('spAdminReturn'))return;
+    const b=document.createElement('button');
+    b.id='spAdminReturn';
+    b.type='button';
+    b.textContent='⚙️ Volver a Administración';
+    b.setAttribute('aria-label','Volver a Administración');
+    b.style.cssText='position:fixed;left:12px;bottom:14px;z-index:99980;border:0;border-radius:999px;padding:12px 16px;background:linear-gradient(135deg,#ffdf54,#f7b928);color:#17120a;font-weight:900;box-shadow:0 6px 22px #0008;cursor:pointer;touch-action:manipulation;';
+    b.addEventListener('click',function(){
+      try{
+        if(typeof currentUser!=='undefined'&&currentUser&&currentUser.role==='admin'){
+          if(typeof adminProducts==='function'){adminProducts();return;}
+        }
+      }catch(e){}
+      if(typeof openAdmin==='function')openAdmin();
+      else document.querySelector('.adminBtn')?.click();
+    });
+    document.body.appendChild(b);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',addAdminReturn,{once:true});
+  else addAdminReturn();
+})();
+</script>
 </body>
 </html>
