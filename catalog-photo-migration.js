@@ -49,19 +49,26 @@
   }
 
   function addButton(db) {
-    if (document.getElementById('spPhotoMigrationBtn')) return;
+    const panel = document.getElementById('panel');
+    if (!panel) return;
+    const existing = document.getElementById('spPhotoMigrationBtn');
+    if (existing) {
+      if (existing.parentElement !== panel) panel.appendChild(existing);
+      return;
+    }
     const button = document.createElement('button');
     button.id = 'spPhotoMigrationBtn';
     button.type = 'button';
     button.textContent = '⚡ Optimizar fotos del catálogo';
     Object.assign(button.style, {
-      position: 'fixed', right: '12px', bottom: '76px', zIndex: '2147483000',
-      maxWidth: 'calc(100vw - 24px)', padding: '12px 16px', border: '0',
-      borderRadius: '12px', background: '#176b45', color: '#fff',
-      font: '600 14px system-ui', boxShadow: '0 3px 14px #0003'
+      display: 'block', position: 'static', boxSizing: 'border-box',
+      width: '100%', maxWidth: '100%', margin: '14px 0 8px',
+      padding: '12px 16px', border: '0', borderRadius: '12px',
+      background: '#176b45', color: '#fff', font: '600 14px system-ui',
+      boxShadow: '0 3px 14px #0003', whiteSpace: 'normal'
     });
     button.addEventListener('click', () => migrate(db, button));
-    document.body.appendChild(button);
+    panel.appendChild(button);
   }
 
   function report(message) {
