@@ -119,6 +119,27 @@
     el.textContent = message;
   }
 
+  function decodeDataImage(dataUrl) {
+    // Decodifica la imagen Base64 localmente; evita fetch(data:) que puede fallar
+    // en móviles con imágenes grandes o por restricciones del navegador.
+    if (typeof dataUrl !== 'string') throw new Error('La fotografía original no es texto válido');
+    const match = dataUrl.match(/^data:image\/(jpeg|jpg|png|webp);base64,([A-Za-z0-9+/=\r\n]+)$/i);
+    if (!match) throw new Error('La fotografía original no tiene un formato Base64 compatible');
+    const mime = /^data:image\/(png|webp)/i.test(dataUrl) ? dataUrl.slice(5, dataUrl.indexOf(';')) : 'image/jpeg';
+    const encoded = match[2].replace(/\s/g, '');
+    let binary;
+    try { binary = atob(encoded); } catch (_) { throw new Error('La fotografía original tiene Base64 inválido'); }
+    const parts = [];
+    const chunkSize = 32768;
+    for (let offset = 0; offset < binary.length; offset += chunkSize) {
+      const chunk = binary.slice(offset, offset + chunkSize);
+      const bytes = new Uint8Array(chunk.length);
+      for (let i = 0; i < chunk.length; i++) bytes[i] = chunk.charCodeAt(i);
+      parts.push(bytes);
+    }
+    return new Blob(parts, { type: mime });
+  }
+
   async function compressPhoto(sourceBlob) {
     if (!sourceBlob || !sourceBlob.size || sourceBlob.size > 12 * 1024 * 1024) {
       throw new Error('Tamaño de imagen no válido (máximo 12 MB)');
@@ -226,9 +247,7 @@
         const p = targets[i];
         let uploadedPath = null;
         try {
-          const response = await fetch(p.image_url);
-          if (!response.ok) throw new Error('No se pudo leer la fotografía original');
-          const originalBlob = await response.blob();
+          const originalBlob = decodeDataImage(p.image_url);
           const blob = await compressPhoto(originalBlob);
           const path = 'products/optimized-' + p.id + '-' + crypto.randomUUID() + '.jpg';
           const { error: uploadError } = await db.storage.from('product-images').upload(path, blob, {
