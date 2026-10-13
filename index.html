@@ -2451,6 +2451,12 @@ function printStatsReport(){
   w.document.close();
   w.onload=()=>{w.focus();setTimeout(()=>{try{w.print()}catch(e){console.warn('No se pudo imprimir Estadísticas:',e)}},300)};
 }
+function normalizePaymentLabel(value){
+  const raw=String(value??'').trim();
+  // Compatibilidad visual para registros antiguos que guardaron el código numérico del selector.
+  const legacyOrderMethods={'1':'Efectivo','2':'Nequi','3':'Bancolombia','4':'Daviplata / transferencia','5':'Tarjeta','6':'Otro'};
+  return legacyOrderMethods[raw]||raw||'Sin especificar';
+}
 async function adminStats(){
   if(!isAdmin()){alert('Solo el administrador o dueño puede consultar estadísticas.');return}
   const panel=document.getElementById('panel');
@@ -2476,10 +2482,10 @@ async function adminStats(){
     const map={};sales.forEach(o=>(o.items||[]).forEach(x=>{const k=x.name||x.productName||x.product_name||products.find(p=>String(p.id)===String(x.id))?.name||'Producto';map[k]=(map[k]||0)+Number(x.qty||1)}));
     return Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,10);
   })();
-  const pay=central?Object.fromEntries((central.payments||[]).map(x=>[x.method,Number(x.total||0)])):period.reduce((a,x)=>a, Object.create(null));
+  const pay=Object.create(null);\n  if(central){(central.payments||[]).forEach(x=>{const k=normalizePaymentLabel(x.method);pay[k]=(pay[k]||0)+Number(x.total||0)})}
   if(!central){
     const periodKeys=new Set(period.map(x=>x.key));
-    sales.filter(o=>periodKeys.has(dayKey(o.date||o.created))).forEach(o=>{const k=o.pay||o.payment_method||o.paymentMethod||'Sin especificar';pay[k]=(pay[k]||0)+Number(o.total||0)});
+    sales.filter(o=>periodKeys.has(dayKey(o.date||o.created))).forEach(o=>{const k=normalizePaymentLabel(o.pay||o.payment_method||o.paymentMethod||'Sin especificar');pay[k]=(pay[k]||0)+Number(o.total||0)});
   }
   const delivered=orders.filter(o=>o.status==='entregado').length,pending=orders.filter(o=>!['entregado','cancelado'].includes(o.status||'recibido')).length;
   const sourceNotice=central
@@ -2627,7 +2633,7 @@ function adminReports(){
   const period=last30.reduce((a,x)=>{a.count+=x.count;a.total+=x.total;return a},{count:0,total:0});
   const productMap={},payMap={};
   sales.slice(0,1000).forEach(o=>{
-    const pay=o.pay||o.payment_method||o.paymentMethod||'Sin registrar';
+    const pay=normalizePaymentLabel(o.pay||o.payment_method||o.paymentMethod||'Sin registrar');
     payMap[pay]=(payMap[pay]||0)+Number(o.total||0);
     (o.items||[]).forEach(x=>{
       const k=x.name||x.productName||x.product_name||products.find(p=>String(p.id)===String(x.id))?.name||'Producto';
