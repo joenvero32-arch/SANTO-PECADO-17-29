@@ -243,14 +243,14 @@
           if (!verifiedBlob.size || verifiedBlob.type !== 'image/jpeg') throw new Error('La fotografía subida no se verificó como JPG');
 
           // Actualizar exclusivamente image_url; no enviar nombre, precio, stock ni categoría.
-          const { data: updated, error: updateError } = await db.from('products')
-            .update({ image_url: publicUrl })
-            .eq('id', p.id)
-            .select('id,image_url')
-            .maybeSingle();
+          const { data: updatedRows, error: updateError } = await db.rpc('admin_update_product_image_url', {
+            p_product_id: p.id,
+            p_image_url: publicUrl
+          });
           if (updateError) throw updateError;
+          const updated = Array.isArray(updatedRows) ? updatedRows[0] : updatedRows;
           if (!updated || updated.id !== p.id || updated.image_url !== publicUrl) {
-            throw new Error('No se confirmó la actualización exclusiva de image_url; revise sesión y permisos RLS');
+            throw new Error('Supabase no confirmó la actualización exclusiva de image_url.');
           }
           uploadedPath = null;
           done++;
