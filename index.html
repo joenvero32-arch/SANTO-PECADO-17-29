@@ -2583,9 +2583,35 @@ async function adminDomicilios(search=''){
 }
 
 async function newDriver(){
-  if(!isAdmin())return;const name=prompt('Nombre del domiciliario:');if(!name||!name.trim())return;const cleanName=name.trim();const phone=prompt('Teléfono:','');if(phone===null)return;const cleanPhone=phone.trim();
-  if(SP_DB_ON){try{let data,error;const adminPinHash=currentUser?.pinHash||(currentUser?.pin?await spSha256(currentUser.pin):'');if(!adminPinHash)throw new Error('No se encontró la validación PIN del administrador.');({data,error}=await SP_DB.rpc('sp_admin_upsert_delivery_driver_by_pin',{p_admin_username:currentUser.user||'admin',p_admin_pin_sha256:adminPinHash,p_name:cleanName,p_phone:cleanPhone,p_active:true}));if(error)throw error;const d=Array.isArray(data)?data[0]:data;if(!d)throw new Error('No se recibió el domiciliario creado.');const drivers=JSON.parse(localStorage.getItem('sp_premium_drivers_v1')||'[]');const merged=drivers.filter(x=>x.id!==d.id&&String(x.name||'').trim().toLowerCase()!==cleanName.toLowerCase());merged.unshift({id:d.id,name:d.name,phone:d.phone||'',active:d.active!==false});localStorage.setItem('sp_premium_drivers_v1',JSON.stringify(merged));auditLog('Nuevo domiciliario','Registrado '+d.name);save();adminDomicilios();return}catch(e){alert('No se pudo guardar el domiciliario en la central: '+(e?.message||e));return}}
-  const drivers=JSON.parse(localStorage.getItem('sp_premium_drivers_v1')||'[]');const duplicate=drivers.find(d=>String(d.name||'').trim().toLowerCase()===cleanName.toLowerCase()||(cleanPhone&&String(d.phone||'').replace(/\D/g,'')===cleanPhone.replace(/\D/g,'')));if(duplicate){alert('Este domiciliario ya está registrado. No se creó un duplicado.');adminDomicilios();return}drivers.unshift({id:String(Date.now()),name:cleanName,phone:cleanPhone,active:true});localStorage.setItem('sp_premium_drivers_v1',JSON.stringify(drivers));auditLog('Nuevo domiciliario','Registrado '+cleanName);save();adminDomicilios();
+  if(!isAdmin())return;
+  const old=document.getElementById('spNewDriverOverlay');if(old)old.remove();
+  const overlay=document.createElement('div');overlay.id='spNewDriverOverlay';
+  overlay.innerHTML=`<style>
+  #spNewDriverOverlay{position:fixed;inset:0;z-index:2147482000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.82);backdrop-filter:blur(9px);font-family:inherit}
+  #spNewDriverCard{width:min(440px,100%);box-sizing:border-box;border:1px solid #f7b92866;border-radius:24px;padding:24px;background:linear-gradient(145deg,#191713,#090909 75%);color:#fff;box-shadow:0 24px 80px #000b}
+  #spNewDriverCard .sndIcon{width:48px;height:48px;display:grid;place-items:center;border-radius:15px;background:#f7b92818;border:1px solid #f7b92855;font-size:24px;margin-bottom:16px}
+  #spNewDriverCard h2{margin:0 0 8px;font-size:22px}#spNewDriverCard p{margin:0 0 20px;color:#aaa;font-size:14px;line-height:1.5}
+  #spNewDriverCard label{display:block;margin:13px 0 7px;color:#f7c94f;font-size:11px;font-weight:900;letter-spacing:1.4px}
+  #spNewDriverCard input{width:100%;box-sizing:border-box;border:1px solid #413a2a;border-radius:12px;background:#080808;color:#fff;padding:14px;font:inherit;outline:none}
+  #spNewDriverCard input:focus{border-color:#f7b928;box-shadow:0 0 0 3px #f7b92820}
+  #spNewDriverCard .sndActions{display:flex;gap:10px;margin-top:22px}#spNewDriverCard button{flex:1;border-radius:12px;padding:13px 9px;font-weight:850;cursor:pointer}
+  #spNewDriverCard .sndCancel{background:#1c1c1c;color:#ddd;border:1px solid #393939}#spNewDriverCard .sndSave{background:linear-gradient(135deg,#ffe18a,#f7b928);color:#17120a;border:0}
+  </style><section id="spNewDriverCard" role="dialog" aria-modal="true" aria-labelledby="spNewDriverTitle"><div class="sndIcon">🛵</div><h2 id="spNewDriverTitle">Nuevo domiciliario</h2><p>Registra los datos del domiciliario para asignar los pedidos de entrega.</p>
+  <form id="spNewDriverForm"><label for="spNewDriverName">NOMBRE COMPLETO</label><input id="spNewDriverName" maxlength="100" placeholder="Nombre del domiciliario" autocomplete="name" required>
+  <label for="spNewDriverPhone">TELÉFONO</label><input id="spNewDriverPhone" type="tel" maxlength="30" inputmode="tel" placeholder="Número de contacto" autocomplete="tel">
+  <div class="sndActions"><button type="button" class="sndCancel" id="spNewDriverCancel">Cancelar</button><button type="submit" class="sndSave" id="spNewDriverSave">Guardar domiciliario</button></div></form></section>`;
+  document.body.appendChild(overlay);const form=overlay.querySelector('#spNewDriverForm'),nameInput=overlay.querySelector('#spNewDriverName'),phoneInput=overlay.querySelector('#spNewDriverPhone'),submit=overlay.querySelector('#spNewDriverSave');
+  const close=()=>overlay.remove();overlay.querySelector('#spNewDriverCancel').onclick=close;overlay.addEventListener('click',e=>{if(e.target===overlay)close()});
+  form.onsubmit=async e=>{
+    e.preventDefault();const cleanName=nameInput.value.trim(),cleanPhone=phoneInput.value.trim();if(!cleanName){nameInput.focus();return}
+    const existingDrivers=JSON.parse(localStorage.getItem('sp_premium_drivers_v1')||'[]');
+    const duplicate=existingDrivers.find(d=>String(d.name||'').trim().toLowerCase()===cleanName.toLowerCase()||(cleanPhone&&String(d.phone||'').replace(/\D/g,'')===cleanPhone.replace(/\D/g,'')));
+    if(duplicate){alert('Este domiciliario ya está registrado. No se creó un duplicado.');return}
+    submit.disabled=true;submit.textContent='Guardando…';
+    if(SP_DB_ON){try{let data,error;const adminPinHash=currentUser?.pinHash||(currentUser?.pin?await spSha256(currentUser.pin):'');if(!adminPinHash)throw new Error('No se encontró la validación PIN del administrador.');({data,error}=await SP_DB.rpc('sp_admin_upsert_delivery_driver_by_pin',{p_admin_username:currentUser.user||'admin',p_admin_pin_sha256:adminPinHash,p_name:cleanName,p_phone:cleanPhone,p_active:true}));if(error)throw error;const d=Array.isArray(data)?data[0]:data;if(!d)throw new Error('No se recibió el domiciliario creado.');const drivers=JSON.parse(localStorage.getItem('sp_premium_drivers_v1')||'[]');const merged=drivers.filter(x=>x.id!==d.id&&String(x.name||'').trim().toLowerCase()!==cleanName.toLowerCase());merged.unshift({id:d.id,name:d.name,phone:d.phone||'',active:d.active!==false});localStorage.setItem('sp_premium_drivers_v1',JSON.stringify(merged));auditLog('Nuevo domiciliario','Registrado '+d.name);save();close();adminDomicilios();return}catch(e){alert('No se pudo guardar el domiciliario en la central: '+(e?.message||e));submit.disabled=false;submit.textContent='Guardar domiciliario';return}}
+    const drivers=JSON.parse(localStorage.getItem('sp_premium_drivers_v1')||'[]');drivers.unshift({id:String(Date.now()),name:cleanName,phone:cleanPhone,active:true});localStorage.setItem('sp_premium_drivers_v1',JSON.stringify(drivers));auditLog('Nuevo domiciliario','Registrado '+cleanName);save();close();adminDomicilios();
+  };
+  setTimeout(()=>nameInput.focus(),60);
 }
 
 async function toggleDriver(id){
