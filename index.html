@@ -2572,26 +2572,43 @@ function printStatsReport(){
   if(!panel){alert('No se encontró el reporte de Estadísticas.');return}
   const report=panel.cloneNode(true);
   report.querySelectorAll('.adminTabs,.modalBtns,.close,button').forEach(el=>el.remove());
+  const content=report.innerHTML;
   const w=window.open('','_blank');
   if(!w){alert('Chrome bloqueó la ventana de impresión. Permite ventanas emergentes para este sitio.');return}
-  const content=report.innerHTML;
+  const stamp=new Date().toLocaleString('es-CO',{dateStyle:'long',timeStyle:'short'});
   w.document.open();
-  w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Estadísticas · Santo Pecado 17-29</title><style>
-    *{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#171717;background:#fff;margin:0;padding:18px;font-size:12px}
-    h2{font-size:22px;margin:4px 0 12px}h3{font-size:15px;margin:0 0 10px}.dashKicker{font-size:10px;letter-spacing:1px;color:#555}
-    .statgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:12px 0}
-    .stat,.dashSection,.adminItem,.notice{border:1px solid #bbb;border-radius:8px;padding:10px;margin:8px 0;break-inside:avoid;page-break-inside:avoid}
-    .stat small{display:block;color:#555;margin-bottom:5px}.stat b{font-size:16px}
-    .dashSectionHead{margin-bottom:8px}.barRow{display:grid;grid-template-columns:90px 95px 1fr;align-items:center;gap:8px;border-bottom:1px solid #ddd;padding:5px 0;break-inside:avoid}
-    .barRow i{display:block;height:7px;background:#eee;border-radius:5px;overflow:hidden}.barRow em{display:block;height:100%;background:#555}
-    .alertRow{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #ddd;padding:6px 0;break-inside:avoid}
-    .muted{color:#555}.empty{padding:10px;color:#555}
-    @page{size:auto;margin:12mm}
-    @media print{body{padding:0}.statgrid{grid-template-columns:repeat(4,minmax(0,1fr))}.dashSection,.stat,.adminItem{break-inside:avoid;page-break-inside:avoid}}
-    @media(max-width:600px){.statgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-  </style></head><body><header style="border-bottom:2px solid #222;padding-bottom:10px;margin-bottom:14px"><b style="font-size:18px">SANTO PECADO 17-29</b><div style="color:#555;margin-top:4px">Reporte de estadísticas · ${new Date().toLocaleString('es-CO')}</div></header>${content}</body></html>`);
+  w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reporte de estadísticas · Santo Pecado 17-29</title><style>
+    :root{--ink:#17140d;--gold:#bd8b18;--goldlight:#f5c84c;--muted:#655f53;--line:#e4dccb;--soft:#faf7ef}
+    *{box-sizing:border-box}
+    html{background:#eee}
+    body{font-family:Arial,Helvetica,sans-serif;color:var(--ink);background:#fff;max-width:900px;margin:22px auto;padding:0 26px 30px;font-size:12px;line-height:1.45}
+    .reportBrand{display:flex;align-items:center;justify-content:space-between;gap:20px;background:linear-gradient(120deg,#111 0%,#252016 100%);color:#fff;padding:24px 26px;border-bottom:5px solid var(--goldlight);border-radius:0 0 12px 12px}
+    .brandMark{width:64px;height:64px;flex:0 0 64px;border:1px solid #d9ad3b;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#f5c84c;font-size:25px;font-weight:900}
+    .brandName{font-size:22px;line-height:1.15;font-weight:900;letter-spacing:1.2px}.brandSub{color:#f5c84c;font-size:10px;letter-spacing:2px;font-weight:800;margin-top:5px}.reportMeta{text-align:right;color:#f0eadc;font-size:11px;line-height:1.7}
+    .reportIntro{padding:18px 2px 12px;border-bottom:1px solid var(--line);margin-bottom:16px}.reportIntro h2{font-size:25px;margin:0 0 4px;color:var(--ink)}.reportIntro p{margin:0;color:var(--muted)}
+    h2{font-size:20px;margin:8px 0 12px}h3{font-size:15px;margin:0 0 10px;color:#241f14}
+    .dashKicker{font-size:10px;letter-spacing:1.4px;color:var(--gold);font-weight:800;text-transform:uppercase}
+    .statgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0 20px}
+    .stat,.dashSection,.adminItem,.notice{min-width:0;border:1px solid var(--line);border-radius:10px;padding:13px;margin:8px 0;background:#fff;break-inside:avoid;page-break-inside:avoid}
+    .stat{border-top:3px solid var(--gold);background:var(--soft)}.stat small{display:block;color:var(--muted);font-size:10px;margin-bottom:5px}.stat b{display:block;font-size:19px;overflow-wrap:anywhere}
+    .dashSection{margin:14px 0;padding:15px 16px}.dashSectionHead{margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+    .barRow{display:grid;grid-template-columns:minmax(90px,1.1fr) minmax(75px,.8fr) minmax(50px,1fr);align-items:center;gap:10px;border-bottom:1px solid #eee7d9;padding:7px 0;break-inside:avoid}
+    .barRow:last-child{border-bottom:0}.barRow i{display:block;height:8px;background:#eee8da;border-radius:8px;overflow:hidden}.barRow em{display:block;height:100%;background:linear-gradient(90deg,#b98917,#f5c84c)}
+    .alertRow{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;border-bottom:1px solid #eee7d9;padding:8px 0;break-inside:avoid}.alertRow:last-child{border-bottom:0}
+    .muted{color:var(--muted)}.empty{padding:16px;color:var(--muted);background:var(--soft);border-radius:8px}
+    .reportFoot{margin-top:22px;padding:12px 0 0;border-top:2px solid var(--gold);display:flex;justify-content:space-between;gap:12px;color:var(--muted);font-size:10px}
+    #panel{width:100%;max-width:none;margin:0;padding:0;border:0;box-shadow:none;background:#fff;color:var(--ink)}
+    #panel *{max-width:100%}#panel h1,#panel h2,#panel h3{color:var(--ink)}#panel table{width:100%;border-collapse:collapse}#panel th{background:#f5edda}#panel th,#panel td{padding:7px;border-bottom:1px solid var(--line);text-align:left}
+    @page{size:A4;margin:12mm}
+    @media print{html{background:#fff}body{max-width:none;margin:0;padding:0;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact}.reportBrand{border-radius:0;padding:18px 22px}.statgrid{grid-template-columns:repeat(4,minmax(0,1fr))}.dashSection,.stat,.adminItem,.notice{break-inside:avoid;page-break-inside:avoid}}
+    @media(max-width:600px){body{margin:0;padding:0 12px 20px}.reportBrand{padding:17px 14px;gap:10px}.brandMark{width:48px;height:48px;flex-basis:48px;font-size:19px}.brandName{font-size:17px}.brandSub{font-size:8px;letter-spacing:1px}.reportMeta{font-size:9px}.statgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.stat b{font-size:17px}.dashSection{padding:12px}.barRow{grid-template-columns:minmax(68px,1fr) minmax(70px,.8fr);gap:7px}.barRow i{grid-column:1/-1}}
+  </style></head><body>
+  <header class="reportBrand"><div style="display:flex;align-items:center;gap:15px"><div class="brandMark">SP</div><div><div class="brandName">SANTO PECADO 17-29</div><div class="brandSub">COMIDAS RÁPIDAS · ZARAGOZA</div></div></div><div class="reportMeta"><b>REPORTE OFICIAL</b><br>Estadísticas del negocio<br>${stamp}</div></header>
+  <section class="reportIntro"><div class="dashKicker">Inteligencia del negocio</div><h2>Reporte de estadísticas</h2><p>Resumen de ventas, productos, pagos y operación.</p></section>
+  <main id="panel">${content}</main><footer class="reportFoot"><span>SANTO PECADO 17-29 · Reporte generado desde el sistema</span><span>Documento informativo</span></footer>
+  </body></html>`);
   w.document.close();
-  w.onload=()=>{w.focus();setTimeout(()=>{try{w.print()}catch(e){console.warn('No se pudo imprimir Estadísticas:',e)}},300)};
+  w.onload=()=>{w.focus();setTimeout(()=>{try{w.print()}catch(e){console.warn('No se pudo imprimir Estadísticas:',e)}},350)};
 }
 function normalizePaymentLabel(value){
   const raw=String(value??'').trim();
