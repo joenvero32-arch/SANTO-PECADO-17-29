@@ -11,8 +11,13 @@
   let checking = false;
 
   async function init() {
-    // No dependemos de que el botón visual de Administración se haya renderizado.
-    // Validamos directamente usuario autenticado, rol admin y cuenta activa.
+    // La aplicación ya valida el acceso del administrador en su sesión existente.
+    // Esta herramienta no debe exigir una segunda sesión Supabase independiente.
+    if (typeof window.isAdmin !== 'function' || !window.isAdmin()) {
+      const button = document.getElementById('spPhotoMigrationBtn');
+      if (button) button.remove();
+      return false;
+    }
     if (!window.supabase) return false;
     if (!client) {
       client = window.supabase.createClient(URL, KEY, {
@@ -22,15 +27,10 @@
     if (checking) return false;
     checking = true;
     try {
-      const { data: authData, error: authError } = await client.auth.getUser();
-      if (authError || !authData?.user) return false;
-      const { data: profile, error: profileError } = await client
-        .from('app_users').select('role,active').eq('id', authData.user.id).maybeSingle();
-      if (profileError || profile?.role !== 'admin' || profile.active !== true) return false;
       addButton(client);
       return true;
     } catch (e) {
-      console.warn('[SP fotos] Esperando sesión de administrador:', e);
+      console.warn('[SP fotos] No se pudo preparar el botón:', e);
       return false;
     } finally {
       checking = false;
