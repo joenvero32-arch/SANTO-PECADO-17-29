@@ -143,6 +143,54 @@
     }
   }
 
+  async function ensureAdminSession(db) {
+    let { data: authData, error: authError } = await db.auth.getUser();
+    if (authError || !authData || !authData.user) {
+      const prior = document.getElementById('spPhotoAuthDialog');
+      if (prior) prior.remove();
+      const overlay = document.createElement('div');
+      overlay.id = 'spPhotoAuthDialog';
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:1000000;background:#000b;display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box;font-family:system-ui,sans-serif;';
+      overlay.innerHTML = '<form style="width:min(440px,100%);box-sizing:border-box;background:#171717;color:#fff;border:1px solid #444;border-radius:16px;padding:20px;box-shadow:0 20px 60px #0008"><h3 style="margin:0 0 10px">Autenticación de Supabase</h3><p style="font-size:14px;line-height:1.45;color:#ddd">La sesión actual de la aplicación no autentica esta herramienta. Ingresa la cuenta de Supabase que tenga rol de administrador activo. No se subirá ninguna foto hasta validar la cuenta.</p><label style="display:block;margin:12px 0 5px">Correo de administrador</label><input name="email" type="email" autocomplete="username" required style="width:100%;box-sizing:border-box;padding:12px;border-radius:8px;border:1px solid #555;background:#090909;color:#fff"><label style="display:block;margin:12px 0 5px">Contraseña de Supabase</label><input name="password" type="password" autocomplete="current-password" required style="width:100%;box-sizing:border-box;padding:12px;border-radius:8px;border:1px solid #555;background:#090909;color:#fff"><p data-error style="color:#ffaaaa;font-size:13px;min-height:18px"></p><div style="display:flex;gap:10px;justify-content:flex-end"><button type="button" data-cancel style="padding:10px 14px;border:1px solid #555;border-radius:8px;background:#333;color:#fff">Cancelar</button><button type="submit" style="padding:10px 14px;border:0;border-radius:8px;background:#176b45;color:#fff;font-weight:700">Validar cuenta</button></div></form>';
+      document.body.appendChild(overlay);
+      const form = overlay.querySelector('form');
+      const result = await new Promise(resolve => {
+        overlay.querySelector('[data-cancel]').addEventListener('click', () => { overlay.remove(); resolve(false); }, { once: true });
+        form.addEventListener('submit', async event => {
+          event.preventDefault();
+          const submit = form.querySelector('button[type="submit"]');
+          const errorEl = form.querySelector('[data-error]');
+          submit.disabled = true;
+          submit.textContent = 'Validando…';
+          errorEl.textContent = '';
+          const fd = new FormData(form);
+          try {
+            const { data, error } = await db.auth.signInWithPassword({
+              email: String(fd.get('email') || '').trim(),
+              password: String(fd.get('password') || '')
+            });
+            if (error || !data || !data.user) throw new Error(error && error.message ? error.message : 'No se pudo iniciar sesión.');
+            overlay.remove();
+            resolve(true);
+          } catch (e) {
+            errorEl.textContent = e && e.message ? e.message : 'No se pudo validar la cuenta.';
+            submit.disabled = false;
+            submit.textContent = 'Validar cuenta';
+          }
+        }, { once: true });
+      });
+      if (!result) throw new Error('Autenticación cancelada. No se subió ninguna fotografía.');
+      ({ data: authData, error: authError } = await db.auth.getUser());
+      if (authError || !authData || !authData.user) throw new Error('Supabase no confirmó la sesión iniciada.');
+    }
+    const { data: appUser, error: roleError } = await db.from('app_users')
+      .select('role,active').eq('id', authData.user.id).maybeSingle();
+    if (roleError || !appUser || appUser.role !== 'admin' || appUser.active !== true) {
+      throw new Error('La cuenta autenticada no tiene rol de administrador activo en app_users. No se subió ninguna fotografía.');
+    }
+    return authData.user;
+  }
+
   async function migrate(db, button) {
     if (started) return;
     const ok = window.confirm(
@@ -154,16 +202,8 @@
     button.textContent = '⏳ Verificando permisos…';
     let done = 0, failed = 0;
     try {
-      // La sesión PIN/local no basta: comprobar Supabase Auth y el rol administrativo.
-      const { data: authData, error: authError } = await db.auth.getUser();
-      if (authError || !authData || !authData.user) {
-        throw new Error('No hay una sesión autenticada de Supabase. No se subió ninguna fotografía.');
-      }
-      const { data: appUser, error: roleError } = await db.from('app_users')
-        .select('role,active').eq('id', authData.user.id).maybeSingle();
-      if (roleError || !appUser || appUser.role !== 'admin' || appUser.active !== true) {
-        throw new Error('Supabase no confirmó el rol de administrador activo. No se subió ninguna fotografía.');
-      }
+      // Si falta sesión, solicitar inicio de sesión Supabase; validar rol activo antes de subir.
+      await ensureAdminSession(db);
 
       const { data: products, error } = await db.from('products')
         .select('id,name,image_url')
