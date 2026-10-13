@@ -128,7 +128,7 @@
     let done = 0, failed = 0;
     try {
       const { data: products, error } = await db.from('products')
-        .select('id,name,image_url,category_id,description,price,stock,minimum_stock,sort_order,active')
+        .select('id,name,image_url')
         .order('name');
       if (error) throw error;
       const targets = (products || []).filter(p => typeof p.image_url === 'string' && /^data:image\/(jpeg|jpg|png|webp);base64,/i.test(p.image_url));
