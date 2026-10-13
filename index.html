@@ -3216,6 +3216,7 @@ function printOrder(no){
     <div class="orderTitle">SOPORTE DE COMPRA · ${esc(o.no)}</div>
     <div class="info"><div><b>Fecha:</b> ${esc(date)}</div><div><b>Cliente:</b> ${esc(o.name||'No registrado')}</div><div><b>Teléfono:</b> ${esc(o.phone||'No registrado')}</div><div><b>Tipo:</b> ${esc(o.type||'')}</div><div><b>Pago:</b> ${esc(o.pay||'')}</div>${o.addr&&o.type==='Domicilio'?`<div><b>Dirección:</b> ${esc(o.addr)}</div>`:''}${driver}</div>
     <div class="items"><div class="itemsTitle">PRODUCTOS</div>${lines||'<div class="line">Sin productos</div>'}</div>
+    ${o.type==='Domicilio'? `<div class="total">DOMICILIO: ${money(3000)}</div>` : ''}
     <div class="total">TOTAL: ${money(o.total)}</div>
     ${o.obs?`<div class="obs"><b>Observaciones:</b> ${esc(o.obs)}</div>`:''}
     <div class="foot">Este documento es un soporte de compra y no constituye factura electrónica.</div>
