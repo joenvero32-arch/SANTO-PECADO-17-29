@@ -2881,12 +2881,40 @@ async function stockMove(id,dir){
     save();adminInventory();
   }catch(e){alert('No se cambió el inventario. Supabase rechazó el movimiento: '+(e.message||e));}
 }
+function showStockAdjustmentDialog(product){
+  return new Promise(resolve=>{
+    const old=document.getElementById('spStockDialog');if(old)old.remove();
+    const overlay=document.createElement('div');
+    overlay.id='spStockDialog';
+    overlay.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.76);backdrop-filter:blur(7px);display:flex;align-items:center;justify-content:center;padding:18px;font-family:inherit';
+    overlay.innerHTML=`<section role="dialog" aria-modal="true" aria-labelledby="spStockTitle" style="width:min(100%,460px);max-height:90vh;overflow:auto;background:linear-gradient(155deg,#1b1710,#101010 72%);color:#fff;border:1px solid rgba(247,185,40,.4);border-radius:22px;box-shadow:0 24px 80px #0009;padding:24px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px"><div style="width:48px;height:48px;border-radius:15px;background:rgba(247,185,40,.12);display:grid;place-items:center;font-size:25px">📦</div><div><div style="font-size:11px;letter-spacing:1.5px;color:#f7b928;font-weight:800">SANTO PECADO 17-29</div><h2 id="spStockTitle" style="font-size:21px;line-height:1.2;margin:4px 0 0">Ajustar inventario</h2></div></div>
+      <div style="background:#ffffff08;border:1px solid #ffffff12;border-radius:14px;padding:13px 15px;margin-bottom:18px"><div style="font-size:11px;letter-spacing:1px;color:#bcb6a8">PRODUCTO</div><strong style="font-size:17px;display:block;margin-top:4px">${esc(product.name)}</strong><div style="font-size:13px;color:#c8c3b8;margin-top:8px">Stock actual: <b style="color:#f7c94b">${Number(product.stock)||0} und.</b></div></div>
+      <label for="spStockValue" style="display:block;font-size:13px;font-weight:800;margin-bottom:7px;color:#e9e3d5">NUEVA EXISTENCIA</label>
+      <input id="spStockValue" type="number" min="0" step="1" inputmode="numeric" value="${Number(product.stock)||0}" style="width:100%;padding:13px 14px;border-radius:12px;background:#0d0d0d;color:#fff;border:1px solid #4c4433;font:inherit;outline-color:#f7b928">
+      <label for="spStockReason" style="display:block;font-size:13px;font-weight:800;margin:16px 0 7px;color:#e9e3d5">MOTIVO DEL AJUSTE</label>
+      <textarea id="spStockReason" rows="2" required placeholder="Explica por qué se ajusta el inventario" style="width:100%;resize:vertical;padding:12px 14px;border-radius:12px;background:#0d0d0d;color:#fff;border:1px solid #4c4433;font:inherit"></textarea>
+      <div style="font-size:12px;line-height:1.45;color:#bdb7aa;margin-top:12px">El ajuste se registrará en el inventario y quedará asociado al motivo indicado.</div>
+      <div style="display:flex;gap:10px;margin-top:22px"><button type="button" data-cancel style="flex:1;padding:13px;border-radius:12px;background:transparent;color:#ddd;border:1px solid #5b5549;font:inherit;font-weight:800">Cancelar</button><button type="button" data-accept style="flex:1;padding:13px;border-radius:12px;background:linear-gradient(135deg,#ffd85c,#f3ad16);color:#17120a;border:0;font:inherit;font-weight:900">Guardar ajuste</button></div>
+    </section>`;
+    document.body.appendChild(overlay);
+    const finish=value=>{overlay.remove();resolve(value)};
+    overlay.querySelector('[data-cancel]').addEventListener('click',()=>finish(null));
+    overlay.addEventListener('click',e=>{if(e.target===overlay)finish(null)});
+    overlay.querySelector('[data-accept]').addEventListener('click',()=>{
+      const raw=overlay.querySelector('#spStockValue').value;
+      const q=Number(raw),reason=overlay.querySelector('#spStockReason').value.trim();
+      if(raw.trim()===''||!Number.isFinite(q)||q<0||!Number.isInteger(q)){alert('Ingresa una cantidad entera igual o mayor que cero.');return}
+      if(!reason){alert('Indica el motivo del ajuste para continuar.');return}
+      finish({q,reason});
+    });
+  });
+}
 async function stockSet(id){
   if(!isAdmin()){alert('Solo el administrador o dueño puede ajustar inventario.');return}
   const p=products.find(x=>String(x.id)===String(id));if(!p)return;
-  const q=Number(prompt('Nuevo stock',p.stock));
-  if(!Number.isFinite(q)||q<0)return;
-  const reason=askReason('Motivo del ajuste de inventario:');if(reason===null)return;
+  const adjustment=await showStockAdjustmentDialog(p);if(!adjustment)return;
+  const {q,reason}=adjustment;
   try{
     const result=await adminInventoryMoveCentral('product',p,'ajuste',q,reason);
     const delta=Number(result.delta);
