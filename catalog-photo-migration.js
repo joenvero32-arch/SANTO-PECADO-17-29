@@ -116,17 +116,55 @@
     el.textContent = message;
   }
 
+  async function compressPhoto(sourceBlob) {
+    if (!sourceBlob || !sourceBlob.size || sourceBlob.size > 12 * 1024 * 1024) {
+      throw new Error('Tamaño de imagen no válido (máximo 12 MB)');
+    }
+    const bitmap = await createImageBitmap(sourceBlob);
+    try {
+      const scale = Math.min(1, 800 / Math.max(bitmap.width, bitmap.height));
+      const width = Math.max(1, Math.round(bitmap.width * scale));
+      const height = Math.max(1, Math.round(bitmap.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d', { alpha: false });
+      if (!ctx) throw new Error('No se pudo preparar el compresor de imagen');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(bitmap, 0, 0, width, height);
+      const result = await new Promise((resolve, reject) => {
+        canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('No se pudo convertir la fotografía a JPG')), 'image/jpeg', 0.88);
+      });
+      if (!result.size) throw new Error('La fotografía comprimida está vacía');
+      return result;
+    } finally {
+      bitmap.close();
+    }
+  }
+
   async function migrate(db, button) {
     if (started) return;
     const ok = window.confirm(
-      'Esta tarea guardará las fotos actuales en Supabase Storage y actualizará únicamente la dirección de la fotografía de cada producto. No cambia precios, stock, pedidos, ventas ni inventario. Se procesará una foto a la vez. ¿Continuar?'
+      'Se comprobará primero la sesión administrativa. Las fotos se convertirán a JPG, máximo 800 px y calidad 88%. Solo se actualizará image_url. Si no se confirma el permiso, se detendrá sin subir fotos. ¿Continuar?'
     );
     if (!ok) return;
     started = true;
     button.disabled = true;
-    button.textContent = '⏳ Optimizando fotografías…';
+    button.textContent = '⏳ Verificando permisos…';
     let done = 0, failed = 0;
     try {
+      // La sesión PIN/local no basta: comprobar Supabase Auth y el rol administrativo.
+      const { data: authData, error: authError } = await db.auth.getUser();
+      if (authError || !authData || !authData.user) {
+        throw new Error('No hay una sesión autenticada de Supabase. No se subió ninguna fotografía.');
+      }
+      const { data: appUser, error: roleError } = await db.from('app_users')
+        .select('role,active').eq('id', authData.user.id).maybeSingle();
+      if (roleError || !appUser || appUser.role !== 'admin' || appUser.active !== true) {
+        throw new Error('Supabase no confirmó el rol de administrador activo. No se subió ninguna fotografía.');
+      }
+
       const { data: products, error } = await db.from('products')
         .select('id,name,image_url')
         .order('name');
@@ -137,22 +175,29 @@
         button.textContent = '✓ Fotos ya optimizadas';
         return;
       }
-      report('Preparando ' + targets.length + ' fotografías. No cierres esta página.');
+      report('Permisos confirmados. Preparando ' + targets.length + ' fotografías. No cierres esta página.');
+      button.textContent = '⏳ Optimizando fotografías…';
       for (let i = 0; i < targets.length; i++) {
         const p = targets[i];
+        let uploadedPath = null;
         try {
           const response = await fetch(p.image_url);
-          const blob = await response.blob();
-          if (!blob.size || blob.size > 12 * 1024 * 1024) throw new Error('Tamaño de imagen no válido');
-          const ext = (blob.type.split('/')[1] || 'jpeg').replace('jpeg', 'jpg').replace(/[^a-z0-9]/gi, '');
-          const path = 'products/optimized-' + p.id + '-' + crypto.randomUUID() + '.' + ext;
+          if (!response.ok) throw new Error('No se pudo leer la fotografía original');
+          const originalBlob = await response.blob();
+          const blob = await compressPhoto(originalBlob);
+          const path = 'products/optimized-' + p.id + '-' + crypto.randomUUID() + '.jpg';
           const { error: uploadError } = await db.storage.from('product-images').upload(path, blob, {
-            upsert: false, contentType: blob.type || 'image/jpeg'
+            upsert: false, contentType: 'image/jpeg'
           });
           if (uploadError) throw uploadError;
+          uploadedPath = path;
           const publicUrl = db.storage.from('product-images').getPublicUrl(path).data.publicUrl;
-          // Actualizar exclusivamente image_url. No usar admin_update_product:
-          // esa RPC recibe y vuelve a escribir campos ajenos a la fotografía.
+          const verifyResponse = await fetch(publicUrl, { method: 'GET', cache: 'no-store' });
+          if (!verifyResponse.ok) throw new Error('La fotografía subida no se puede abrir públicamente');
+          const verifiedBlob = await verifyResponse.blob();
+          if (!verifiedBlob.size || verifiedBlob.type !== 'image/jpeg') throw new Error('La fotografía subida no se verificó como JPG');
+
+          // Actualizar exclusivamente image_url; no enviar nombre, precio, stock ni categoría.
           const { data: updated, error: updateError } = await db.from('products')
             .update({ image_url: publicUrl })
             .eq('id', p.id)
@@ -162,9 +207,14 @@
           if (!updated || updated.id !== p.id || updated.image_url !== publicUrl) {
             throw new Error('No se confirmó la actualización exclusiva de image_url; revise sesión y permisos RLS');
           }
+          uploadedPath = null;
           done++;
         } catch (e) {
           failed++;
+          if (uploadedPath) {
+            const { error: cleanupError } = await db.storage.from('product-images').remove([uploadedPath]);
+            if (cleanupError) console.warn('[SP fotos] No se pudo limpiar un archivo de migración fallida:', cleanupError);
+          }
           console.error('[SP fotos]', p.name, e);
         }
         report('Optimizando fotos: ' + (i + 1) + '/' + targets.length +
@@ -172,18 +222,18 @@
           '\nNo cierres esta página hasta terminar.');
       }
       if (failed === 0) {
-        report('✓ Listo: ' + done + ' fotografías ahora están en Supabase Storage. Recarga la aplicación para comprobar la velocidad.');
+        report('✓ Listo: ' + done + ' fotografías convertidas a JPG y verificadas en Supabase Storage.');
         button.textContent = '✓ Fotos optimizadas';
       } else {
         report('Proceso terminado parcialmente.\nCorrectas: ' + done + ' · Con error: ' + failed +
-          '\nLas imágenes que no se actualizaron conservan su dirección original. Revisa la consola antes de volver a intentar.');
+          '\nLas direcciones originales de las fotos fallidas se conservan. Revisa la consola antes de reintentar.');
         button.textContent = '⚠ Revisión necesaria';
       }
     } catch (e) {
       console.error('[SP migración de fotos]', e);
-      report('No se pudo iniciar la optimización: ' + (e && e.message ? e.message : String(e)) +
-        '\nNo se ha confirmado ningún cambio global. Revisa permisos de Storage y del administrador.');
-      button.textContent = '⚠ No se pudo completar';
+      report('Proceso detenido antes de migrar: ' + (e && e.message ? e.message : String(e)) +
+        '\nNo se subieron fotografías durante la verificación previa.');
+      button.textContent = '⚠ Verificación pendiente';
     } finally {
       started = false;
       button.disabled = false;
