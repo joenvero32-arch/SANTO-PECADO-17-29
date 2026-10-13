@@ -2775,14 +2775,34 @@ function configureTopping(id){
   if(!isAdmin() && !can('allowInventory')){alert('No tienes permiso para inventario.');return}
   if(!isAdmin()){alert('Solo el administrador puede configurar el control de inventario.');return}
   const t=toppings.find(x=>x.id===id);if(!t)return;
-  const unit=prompt('Unidad de inventario (unidades, porciones, gramos, ml...)',t.unit);if(unit===null)return;if(!unit.trim()){alert('La unidad es obligatoria.');return;}
-  const usage=numberAsk('Cantidad que se descuenta por UNA adición (ejemplo: 3 camarones)',t.usage,false);if(usage===null)return;
-  const stock=numberAsk('Existencia actual de '+t.name,t.stock);if(stock===null)return;
-  const minStock=numberAsk('Existencia mínima para alerta',t.minStock);if(minStock===null)return;
-  const wasTracked=t.tracked,previous=Number(t.stock);
-  Object.assign(t,{unit:unit.trim(),usage,stock,minStock,tracked:true});
-  movements.unshift({date:new Date().toISOString(),kind:'topping',product:t.name,type:wasTracked?'Configuración de topping':'Inicio de control de topping',qty:stock-previous,unit:t.unit,stock});
-  save();syncToppingCentral(t).catch(e=>alert('Topping guardado localmente, pero no se pudo sincronizar con Supabase: '+(e.message||e)));adminToppingInventory();
+  const old=document.getElementById('spToppingConfigOverlay');if(old)old.remove();
+  const overlay=document.createElement('div');overlay.id='spToppingConfigOverlay';
+  overlay.innerHTML=`<style>
+  #spToppingConfigOverlay{position:fixed;inset:0;z-index:2147482000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.82);backdrop-filter:blur(9px);font-family:inherit;overflow:auto}
+  #spToppingConfigCard{width:min(460px,100%);max-height:92dvh;overflow:auto;box-sizing:border-box;border:1px solid #f7b92866;border-radius:24px;padding:22px;background:linear-gradient(145deg,#191713,#090909 75%);color:#fff;box-shadow:0 24px 80px #000b}
+  #spToppingConfigCard .stcIcon{width:46px;height:46px;display:grid;place-items:center;border-radius:14px;background:#f7b92818;border:1px solid #f7b92855;font-size:23px;margin-bottom:14px}
+  #spToppingConfigCard h2{margin:0 0 7px;font-size:21px}#spToppingConfigCard p{margin:0 0 16px;color:#aaa;font-size:13px;line-height:1.5}
+  #spToppingConfigCard label{display:block;margin:12px 0 6px;color:#f7c94f;font-size:10px;font-weight:900;letter-spacing:1.2px}
+  #spToppingConfigCard input,#spToppingConfigCard select{display:block;width:100%;box-sizing:border-box;border:1px solid #413a2a;border-radius:11px;background:#080808;color:#fff;padding:12px;font:inherit;outline:none}
+  #spToppingConfigCard input:focus,#spToppingConfigCard select:focus{border-color:#f7b928;box-shadow:0 0 0 3px #f7b92820}
+  #spToppingConfigCard .stcGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  #spToppingConfigCard .stcActions{display:flex;gap:10px;margin-top:20px}#spToppingConfigCard button{flex:1;border-radius:12px;padding:12px 8px;font-weight:850;cursor:pointer}
+  #spToppingConfigCard .stcCancel{background:#1c1c1c;color:#ddd;border:1px solid #393939}#spToppingConfigCard .stcSave{background:linear-gradient(135deg,#ffe18a,#f7b928);color:#17120a;border:0}
+  @media(max-width:380px){#spToppingConfigCard .stcGrid{grid-template-columns:1fr}}
+  </style><section id="spToppingConfigCard" role="dialog" aria-modal="true" aria-labelledby="spToppingConfigTitle"><div class="stcIcon">📦</div><h2 id="spToppingConfigTitle">Configurar inventario</h2><p>${esc(t.name)} · Define la unidad, el consumo por adición y los niveles de existencias.</p>
+  <form id="spToppingConfigForm"><label for="spToppingConfigUnit">UNIDAD DE INVENTARIO</label><input id="spToppingConfigUnit" maxlength="35" value="${esc(t.unit||'porciones')}" placeholder="Unidades, porciones, gramos..." required>
+  <label for="spToppingConfigUsage">CONSUMO POR CADA ADICIÓN</label><input id="spToppingConfigUsage" type="number" min="0.001" step="any" inputmode="decimal" value="${Number(t.usage||1)}" required>
+  <div class="stcGrid"><div><label for="spToppingConfigStock">EXISTENCIA ACTUAL</label><input id="spToppingConfigStock" type="number" min="0" step="any" inputmode="decimal" value="${Number(t.stock||0)}" required></div><div><label for="spToppingConfigMin">STOCK MÍNIMO</label><input id="spToppingConfigMin" type="number" min="0" step="any" inputmode="decimal" value="${Number(t.minStock||0)}" required></div></div>
+  <div class="stcActions"><button type="button" class="stcCancel" id="spToppingConfigCancel">Cancelar</button><button type="submit" class="stcSave">Guardar configuración</button></div></form></section>`;
+  document.body.appendChild(overlay);
+  const form=overlay.querySelector('#spToppingConfigForm'),unitInput=overlay.querySelector('#spToppingConfigUnit'),usageInput=overlay.querySelector('#spToppingConfigUsage'),stockInput=overlay.querySelector('#spToppingConfigStock'),minInput=overlay.querySelector('#spToppingConfigMin');
+  const close=()=>overlay.remove();overlay.querySelector('#spToppingConfigCancel').onclick=close;overlay.addEventListener('click',e=>{if(e.target===overlay)close()});
+  form.onsubmit=e=>{e.preventDefault();const unit=unitInput.value.trim(),usage=Number(usageInput.value),stock=Number(stockInput.value),minStock=Number(minInput.value);if(!unit){unitInput.focus();return}if(!Number.isFinite(usage)||usage<=0){usageInput.focus();return}if(!Number.isFinite(stock)||stock<0){stockInput.focus();return}if(!Number.isFinite(minStock)||minStock<0){minInput.focus();return}
+    const wasTracked=t.tracked,previous=Number(t.stock);Object.assign(t,{unit,usage,stock,minStock,tracked:true});
+    movements.unshift({date:new Date().toISOString(),kind:'topping',product:t.name,type:wasTracked?'Configuración de topping':'Inicio de control de topping',qty:stock-previous,unit:t.unit,stock});
+    close();save();syncToppingCentral(t).catch(e=>alert('Topping guardado localmente, pero no se pudo sincronizar con Supabase: '+(e.message||e)));adminToppingInventory();
+  };
+  setTimeout(()=>unitInput.focus(),60);
 }
 async function toppingMove(id,dir){
   if(!requirePermission('allowInventory'))return;
