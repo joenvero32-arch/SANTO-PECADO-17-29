@@ -9,6 +9,7 @@
 
   let client = null;
   let checking = false;
+  let adminPanelObserver = null;
 
   function hasAdminSession() {
     try {
@@ -51,7 +52,24 @@
   function addButton(db) {
     const adminPanel = document.getElementById('spAdminPanel');
     const tabs = adminPanel && adminPanel.querySelector('.spTabs');
-    if (!adminPanel || !tabs) return;
+    if (!adminPanel || !tabs) {
+      // El panel solo se crea cuando el administrador abre Administración.
+      // Esperar a que exista, sin poner el botón flotante ni ocultarlo.
+      if (!adminPanelObserver && document.body) {
+        adminPanelObserver = new MutationObserver(() => {
+          const panelNow = document.getElementById('spAdminPanel');
+          if (panelNow && panelNow.querySelector('.spTabs')) {
+            addButton(db);
+            if (document.getElementById('spPhotoMigrationBtn')) {
+              adminPanelObserver.disconnect();
+              adminPanelObserver = null;
+            }
+          }
+        });
+        adminPanelObserver.observe(document.body, { childList: true, subtree: true });
+      }
+      return;
+    }
     let wrap = document.getElementById('spPhotoMigrationWrap');
     if (!wrap) {
       wrap = document.createElement('div');
