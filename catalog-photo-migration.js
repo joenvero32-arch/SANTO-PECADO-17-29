@@ -9,6 +9,7 @@
 
   let client = null;
   let checking = false;
+  let adminMenuObserver = null;
 
   function hasAdminSession() {
     try {
@@ -47,27 +48,59 @@
   }
 
   function addButton(db) {
-    // #panel es el panel de administración que se ve en la aplicación principal.
+    // Solo se inserta dentro del menú principal de administración autenticado.
+    // Nunca se añade al formulario de acceso (correo/contraseña o PIN).
     const panel = document.getElementById('panel');
-    if (!panel || !hasAdminSession()) return;
-    const existing = document.getElementById('spPhotoMigrationBtn');
-    if (existing) {
-      if (existing.parentElement !== panel) panel.appendChild(existing);
+    const menu = panel && panel.querySelector('.sp-admin-groups');
+    if (!panel || !menu || !hasAdminSession()) {
+      const button = document.getElementById('spPhotoMigrationBtn');
+      if (button) button.remove();
+      if (!adminMenuObserver && panel && document.body && hasAdminSession()) {
+        adminMenuObserver = new MutationObserver(() => {
+          const currentPanel = document.getElementById('panel');
+          if (currentPanel && currentPanel.querySelector('.sp-admin-groups') && hasAdminSession()) {
+            addButton(db);
+            if (document.getElementById('spPhotoMigrationBtn')) {
+              adminMenuObserver.disconnect();
+              adminMenuObserver = null;
+            }
+          }
+        });
+        adminMenuObserver.observe(panel, { childList: true, subtree: true });
+      }
       return;
     }
-    const button = document.createElement('button');
-    button.id = 'spPhotoMigrationBtn';
-    button.type = 'button';
-    button.textContent = '⚡ Optimizar fotos del catálogo';
+    let section = document.getElementById('spPhotoMigrationSection');
+    if (!section) {
+      section = document.createElement('section');
+      section.id = 'spPhotoMigrationSection';
+      section.className = 'sp-admin-group';
+      const heading = document.createElement('h3');
+      heading.textContent = 'HERRAMIENTAS DEL ADMINISTRADOR';
+      section.appendChild(heading);
+      const grid = document.createElement('div');
+      grid.className = 'sp-admin-group-grid';
+      section.appendChild(grid);
+      menu.appendChild(section);
+    }
+    const grid = section.querySelector('.sp-admin-group-grid');
+    if (!grid) return;
+    let button = document.getElementById('spPhotoMigrationBtn');
+    if (!button) {
+      button = document.createElement('button');
+      button.id = 'spPhotoMigrationBtn';
+      button.type = 'button';
+      button.textContent = '⚡ Optimizar fotos del catálogo';
+      button.addEventListener('click', () => migrate(db, button));
+    }
     Object.assign(button.style, {
       display: 'block', position: 'static', boxSizing: 'border-box',
-      width: '100%', maxWidth: '100%', margin: '14px 0 8px',
-      padding: '11px 14px', border: '0', borderRadius: '10px',
+      width: '100%', maxWidth: '100%', margin: '0',
+      padding: '12px 14px', border: '0', borderRadius: '10px',
       background: '#176b45', color: '#fff', font: '600 14px system-ui',
-      boxShadow: '0 3px 14px #0003', whiteSpace: 'normal'
+      boxShadow: '0 3px 14px #0003', whiteSpace: 'normal', textAlign: 'center'
     });
-    button.addEventListener('click', () => migrate(db, button));
-    panel.appendChild(button);
+    if (button.parentElement !== grid) grid.appendChild(button);
   }
 
   function report(message) {
