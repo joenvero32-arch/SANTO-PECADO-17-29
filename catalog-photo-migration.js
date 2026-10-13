@@ -106,12 +106,15 @@
 
   function report(message) {
     let el = document.getElementById('spPhotoMigrationStatus');
-    const wrap = document.getElementById('spPhotoMigrationWrap');
     if (!el) {
       el = document.createElement('div');
       el.id = 'spPhotoMigrationStatus';
-      el.style.cssText = 'display:block;margin:0 0 8px;padding:10px 12px;border-radius:10px;background:#191919;color:#fff;font:13px system-ui;white-space:pre-wrap;overflow-wrap:anywhere;';
-      if (wrap) wrap.appendChild(el);
+      el.style.cssText = 'display:block;box-sizing:border-box;width:100%;margin:10px 0;padding:12px;border:1px solid #555;border-radius:10px;background:#191919;color:#fff;font:13px system-ui;white-space:pre-wrap;overflow-wrap:anywhere;';
+      const section = document.getElementById('spPhotoMigrationSection');
+      const button = document.getElementById('spPhotoMigrationBtn');
+      if (section) section.appendChild(el);
+      else if (button && button.parentElement) button.parentElement.appendChild(el);
+      else document.body.appendChild(el);
     }
     el.textContent = message;
   }
@@ -177,7 +180,7 @@
             submit.disabled = false;
             submit.textContent = 'Validar cuenta';
           }
-        }, { once: true });
+        });
       });
       if (!result) throw new Error('Autenticación cancelada. No se subió ninguna fotografía.');
       ({ data: authData, error: authError } = await db.auth.getUser());
@@ -253,11 +256,13 @@
           done++;
         } catch (e) {
           failed++;
+          const reason = e && e.message ? e.message : String(e);
           if (uploadedPath) {
             const { error: cleanupError } = await db.storage.from('product-images').remove([uploadedPath]);
             if (cleanupError) console.warn('[SP fotos] No se pudo limpiar un archivo de migración fallida:', cleanupError);
           }
           console.error('[SP fotos]', p.name, e);
+          report('Prueba de fotografía detenida. Producto: ' + p.name + '\nMotivo: ' + reason + '\nNo vuelvas a ejecutar la prueba hasta revisar este error.');
         }
         report('Optimizando fotos: ' + (i + 1) + '/' + targets.length +
           '\nCorrectas: ' + done + ' · Pendientes/error: ' + failed +
