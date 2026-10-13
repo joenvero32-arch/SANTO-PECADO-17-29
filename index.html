@@ -2524,6 +2524,8 @@ async function printDailyClose(){
   let orders=salesForDay(today); if(SP_DB_ON){try{const central=await spGetFinanceOrders();if(Array.isArray(central))orders=central.filter(o=>String(o.payment_status||'').toLowerCase()==='pagado').map(o=>({date:o.updated_at||o.created_at,created:o.created_at,pay:o.payment_method||'',total:Number(o.total||0)})).filter(o=>dayKey(o.date||o.created)===today)}catch(e){alert('No se pudo consultar ventas centrales; no se imprimió el cierre.');return}} const localOrders=orders.filter(o=>!closeAt||new Date(o.date||o.created||0).getTime()>closeAt);
   const pay=paymentTotals(localOrders);
   const salesTotal=localOrders.reduce((a,o)=>a+Number(o.total||0),0);
+  const cashSales=localOrders.filter(o=>String(o.pay||'').trim().toLowerCase()==='efectivo').reduce((a,o)=>a+Number(o.total||0),0);
+  const nonCashSales=salesTotal-cashSales;
   getBusinessExpenses(today,today).then(expenses=>{
     const session=expenses.filter(x=>!closeAt||new Date(x.created_at||x.createdAt||x.date||0).getTime()>closeAt);
     const expenseTotal=session.reduce((a,x)=>a+Number(x.amount||0),0);
@@ -2532,7 +2534,7 @@ async function printDailyClose(){
     const purchases=session.filter(x=>/compra|proveedor/i.test(String(x.category||'')+' '+String(x.description||'')));
     const other=session.filter(x=>!payroll.includes(x)&&!purchases.includes(x));
     const remaining=salesTotal-expenseTotal;
-    const expected=opening+Number(pay['Efectivo']||0)-cashExpenses;
+    const expected=opening+cashSales-cashExpenses;
     const rows=items=>items.length?items.map(x=>'<tr><td>'+esc(x.expense_type||'Gasto')+'</td><td>'+esc(x.category||'')+'</td><td>'+esc(x.description||'')+(x.employee_name?' · '+esc(x.employee_name):'')+'</td><td>'+esc(x.payment_method||'')+'</td><td class="num">-'+money(x.amount)+'</td></tr>').join(''):'<tr><td colspan="5">Sin registros en este periodo.</td></tr>';
     const payRows=Object.entries(pay).map(([k,v])=>'<tr><td>'+esc(k)+'</td><td class="num">'+money(v)+'</td></tr>').join('')||'<tr><td colspan="2">Sin ventas registradas.</td></tr>';
     const w=window.open('','_blank');
@@ -2551,13 +2553,13 @@ async function printDailyClose(){
     <h1>CIERRE DIARIO DE CAJA</h1><div>Responsable: ${esc(currentUser?.name||'Administrador')} · Apertura: ${openingRecord?new Date(openingRecord.date).toLocaleTimeString('es-CO'):'No consta apertura registrada'}</div>
     <h2>Resumen de ventas y caja</h2><div class="summary">
     <div class="card"><div class="label">Base inicial</div><div class="value">${money(opening)}</div></div>
-    <div class="card"><div class="label">Ventas del periodo</div><div class="value">${money(salesTotal)}</div></div>
+    <div class="card"><div class="label">Ventas totales</div><div class="value">${money(salesTotal)}</div></div><div class="card"><div class="label">Ventas en efectivo</div><div class="value">${money(cashSales)}</div></div><div class="card"><div class="label">Transferencias y otros pagos no efectivo</div><div class="value">${money(nonCashSales)}</div></div>
     <div class="card"><div class="label">Total gastos/pagos</div><div class="value">${money(expenseTotal)}</div></div>
     </div><h2>Ventas por medio de pago</h2><table><thead><tr><th>Medio de pago</th><th class="num">Total</th></tr></thead><tbody>${payRows}</tbody><tfoot><tr><th>Total ventas</th><th class="num">${money(salesTotal)}</th></tr></tfoot></table>
     <h2>Compras y proveedores</h2><table><thead><tr><th>Tipo</th><th>Categoría</th><th>Descripción</th><th>Pago</th><th class="num">Valor</th></tr></thead><tbody>${rows(purchases)}</tbody></table>
     <h2>Nómina y pagos a trabajadores</h2><table><thead><tr><th>Tipo</th><th>Categoría</th><th>Descripción / trabajador</th><th>Pago</th><th class="num">Valor</th></tr></thead><tbody>${rows(payroll)}</tbody></table>
     <h2>Otros gastos registrados</h2><table><thead><tr><th>Tipo</th><th>Categoría</th><th>Descripción</th><th>Pago</th><th class="num">Valor</th></tr></thead><tbody>${rows(other)}</tbody></table>
-    <h2>Resultado del día</h2><table><tbody><tr><td>Ventas del periodo</td><td class="num">${money(salesTotal)}</td></tr><tr><td>Menos gastos y nómina pagados/registrados</td><td class="num">-${money(expenseTotal)}</td></tr><tr><th>Saldo después de gastos registrados</th><th class="num">${money(remaining)}</th></tr><tr><td>Base inicial de caja</td><td class="num">${money(opening)}</td></tr><tr><td>Efectivo esperado (base + ventas efectivo − gastos efectivo)</td><td class="num">${money(expected)}</td></tr><tr><td>Efectivo contado al cierre</td><td class="num">${close?money(close.counted):'Pendiente de cierre'}</td></tr><tr><td>Diferencia de caja</td><td class="num">${close?money(close.difference):'Pendiente de cierre'}</td></tr></tbody></table>
+    <h2>Resultado del día</h2><table><tbody><tr><td>Ventas del periodo</td><td class="num">${money(salesTotal)}</td></tr><tr><td>Menos gastos y nómina pagados/registrados</td><td class="num">-${money(expenseTotal)}</td></tr><tr><th>Saldo después de gastos registrados</th><th class="num">${money(remaining)}</th></tr><tr><td>Base inicial de caja</td><td class="num">${money(opening)}</td></tr><tr><td>Efectivo esperado (base + ventas en efectivo − gastos en efectivo)</td><td class="num">${money(expected)}</td></tr><tr><td>Efectivo contado al cierre</td><td class="num">${close?money(close.counted):'Pendiente de cierre'}</td></tr><tr><td>Diferencia de caja</td><td class="num">${close?money(close.difference):'Pendiente de cierre'}</td></tr></tbody></table>
     ${close?'<div><b>Observación:</b> '+esc(close.reason||'Sin observaciones')+'<br><b>Estado:</b> '+esc(close.status||'')+'</div>':'<p><b>Nota:</b> aún no hay un cierre registrado para hoy; los datos corresponden a la caja actual.</p>'}
     <div class="note">Informe generado desde el sistema. Los gastos se muestran según los registros existentes; verificar su estado de pago y clasificación contable.</div><script>window.onload=()=>{setTimeout(()=>window.print(),300)};<\/script></body></html>`);
     w.document.close();
