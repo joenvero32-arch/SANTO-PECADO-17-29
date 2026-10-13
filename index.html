@@ -735,11 +735,11 @@ function requirePermission(permission){
   // Evitar guardarlo localmente y reenviarlo luego a Supabase como historial legado.
   // El acceso por PIN se registra por la vía central de administración; no duplicarlo aquí.
   const normalizedAction=String(action||'').trim().toLowerCase();
-  if(normalizedAction==='auditoría consultada'||normalizedAction==='inicio de sesión por pin')return;
+  // Estos eventos tienen una ruta central exclusiva. No guardarlos en el historial local,
+  // porque la sincronización histórica podría volver a insertarlos en audit_logs.
+  if(normalizedAction==='auditoría consultada'||normalizedAction==='inicio de sesión por pin'||normalizedAction==='pago recibido')return;
   const entry={date:new Date().toISOString(),action,details,orderNo:orderNo||'',user:currentUser?currentUser.user:'sistema',name:currentUser?currentUser.name:'Sistema',role:currentUser?currentUser.role:'system'};
   audit.unshift(entry);audit=audit.slice(0,1000);localStorage.setItem(AUDIT,JSON.stringify(audit));
-  // El pago se registra centralmente dentro de la RPC que confirma la venta; no volver a enviarlo desde el navegador.
-  if(normalizedAction==='pago recibido')return;
   // El acceso por PIN local no crea una sesión auth.uid(); en ese caso se valida el PIN mediante RPC segura.
   try{
     if(SP_DB_ON&&SP_DB&&currentUser){
