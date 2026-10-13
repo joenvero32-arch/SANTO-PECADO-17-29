@@ -95,9 +95,10 @@
     }
     Object.assign(button.style, {
       display: 'block', position: 'static', boxSizing: 'border-box',
-      width: '100%', maxWidth: '100%', margin: '0',
-      padding: '12px 14px', border: '0', borderRadius: '10px',
-      background: '#176b45', color: '#fff', font: '600 14px system-ui',
+      gridColumn: '1 / -1', justifySelf: 'stretch',
+      width: '100%', maxWidth: '100%', minWidth: '0', margin: '0',
+      padding: '12px 16px', border: '0', borderRadius: '10px',
+      background: '#176b45', color: '#fff', font: '600 15px system-ui',
       boxShadow: '0 3px 14px #0003', whiteSpace: 'normal', textAlign: 'center'
     });
     if (button.parentElement !== grid) grid.appendChild(button);
