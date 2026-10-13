@@ -2970,8 +2970,34 @@ function newTopping(){
 }
 function editTopping(id){
   if(!isAdmin()){alert('Solo el administrador o dueño puede modificar toppings.');return}
-  const t=toppings.find(x=>String(x.id)===String(id));if(!t){alert('No se encontró el topping.');return}const name=prompt('Nombre',t.name);if(name===null)return;
-  const price=Number(prompt('Precio',t.price));t.name=name.trim();t.price=isNaN(price)?0:price;save();adminToppings();
+  const t=toppings.find(x=>String(x.id)===String(id));if(!t){alert('No se encontró el topping.');return}
+  const old=document.getElementById('spToppingEditOverlay');if(old)old.remove();
+  const overlay=document.createElement('div');overlay.id='spToppingEditOverlay';
+  overlay.innerHTML=`<style>
+  #spToppingEditOverlay{position:fixed;inset:0;z-index:2147482000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.78);backdrop-filter:blur(9px);font-family:inherit}
+  #spToppingEditCard{width:min(440px,100%);box-sizing:border-box;border:1px solid rgba(247,185,40,.42);border-radius:24px;padding:24px;background:linear-gradient(145deg,#191713,#090909 75%);color:#fff;box-shadow:0 24px 80px #000b}
+  #spToppingEditCard .steIcon{width:46px;height:46px;display:grid;place-items:center;border-radius:14px;background:#f7b92818;border:1px solid #f7b92855;font-size:23px;margin-bottom:15px}
+  #spToppingEditCard h2{margin:0 0 7px;font-size:22px}#spToppingEditCard p{margin:0 0 20px;color:#aaa;font-size:14px;line-height:1.5}
+  #spToppingEditCard label{display:block;margin:13px 0 7px;color:#f7c94f;font-size:11px;font-weight:900;letter-spacing:1.4px}
+  #spToppingEditCard input{width:100%;box-sizing:border-box;border:1px solid #413a2a;border-radius:12px;background:#080808;color:#fff;padding:14px;font:inherit;outline:none}
+  #spToppingEditCard input:focus{border-color:#f7b928;box-shadow:0 0 0 3px #f7b92820}
+  #spToppingEditCard .steActions{display:flex;gap:10px;margin-top:22px}
+  #spToppingEditCard button{flex:1;border-radius:12px;padding:13px 9px;font-weight:850;cursor:pointer}
+  #spToppingEditCard .steCancel{background:#1c1c1c;color:#ddd;border:1px solid #393939}
+  #spToppingEditCard .steSave{background:linear-gradient(135deg,#ffe18a,#f7b928);color:#17120a;border:0}
+  </style><section id="spToppingEditCard" role="dialog" aria-modal="true" aria-labelledby="spToppingEditTitle">
+  <div class="steIcon">🧀</div><h2 id="spToppingEditTitle">Editar topping</h2><p>Actualiza el nombre y el precio de esta adición.</p>
+  <form id="spToppingEditForm"><label for="spToppingEditName">NOMBRE</label><input id="spToppingEditName" maxlength="100" required>
+  <label for="spToppingEditPrice">PRECIO · COP (0 = GRATIS)</label><input id="spToppingEditPrice" type="number" min="0" step="1" inputmode="numeric" required>
+  <div class="steActions"><button type="button" class="steCancel" id="spToppingEditCancel">Cancelar</button><button type="submit" class="steSave">Guardar cambios</button></div></form></section>`;
+  document.body.appendChild(overlay);
+  const form=overlay.querySelector('#spToppingEditForm'),nameInput=overlay.querySelector('#spToppingEditName'),priceInput=overlay.querySelector('#spToppingEditPrice');
+  nameInput.value=t.name||'';priceInput.value=Number(t.price||0);
+  const close=()=>overlay.remove();
+  overlay.querySelector('#spToppingEditCancel').onclick=close;
+  overlay.addEventListener('click',e=>{if(e.target===overlay)close()});
+  form.onsubmit=e=>{e.preventDefault();const name=nameInput.value.trim(),price=Number(priceInput.value);if(!name){nameInput.focus();return}if(!Number.isFinite(price)||price<0){priceInput.focus();return}t.name=name;t.price=price;close();save();adminToppings()};
+  setTimeout(()=>nameInput.focus(),60);
 }
 function toggleTopping(id){
   if(!isAdmin()){alert('Solo el administrador o dueño puede modificar toppings.');return}const t=toppings.find(x=>String(x.id)===String(id));if(!t)return;t.active=!t.active;save();adminToppings();}
