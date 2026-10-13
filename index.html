@@ -2215,26 +2215,41 @@ function adminCategories(){
 function categoryHidden(c){return !categories.includes(c)}
 async function newCategory(){
   if(!isAdmin()){alert('Solo el administrador o dueño puede modificar categorías.');return}
-  const name=prompt('Nombre de la nueva categoría:');
-  if(name===null)return;
-  const v=name.trim();
-  if(!v)return;
-  if(categories.some(c=>c.toLowerCase()===v.toLowerCase())){alert('Esa categoría ya existe.');return}
-  try{
-    if(SP_DB_ON && SP_DB?.rpc){
-      const {data,error}=await SP_DB.rpc('admin_upsert_category',{p_name:v,p_sort_order:categories.length});
-      if(error)throw error;
-      if(!data?.id)throw new Error('Supabase no confirmó la categoría');
+  const old=document.getElementById('spNewCategoryOverlay');if(old)old.remove();
+  const overlay=document.createElement('div');overlay.id='spNewCategoryOverlay';
+  overlay.innerHTML=`<style>
+  #spNewCategoryOverlay{position:fixed;inset:0;z-index:2147482000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.82);backdrop-filter:blur(9px);font-family:inherit}
+  #spNewCategoryCard{width:min(440px,100%);box-sizing:border-box;border:1px solid #f7b92866;border-radius:24px;padding:24px;background:linear-gradient(145deg,#191713,#090909 75%);color:#fff;box-shadow:0 24px 80px #000b}
+  #spNewCategoryCard .sncIcon{width:48px;height:48px;display:grid;place-items:center;border-radius:15px;background:#f7b92818;border:1px solid #f7b92855;font-size:24px;margin-bottom:16px}
+  #spNewCategoryCard h2{margin:0 0 8px;font-size:22px}#spNewCategoryCard p{margin:0 0 20px;color:#aaa;font-size:14px;line-height:1.5}
+  #spNewCategoryCard label{display:block;margin:13px 0 7px;color:#f7c94f;font-size:11px;font-weight:900;letter-spacing:1.4px}
+  #spNewCategoryCard input{width:100%;box-sizing:border-box;border:1px solid #413a2a;border-radius:12px;background:#080808;color:#fff;padding:14px;font:inherit;outline:none}
+  #spNewCategoryCard input:focus{border-color:#f7b928;box-shadow:0 0 0 3px #f7b92820}
+  #spNewCategoryCard .sncActions{display:flex;gap:10px;margin-top:22px}#spNewCategoryCard button{flex:1;border-radius:12px;padding:13px 9px;font-weight:850;cursor:pointer}
+  #spNewCategoryCard .sncCancel{background:#1c1c1c;color:#ddd;border:1px solid #393939}#spNewCategoryCard .sncSave{background:linear-gradient(135deg,#ffe18a,#f7b928);color:#17120a;border:0}
+  </style><section id="spNewCategoryCard" role="dialog" aria-modal="true" aria-labelledby="spNewCategoryTitle"><div class="sncIcon">📂</div><h2 id="spNewCategoryTitle">Nueva categoría</h2><p>Crea una categoría para organizar los productos de tu catálogo.</p>
+  <form id="spNewCategoryForm"><label for="spNewCategoryName">NOMBRE DE LA CATEGORÍA</label><input id="spNewCategoryName" maxlength="80" placeholder="Ej. Hamburguesas" autocomplete="off" required>
+  <div class="sncActions"><button type="button" class="sncCancel" id="spNewCategoryCancel">Cancelar</button><button type="submit" class="sncSave" id="spNewCategorySave">Crear categoría</button></div></form></section>`;
+  document.body.appendChild(overlay);const form=overlay.querySelector('#spNewCategoryForm'),input=overlay.querySelector('#spNewCategoryName'),submit=overlay.querySelector('#spNewCategorySave');
+  const close=()=>overlay.remove();overlay.querySelector('#spNewCategoryCancel').onclick=close;overlay.addEventListener('click',e=>{if(e.target===overlay)close()});
+  form.onsubmit=async e=>{
+    e.preventDefault();const v=input.value.trim();if(!v){input.focus();return}
+    if(categories.some(c=>c.toLowerCase()===v.toLowerCase())){alert('Esa categoría ya existe.');input.focus();return}
+    submit.disabled=true;submit.textContent='Guardando…';
+    try{
+      if(SP_DB_ON && SP_DB?.rpc){
+        const {data,error}=await SP_DB.rpc('admin_upsert_category',{p_name:v,p_sort_order:categories.length});
+        if(error)throw error;
+        if(!data?.id)throw new Error('Supabase no confirmó la categoría');
+      }
+      categories.push(v);localStorage.setItem(CATS,JSON.stringify(categories));auditLog('Categoría creada',v);
+      if(typeof window.loadPublicCatalog==='function') await window.loadPublicCatalog();
+      close();render();adminCategories();
+    }catch(e){
+      console.warn('No se pudo guardar la categoría:',e);alert('No se pudo guardar la categoría en Supabase: '+(e.message||e));submit.disabled=false;submit.textContent='Crear categoría';
     }
-    categories.push(v);
-    localStorage.setItem(CATS,JSON.stringify(categories));
-    auditLog('Categoría creada',v);
-    if(typeof window.loadPublicCatalog==='function') await window.loadPublicCatalog();
-    render();adminCategories();
-  }catch(e){
-    console.warn('No se pudo guardar la categoría:',e);
-    alert('No se pudo guardar la categoría en Supabase: '+(e.message||e));
-  }
+  };
+  setTimeout(()=>input.focus(),60);
 }
 function editCategory(i){
   if(!isAdmin()){alert('Solo el administrador o dueño puede modificar categorías.');return}
