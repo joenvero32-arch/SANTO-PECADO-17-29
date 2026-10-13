@@ -264,9 +264,11 @@
           console.error('[SP fotos]', p.name, e);
           report('Prueba de fotografía detenida. Producto: ' + p.name + '\nMotivo: ' + reason + '\nNo vuelvas a ejecutar la prueba hasta revisar este error.');
         }
-        report('Optimizando fotos: ' + (i + 1) + '/' + targets.length +
-          '\nCorrectas: ' + done + ' · Pendientes/error: ' + failed +
-          '\nNo cierres esta página hasta terminar.');
+        if (failed === 0) {
+          report('Optimizando fotos: ' + (i + 1) + '/' + targets.length +
+            '\nCorrectas: ' + done + ' · Pendientes/error: ' + failed +
+            '\nNo cierres esta página hasta terminar.');
+        }
       }
       if (failed === 0) {
         report('✓ Prueba controlada lista: ' + done + ' fotografía convertida a JPG y verificada en Supabase Storage. Las demás siguen intactas.');
