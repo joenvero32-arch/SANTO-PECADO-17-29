@@ -9,7 +9,6 @@
 
   let client = null;
   let checking = false;
-  let adminPanelObserver = null;
 
   function hasAdminSession() {
     try {
@@ -23,8 +22,6 @@
   }
 
   async function init() {
-    // La aplicación valida el PIN y guarda la sesión administrativa en sessionStorage.
-    // No exigir otra sesión de Supabase: el login principal de esta aplicación es local/PIN.
     if (!hasAdminSession()) {
       const button = document.getElementById('spPhotoMigrationBtn');
       if (button) button.remove();
@@ -50,36 +47,12 @@
   }
 
   function addButton(db) {
-    const adminPanel = document.getElementById('spAdminPanel');
-    const tabs = adminPanel && adminPanel.querySelector('.spTabs');
-    if (!adminPanel || !tabs) {
-      // El panel solo se crea cuando el administrador abre Administración.
-      // Esperar a que exista, sin poner el botón flotante ni ocultarlo.
-      if (!adminPanelObserver && document.body) {
-        adminPanelObserver = new MutationObserver(() => {
-          const panelNow = document.getElementById('spAdminPanel');
-          if (panelNow && panelNow.querySelector('.spTabs')) {
-            addButton(db);
-            if (document.getElementById('spPhotoMigrationBtn')) {
-              adminPanelObserver.disconnect();
-              adminPanelObserver = null;
-            }
-          }
-        });
-        adminPanelObserver.observe(document.body, { childList: true, subtree: true });
-      }
-      return;
-    }
-    let wrap = document.getElementById('spPhotoMigrationWrap');
-    if (!wrap) {
-      wrap = document.createElement('div');
-      wrap.id = 'spPhotoMigrationWrap';
-      wrap.style.cssText = 'flex:0 0 auto;padding:10px 14px 0;background:#101010;';
-      tabs.insertAdjacentElement('afterend', wrap);
-    }
+    // #panel es el panel de administración que se ve en la aplicación principal.
+    const panel = document.getElementById('panel');
+    if (!panel || !hasAdminSession()) return;
     const existing = document.getElementById('spPhotoMigrationBtn');
     if (existing) {
-      if (existing.parentElement !== wrap) wrap.appendChild(existing);
+      if (existing.parentElement !== panel) panel.appendChild(existing);
       return;
     }
     const button = document.createElement('button');
@@ -88,13 +61,13 @@
     button.textContent = '⚡ Optimizar fotos del catálogo';
     Object.assign(button.style, {
       display: 'block', position: 'static', boxSizing: 'border-box',
-      width: '100%', maxWidth: '100%', margin: '0 0 8px',
+      width: '100%', maxWidth: '100%', margin: '14px 0 8px',
       padding: '11px 14px', border: '0', borderRadius: '10px',
       background: '#176b45', color: '#fff', font: '600 14px system-ui',
       boxShadow: '0 3px 14px #0003', whiteSpace: 'normal'
     });
     button.addEventListener('click', () => migrate(db, button));
-    wrap.appendChild(button);
+    panel.appendChild(button);
   }
 
   function report(message) {
