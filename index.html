@@ -2789,23 +2789,33 @@ async function toppingMove(id,dir){
   if(!isAdmin() && dir<0){alert('El empleado solo puede registrar entradas de inventario.');return}
   const t=toppings.find(x=>x.id===id);if(!t)return;
   if(!t.tracked){alert('Primero pulsa Configurar para activar el inventario.');return}
-  const q=numberAsk('Cantidad en '+t.unit,1,false);if(q===null||q<=0)return;
-  if(!isAdmin() && dir>0){
-    try{
-      const row=await employeeInventoryEntryToppingCentral(t,q);
-      t.stock=Number(row?.stock ?? (Number(t.stock)+q));
-      movements.unshift({date:new Date().toISOString(),kind:'topping',product:t.name,type:'Entrada',qty:q,unit:t.unit,stock:t.stock});
-      save();adminToppingInventory();
-    }catch(e){alert('La entrada no se pudo registrar en Supabase: '+(e.message||e));}
-    return;
-  }
-  const reason=askReason(dir>0?'Motivo de la entrada del topping:':'Motivo de la salida del topping:');if(reason===null)return;
-  try{
-    const result=await adminInventoryMoveCentral('topping',t,dir>0?'entrada':'salida',q,reason);
-    t.stock=Number(result.stock);
-    movements.unshift({date:new Date().toISOString(),kind:'topping',product:t.name,type:dir>0?'Entrada':'Salida',qty:dir>0?q:-q,unit:t.unit,stock:t.stock,reason});
-    save();adminToppingInventory();
-  }catch(e){alert('No se cambió el inventario del topping. Supabase rechazó el movimiento: '+(e.message||e));}
+  const overlay=document.createElement('div');overlay.id='spToppingMoveOverlay';
+  const old=document.getElementById('spToppingMoveOverlay');if(old)old.remove();
+  const title=dir>0?'Entrada de inventario':'Salida de inventario',symbol=dir>0?'＋':'−';
+  overlay.innerHTML=`<style>
+  #spToppingMoveOverlay{position:fixed;inset:0;z-index:2147482000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.8);backdrop-filter:blur(9px);font-family:inherit}
+  #spToppingMoveCard{width:min(440px,100%);box-sizing:border-box;border:1px solid #f7b92866;border-radius:24px;padding:24px;background:linear-gradient(145deg,#191713,#090909 75%);color:#fff;box-shadow:0 24px 80px #000b}
+  #spToppingMoveCard .stmIcon{width:48px;height:48px;display:grid;place-items:center;border-radius:15px;background:#f7b92818;border:1px solid #f7b92855;font-size:25px;margin-bottom:16px}
+  #spToppingMoveCard h2{margin:0 0 8px;font-size:22px}#spToppingMoveCard p{margin:0 0 18px;color:#aaa;font-size:14px;line-height:1.5}
+  #spToppingMoveCard .stmStock{padding:12px 14px;border:1px solid #373124;background:#0b0b0b;border-radius:12px;margin-bottom:17px;color:#c9c1ad;font-size:13px}
+  #spToppingMoveCard .stmStock b{color:#f7c94f;font-size:16px}
+  #spToppingMoveCard label{display:block;margin:13px 0 7px;color:#f7c94f;font-size:11px;font-weight:900;letter-spacing:1.4px}
+  #spToppingMoveCard input{width:100%;box-sizing:border-box;border:1px solid #413a2a;border-radius:12px;background:#080808;color:#fff;padding:14px;font:inherit;outline:none}
+  #spToppingMoveCard input:focus{border-color:#f7b928;box-shadow:0 0 0 3px #f7b92820}
+  #spToppingMoveCard .stmActions{display:flex;gap:10px;margin-top:22px}#spToppingMoveCard button{flex:1;border-radius:12px;padding:13px 9px;font-weight:850;cursor:pointer}
+  #spToppingMoveCard .stmCancel{background:#1c1c1c;color:#ddd;border:1px solid #393939}#spToppingMoveCard .stmSave{background:linear-gradient(135deg,#ffe18a,#f7b928);color:#17120a;border:0}
+  </style><section id="spToppingMoveCard" role="dialog" aria-modal="true"><div class="stmIcon">📦</div><h2>${title}</h2><p>${dir>0?'Registra las unidades que ingresan al inventario.':'Registra las unidades que salen del inventario.'} · ${esc(t.name)}</p>
+  <div class="stmStock">Existencia actual: <b>${Number(t.stock||0)} ${esc(t.unit)}</b></div><form id="spToppingMoveForm">
+  <label for="spToppingMoveQty">CANTIDAD (${esc(t.unit).toUpperCase()})</label><input id="spToppingMoveQty" type="number" min="0.001" step="any" inputmode="decimal" value="1" required>
+  <label for="spToppingMoveReason">MOTIVO</label><input id="spToppingMoveReason" maxlength="180" placeholder="${dir>0?'Ej. Compra de insumos':'Ej. Consumo o merma'}" required>
+  <div class="stmActions"><button type="button" class="stmCancel" id="spToppingMoveCancel">Cancelar</button><button type="submit" class="stmSave">Confirmar ${dir>0?'entrada':'salida'}</button></div></form></section>`;
+  document.body.appendChild(overlay);const form=overlay.querySelector('#spToppingMoveForm'),qty=overlay.querySelector('#spToppingMoveQty'),reasonInput=overlay.querySelector('#spToppingMoveReason');
+  const close=()=>overlay.remove();overlay.querySelector('#spToppingMoveCancel').onclick=close;overlay.addEventListener('click',e=>{if(e.target===overlay)close()});
+  form.onsubmit=async e=>{e.preventDefault();const q=Number(qty.value),reason=reasonInput.value.trim();if(!Number.isFinite(q)||q<=0){qty.focus();return}if(!reason){reasonInput.focus();return}close();
+    if(!isAdmin()&&dir>0){try{const row=await employeeInventoryEntryToppingCentral(t,q);t.stock=Number(row?.stock??(Number(t.stock)+q));movements.unshift({date:new Date().toISOString(),kind:'topping',product:t.name,type:'Entrada',qty:q,unit:t.unit,stock:t.stock,reason});save();adminToppingInventory()}catch(e){alert('La entrada no se pudo registrar en Supabase: '+(e.message||e))}return}
+    try{const result=await adminInventoryMoveCentral('topping',t,dir>0?'entrada':'salida',q,reason);t.stock=Number(result.stock);movements.unshift({date:new Date().toISOString(),kind:'topping',product:t.name,type:dir>0?'Entrada':'Salida',qty:dir>0?q:-q,unit:t.unit,stock:t.stock,reason});save();adminToppingInventory()}catch(e){alert('No se cambió el inventario del topping. Supabase rechazó el movimiento: '+(e.message||e))}
+  };
+  setTimeout(()=>qty.focus(),60);
 }
 async function toppingSet(id){
   if(!isAdmin()){alert('Solo el administrador o dueño puede ajustar inventario.');return}
@@ -2965,8 +2975,26 @@ function adminToppings(){
 }
 function newTopping(){
   if(!isAdmin()){alert('Solo el administrador o dueño puede modificar toppings.');return}
-  const name=prompt('Nombre del topping, salsa o adición');if(name===null||!name.trim())return;
-  const price=Number(prompt('Precio (0 = gratis)','0'));toppings.push({id:Date.now(),name:name.trim(),price:isNaN(price)?0:price,active:true,tracked:false,stock:0,minStock:0,usage:1,unit:'porciones'});save();adminToppings();
+  const old=document.getElementById('spToppingNewOverlay');if(old)old.remove();
+  const overlay=document.createElement('div');overlay.id='spToppingNewOverlay';
+  overlay.innerHTML=`<style>
+  #spToppingNewOverlay{position:fixed;inset:0;z-index:2147482000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.8);backdrop-filter:blur(9px);font-family:inherit}
+  #spToppingNewCard{width:min(440px,100%);box-sizing:border-box;border:1px solid #f7b92866;border-radius:24px;padding:24px;background:linear-gradient(145deg,#191713,#090909 75%);color:#fff;box-shadow:0 24px 80px #000b}
+  #spToppingNewCard .stnIcon{width:48px;height:48px;display:grid;place-items:center;border-radius:15px;background:#f7b92818;border:1px solid #f7b92855;font-size:24px;margin-bottom:16px}
+  #spToppingNewCard h2{margin:0 0 8px;font-size:22px}#spToppingNewCard p{margin:0 0 20px;color:#aaa;font-size:14px;line-height:1.5}
+  #spToppingNewCard label{display:block;margin:13px 0 7px;color:#f7c94f;font-size:11px;font-weight:900;letter-spacing:1.4px}
+  #spToppingNewCard input{width:100%;box-sizing:border-box;border:1px solid #413a2a;border-radius:12px;background:#080808;color:#fff;padding:14px;font:inherit;outline:none}
+  #spToppingNewCard input:focus{border-color:#f7b928;box-shadow:0 0 0 3px #f7b92820}
+  #spToppingNewCard .stnActions{display:flex;gap:10px;margin-top:22px}#spToppingNewCard button{flex:1;border-radius:12px;padding:13px 9px;font-weight:850;cursor:pointer}
+  #spToppingNewCard .stnCancel{background:#1c1c1c;color:#ddd;border:1px solid #393939}#spToppingNewCard .stnSave{background:linear-gradient(135deg,#ffe18a,#f7b928);color:#17120a;border:0}
+  </style><section id="spToppingNewCard" role="dialog" aria-modal="true"><div class="stnIcon">🧀</div><h2>Nuevo topping</h2><p>Agrega una salsa, queso o adicional al catálogo.</p>
+  <form id="spToppingNewForm"><label for="spToppingNewName">NOMBRE DEL TOPPING</label><input id="spToppingNewName" maxlength="100" placeholder="Ej. Queso extra" required>
+  <label for="spToppingNewPrice">PRECIO · COP (0 = GRATIS)</label><input id="spToppingNewPrice" type="number" min="0" step="1" inputmode="numeric" value="0" required>
+  <div class="stnActions"><button type="button" class="stnCancel" id="spToppingNewCancel">Cancelar</button><button type="submit" class="stnSave">Crear topping</button></div></form></section>`;
+  document.body.appendChild(overlay);const form=overlay.querySelector('#spToppingNewForm'),name=overlay.querySelector('#spToppingNewName'),price=overlay.querySelector('#spToppingNewPrice');
+  const close=()=>overlay.remove();overlay.querySelector('#spToppingNewCancel').onclick=close;overlay.addEventListener('click',e=>{if(e.target===overlay)close()});
+  form.onsubmit=e=>{e.preventDefault();const n=name.value.trim(),p=Number(price.value);if(!n){name.focus();return}if(!Number.isFinite(p)||p<0){price.focus();return}toppings.push({id:Date.now(),name:n,price:p,active:true,tracked:false,stock:0,minStock:0,usage:1,unit:'porciones'});close();save();adminToppings()};
+  setTimeout(()=>name.focus(),60);
 }
 function editTopping(id){
   if(!isAdmin()){alert('Solo el administrador o dueño puede modificar toppings.');return}
