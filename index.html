@@ -2482,7 +2482,8 @@ async function adminStats(){
     const map={};sales.forEach(o=>(o.items||[]).forEach(x=>{const k=x.name||x.productName||x.product_name||products.find(p=>String(p.id)===String(x.id))?.name||'Producto';map[k]=(map[k]||0)+Number(x.qty||1)}));
     return Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,10);
   })();
-  const pay=Object.create(null);\n  if(central){(central.payments||[]).forEach(x=>{const k=normalizePaymentLabel(x.method);pay[k]=(pay[k]||0)+Number(x.total||0)})}
+  const pay=Object.create(null);
+  if(central){(central.payments||[]).forEach(x=>{const k=normalizePaymentLabel(x.method);pay[k]=(pay[k]||0)+Number(x.total||0)})}
   if(!central){
     const periodKeys=new Set(period.map(x=>x.key));
     sales.filter(o=>periodKeys.has(dayKey(o.date||o.created))).forEach(o=>{const k=normalizePaymentLabel(o.pay||o.payment_method||o.paymentMethod||'Sin especificar');pay[k]=(pay[k]||0)+Number(o.total||0)});
