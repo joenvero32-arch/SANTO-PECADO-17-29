@@ -80,11 +80,18 @@
       const msg=String(firstError?.message||firstError||'');
       if(!/no se encontraron las credenciales del administrador/i.test(msg)) throw firstError;
       const active=(typeof currentUser!=='undefined'&&currentUser)?currentUser:null;
-      let username=String(active?.user||active?.username||'').trim();
-      if(!username) username=String(prompt('Usuario administrador para consultar Caja/Ventas:')||'').trim();
-      if(!username) throw new Error('Consulta cancelada: falta el usuario administrador.');
-      const pin=prompt('Ingresa el PIN del administrador para consultar Caja/Ventas centrales. No se guardará.');
-      if(pin===null||!String(pin).trim()) throw new Error('Consulta cancelada: no se ingresó el PIN.');
+      const localUsers=(typeof users!=='undefined'&&Array.isArray(users))?users:[];
+      const activeName=String(active?.user||active?.username||'').trim().toLowerCase();
+      const storedAdmin=localUsers.find(u=>String(u?.user||u?.username||'').trim().toLowerCase()===activeName&&String(u?.role||'').toLowerCase()==='admin')
+        ||localUsers.find(u=>String(u?.role||'').toLowerCase()==='admin');
+      const username=String(active?.user||active?.username||storedAdmin?.user||storedAdmin?.username||'').trim();
+      if(!username) throw new Error('No se encontró el usuario administrador de la sesión.');
+      // Reutiliza el PIN de la sesión administrativa; solo lo solicita si la sesión no conserva el PIN.
+      let pin=active?.pin||storedAdmin?.pin||'';
+      if(!pin){
+        pin=prompt('Ingresa el PIN del administrador para consultar Caja/Ventas centrales. No se guardará.');
+        if(pin===null||!String(pin).trim()) throw new Error('Consulta cancelada: no se ingresó el PIN.');
+      }
       if(typeof SP_DB==='undefined'||!SP_DB||typeof SP_DB.rpc!=='function') throw new Error('La conexión central de Supabase no está disponible.');
       const result=await SP_DB.rpc('sp_get_admin_orders_pin',{p_username:username,p_pin:String(pin).trim()});
       if(result.error) throw result.error;
