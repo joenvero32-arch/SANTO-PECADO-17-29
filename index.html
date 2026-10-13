@@ -2600,7 +2600,28 @@ function printStatsReport(){
     #panel{width:100%;max-width:none;margin:0;padding:0;border:0;box-shadow:none;background:#fff;color:var(--ink)}
     #panel *{max-width:100%}#panel h1,#panel h2,#panel h3{color:var(--ink)}#panel table{width:100%;border-collapse:collapse}#panel th{background:#f5edda}#panel th,#panel td{padding:7px;border-bottom:1px solid var(--line);text-align:left}
     @page{size:A4;margin:12mm}
-    @media print{html{background:#fff}body{max-width:none;margin:0;padding:0;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact}.reportBrand{border-radius:0;padding:18px 22px}.statgrid{grid-template-columns:repeat(4,minmax(0,1fr))}.dashSection,.stat,.adminItem,.notice{break-inside:avoid;page-break-inside:avoid}}
+    /* Impresión monocromática: todo el contenido debe conservar contraste sin depender del color. */
+    @media print{
+      :root{--ink:#000;--gold:#222;--goldlight:#222;--muted:#333;--line:#aaa;--soft:#fff}
+      html,body{background:#fff!important;color:#000!important}
+      body{max-width:none;margin:0;padding:0;font-size:10.5pt;line-height:1.4;-webkit-print-color-adjust:economy;print-color-adjust:economy}
+      .reportBrand{display:flex!important;background:#fff!important;color:#000!important;border:2px solid #000;border-bottom:4px double #000;border-radius:0;padding:15px 18px}
+      .brandMark{border:2px solid #000;color:#000!important;background:#fff!important}
+      .brandName,.brandSub,.reportMeta,.reportIntro h2,.reportIntro p,.dashKicker,h2,h3{color:#000!important}
+      .brandSub{font-weight:900}.reportMeta{color:#222!important}
+      .reportIntro{border-bottom:2px solid #333}
+      #panel,#panel *{color:#000!important;background-color:transparent!important;box-shadow:none!important;text-shadow:none!important}
+      #panel .stat,#panel .dashSection,#panel .adminItem,#panel .notice,#panel .empty{background:#fff!important;border:1px solid #777!important;color:#000!important}
+      #panel .stat{border-top:3px solid #000!important}
+      #panel .stat small,#panel .muted{color:#333!important}
+      #panel .barRow{border-bottom:1px solid #bbb!important}
+      #panel .barRow i{background:#ddd!important;border:1px solid #888!important}
+      #panel .barRow em{background:#555!important}
+      #panel table{width:100%;border-collapse:collapse}#panel th{background:#eee!important;color:#000!important}#panel th,#panel td{border:1px solid #999!important}
+      .reportFoot{border-top:2px solid #000;color:#222!important}
+      .statgrid{grid-template-columns:repeat(4,minmax(0,1fr))}
+      .dashSection,.stat,.adminItem,.notice{break-inside:avoid;page-break-inside:avoid}
+    }
     @media(max-width:600px){body{margin:0;padding:0 12px 20px}.reportBrand{padding:17px 14px;gap:10px}.brandMark{width:48px;height:48px;flex-basis:48px;font-size:19px}.brandName{font-size:17px}.brandSub{font-size:8px;letter-spacing:1px}.reportMeta{font-size:9px}.statgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.stat b{font-size:17px}.dashSection{padding:12px}.barRow{grid-template-columns:minmax(68px,1fr) minmax(70px,.8fr);gap:7px}.barRow i{grid-column:1/-1}}
   </style></head><body>
   <header class="reportBrand"><div style="display:flex;align-items:center;gap:15px"><div class="brandMark">SP</div><div><div class="brandName">SANTO PECADO 17-29</div><div class="brandSub">COMIDAS RÁPIDAS · ZARAGOZA</div></div></div><div class="reportMeta"><b>REPORTE OFICIAL</b><br>Estadísticas del negocio<br>${stamp}</div></header>
