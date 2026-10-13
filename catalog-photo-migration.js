@@ -7,21 +7,38 @@
   const KEY = 'sb_publishable_chFTmgoaIVvJSdpgTTuUSQ_fBNEq4WJ';
   let started = false;
 
+  let client = null;
+  let checking = false;
+
   async function init() {
-    // admin-finish.js solo crea #spAdminBtn tras validar rol admin y usuario activo.
-    // Reutilizamos esa validación visual para evitar una segunda comprobación de sesión
-    // que podía fallar si Supabase aún estaba restaurando el PIN/sesión en el navegador.
-    if (!window.supabase || !document.getElementById('spAdminBtn')) return;
-    const client = window.supabase.createClient(URL, KEY, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
-    });
-    addButton(client);
+    // No dependemos de que el botón visual de Administración se haya renderizado.
+    // Validamos directamente usuario autenticado, rol admin y cuenta activa.
+    if (!window.supabase) return false;
+    if (!client) {
+      client = window.supabase.createClient(URL, KEY, {
+        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+      });
+    }
+    if (checking) return false;
+    checking = true;
+    try {
+      const { data: authData, error: authError } = await client.auth.getUser();
+      if (authError || !authData?.user) return false;
+      const { data: profile, error: profileError } = await client
+        .from('app_users').select('role,active').eq('id', authData.user.id).maybeSingle();
+      if (profileError || profile?.role !== 'admin' || profile.active !== true) return false;
+      addButton(client);
+      return true;
+    } catch (e) {
+      console.warn('[SP fotos] Esperando sesión de administrador:', e);
+      return false;
+    } finally {
+      checking = false;
+    }
   }
 
   function addButton(db) {
     if (document.getElementById('spPhotoMigrationBtn')) return;
-    const admin = document.getElementById('spAdminBtn');
-    if (!admin) return;
     const button = document.createElement('button');
     button.id = 'spPhotoMigrationBtn';
     button.type = 'button';
@@ -130,11 +147,22 @@
     }
   }
 
-  const timer = setInterval(() => {
-    if (document.getElementById('spAdminBtn')) {
-      clearInterval(timer);
-      init().catch(e => console.error('[SP fotos] No se pudo habilitar la herramienta', e));
+  // Reintenta mientras Supabase restaura la sesión. Solo un admin activo verá el botón.
+  async function boot() {
+    if (!window.supabase) {
+      const existing = document.querySelector('script[src*="supabase-js"]');
+      if (!existing) {
+        const sc = document.createElement('script');
+        sc.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+        sc.onload = () => init();
+        sc.onerror = () => console.warn('[SP fotos] No se pudo cargar Supabase JS');
+        document.head.appendChild(sc);
+      }
+      return;
     }
-  }, 1000);
-  setTimeout(() => clearInterval(timer), 120000);
+    await init();
+  }
+  boot();
+  const timer = setInterval(boot, 2000);
+  setTimeout(() => clearInterval(timer), 180000);
 })();
