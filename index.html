@@ -2935,6 +2935,38 @@ function adminKitchen(){
     ${a.length?a.map(o=>{const queued=q.find(x=>String(x.no)===String(o.no));return `<div class="order" style="margin-top:12px"><div class="adminTop"><div><b>${esc(o.no)}</b> · ${esc(new Date(o.created).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}))}</div><span>${statusLabel(o)}</span></div><div>👤 ${esc(o.name||'Cliente')} · 📞 ${esc(o.phone||'-')}</div><div>🚚 ${esc(o.type||'-')}${o.addr?' · 📍 '+esc(o.addr):''}</div>${o.type==='Domicilio'&&o.driverName?`<div>🛵 Domiciliario: <b>${esc(o.driverName)}</b>${o.driverPhone?' · '+esc(o.driverPhone):''}</div>`:''}<div class="adminActions"><button class="mini" onclick="printComanda('${esc(o.no)}')">🖨️ ${queued?.printed?'Reimprimir':'Imprimir'} comanda</button>${o.status==='recibido'?`<button class="mini" onclick="setOrderStatus('${esc(o.no)}','preparacion',true)">👨‍🍳 En preparación</button>`:''}${o.status==='preparacion'?`<button class="mini" onclick="setOrderStatus('${esc(o.no)}','listo',true)">📦 Pedido listo</button>`:''}<button class="mini" onclick="adminKitchen()">🔄 Actualizar</button></div></div>`}).join(''):'<div class="empty">No hay pedidos pendientes para cocina.</div>'}`;
   document.getElementById('modal').classList.add('open');
 }
+function showPaymentConfirmation(order){
+  return new Promise(resolve=>{
+    const existing=document.getElementById('spPaymentDialog');
+    if(existing)existing.remove();
+    const methods=['Efectivo','Nequi','Bancolombia','Daviplata / transferencia','Tarjeta','Otro'];
+    const saved=String(order.pay||'').toLowerCase();
+    const selected=methods.find(m=>m.toLowerCase()===saved)||methods.find(m=>saved.includes(m.toLowerCase()))||'Efectivo';
+    const overlay=document.createElement('div');
+    overlay.id='spPaymentDialog';
+    overlay.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.76);backdrop-filter:blur(7px);display:flex;align-items:center;justify-content:center;padding:18px;font-family:inherit';
+    overlay.innerHTML=`<section role="dialog" aria-modal="true" aria-labelledby="spPaymentTitle" style="width:min(100%,460px);max-height:90vh;overflow:auto;background:linear-gradient(155deg,#1b1710,#101010 72%);color:#fff;border:1px solid rgba(247,185,40,.4);border-radius:22px;box-shadow:0 24px 80px #0009;padding:24px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px"><div style="width:48px;height:48px;border-radius:15px;background:rgba(247,185,40,.12);display:grid;place-items:center;font-size:25px">💳</div><div><div style="font-size:11px;letter-spacing:1.5px;color:#f7b928;font-weight:800">SANTO PECADO 17-29</div><h2 id="spPaymentTitle" style="font-size:21px;line-height:1.2;margin:4px 0 0">Confirmar pago recibido</h2></div></div>
+      <div style="background:#ffffff08;border:1px solid #ffffff12;border-radius:14px;padding:13px 15px;margin-bottom:18px"><div style="font-size:12px;color:#bcb6a8">PEDIDO</div><strong style="font-size:17px">${esc(order.no)}</strong><div style="font-size:13px;color:#c8c3b8;margin-top:3px">${esc(order.name||'Cliente')}</div><div style="font-size:23px;font-weight:900;color:#f7c94b;margin-top:7px">${esc(money(order.total||0))}</div></div>
+      <label for="spPaymentMethod" style="display:block;font-size:13px;font-weight:800;margin-bottom:7px;color:#e9e3d5">MEDIO DE PAGO</label>
+      <select id="spPaymentMethod" style="width:100%;padding:13px 14px;border-radius:12px;background:#0d0d0d;color:#fff;border:1px solid #4c4433;font:inherit;outline-color:#f7b928">${methods.map(m=>`<option value="${esc(m)}" ${m===selected?'selected':''}>${esc(m)}</option>`).join('')}</select>
+      <label for="spPaymentNote" style="display:block;font-size:13px;font-weight:800;margin:16px 0 7px;color:#e9e3d5">NOTA (OPCIONAL)</label>
+      <textarea id="spPaymentNote" rows="2" placeholder="Añade una observación si hace falta" style="width:100%;resize:vertical;padding:12px 14px;border-radius:12px;background:#0d0d0d;color:#fff;border:1px solid #4c4433;font:inherit">${'Pago recibido y pedido entregado'}</textarea>
+      <div style="font-size:12px;line-height:1.45;color:#bdb7aa;margin-top:12px">Al continuar se registrará el pago de este pedido una sola vez. El estado de preparación o entrega se conservará.</div>
+      <div style="display:flex;gap:10px;margin-top:22px"><button type="button" data-cancel style="flex:1;padding:13px;border-radius:12px;background:transparent;color:#ddd;border:1px solid #5b5549;font:inherit;font-weight:800">Cancelar</button><button type="button" data-accept style="flex:1;padding:13px;border-radius:12px;background:linear-gradient(135deg,#ffd85c,#f3ad16);color:#17120a;border:0;font:inherit;font-weight:900">Confirmar pago</button></div>
+    </section>`;
+    document.body.appendChild(overlay);
+    const finish=value=>{overlay.remove();resolve(value)};
+    overlay.querySelector('[data-cancel]').addEventListener('click',()=>finish(null));
+    overlay.addEventListener('click',e=>{if(e.target===overlay)finish(null)});
+    overlay.querySelector('[data-accept]').addEventListener('click',()=>{
+      const method=overlay.querySelector('#spPaymentMethod').value;
+      const note=overlay.querySelector('#spPaymentNote').value.trim();
+      if(!method){return}
+      finish({method,note});
+    });
+  });
+}
 const SP_PAYMENT_CONFIRMING=new Set();
 async function confirmOrderPayment(no){
   const key=String(no||'').trim();
@@ -2965,10 +2997,10 @@ async function confirmOrderPayment(no){
       adminOrders();
       return;
     }
-    const method=prompt('Confirma el medio de pago recibido:\n\n1. Efectivo\n2. Nequi\n3. Bancolombia\n4. Daviplata / transferencia\n5. Tarjeta\n6. Otro',o.pay||'Efectivo');
-    if(method===null||!method.trim())return;
-    const note=prompt('Nota de pago (opcional):','Pago recibido y pedido entregado')||'';
-    if(!confirm('¿Confirmas que el pago del pedido '+o.no+' fue recibido por '+method.trim()+'? Se registrará una sola venta y se conservará el estado actual de preparación/entrega.'))return;
+    const paymentData=await showPaymentConfirmation(o);
+    if(!paymentData)return;
+    const method=paymentData.method;
+    const note=paymentData.note;
     let row=null;
     if(SP_DB_ON){
       if(!o.centralId){alert('Este pedido no tiene una referencia central válida. No se registrará el pago localmente.');return}
