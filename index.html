@@ -2858,13 +2858,45 @@ async function adminInventoryMoveCentral(kind,item,movement,quantity,reason){
   if(!data||!data.item||!Number.isFinite(Number(data.stock)))throw new Error('Supabase no confirmó el movimiento. No se cambió el inventario local.');
   return data;
 }
+function showInventoryMoveDialog(product,direction,needReason){
+  return new Promise(resolve=>{
+    const old=document.getElementById('spInventoryMoveDialog');if(old)old.remove();
+    const isEntry=direction==='entrada';
+    const overlay=document.createElement('div');
+    overlay.id='spInventoryMoveDialog';
+    overlay.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.76);backdrop-filter:blur(7px);display:flex;align-items:center;justify-content:center;padding:18px;font-family:inherit';
+    overlay.innerHTML=`<section role="dialog" aria-modal="true" aria-labelledby="spMoveTitle" style="width:min(100%,460px);max-height:90vh;overflow:auto;background:linear-gradient(155deg,#1b1710,#101010 72%);color:#fff;border:1px solid rgba(247,185,40,.4);border-radius:22px;box-shadow:0 24px 80px #0009;padding:24px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px"><div style="width:48px;height:48px;border-radius:15px;background:rgba(247,185,40,.12);display:grid;place-items:center;font-size:25px">${isEntry?'📥':'📤'}</div><div><div style="font-size:11px;letter-spacing:1.5px;color:#f7b928;font-weight:800">SANTO PECADO 17-29</div><h2 id="spMoveTitle" style="font-size:21px;line-height:1.2;margin:4px 0 0">${isEntry?'Registrar entrada':'Registrar salida'}</h2></div></div>
+      <div style="background:#ffffff08;border:1px solid #ffffff12;border-radius:14px;padding:13px 15px;margin-bottom:18px"><div style="font-size:11px;letter-spacing:1px;color:#bcb6a8">PRODUCTO</div><strong style="font-size:17px;display:block;margin-top:4px">${esc(product.name)}</strong><div style="font-size:13px;color:#c8c3b8;margin-top:8px">Existencia actual: <b style="color:#f7c94b">${Number(product.stock)||0} und.</b></div></div>
+      <label for="spMoveQuantity" style="display:block;font-size:13px;font-weight:800;margin-bottom:7px;color:#e9e3d5">CANTIDAD ${isEntry?'QUE INGRESA':'QUE SALE'}</label>
+      <input id="spMoveQuantity" type="number" min="1" step="1" inputmode="numeric" placeholder="Ej. 1" style="width:100%;padding:13px 14px;border-radius:12px;background:#0d0d0d;color:#fff;border:1px solid #4c4433;font:inherit;outline-color:#f7b928">
+      ${needReason?`<label for="spMoveReason" style="display:block;font-size:13px;font-weight:800;margin:16px 0 7px;color:#e9e3d5">MOTIVO DEL MOVIMIENTO</label><textarea id="spMoveReason" rows="2" required placeholder="${isEntry?'Ej. Compra a proveedor':'Ej. Consumo, merma o corrección'}" style="width:100%;resize:vertical;padding:12px 14px;border-radius:12px;background:#0d0d0d;color:#fff;border:1px solid #4c4433;font:inherit"></textarea>`:''}
+      <div style="font-size:12px;line-height:1.45;color:#bdb7aa;margin-top:12px">${isEntry?'La cantidad se sumará a la existencia actual.':'La cantidad se descontará de la existencia actual.'}${needReason?' El movimiento quedará registrado con su motivo.':''}</div>
+      <div style="display:flex;gap:10px;margin-top:22px"><button type="button" data-cancel style="flex:1;padding:13px;border-radius:12px;background:transparent;color:#ddd;border:1px solid #5b5549;font:inherit;font-weight:800">Cancelar</button><button type="button" data-accept style="flex:1;padding:13px;border-radius:12px;background:linear-gradient(135deg,#ffd85c,#f3ad16);color:#17120a;border:0;font:inherit;font-weight:900">${isEntry?'Registrar entrada':'Registrar salida'}</button></div>
+    </section>`;
+    document.body.appendChild(overlay);
+    const finish=value=>{overlay.remove();resolve(value)};
+    overlay.querySelector('[data-cancel]').addEventListener('click',()=>finish(null));
+    overlay.addEventListener('click',e=>{if(e.target===overlay)finish(null)});
+    overlay.querySelector('[data-accept]').addEventListener('click',()=>{
+      const raw=overlay.querySelector('#spMoveQuantity').value,q=Number(raw);
+      const reason=needReason?overlay.querySelector('#spMoveReason').value.trim():'';
+      if(!raw.trim()||!Number.isFinite(q)||q<=0||!Number.isInteger(q)){alert('Ingresa una cantidad entera mayor que cero.');return}
+      if(needReason&&!reason){alert('Indica el motivo del movimiento para continuar.');return}
+      if(!isEntry&&q>Number(product.stock||0)){alert('La salida no puede superar la existencia disponible.');return}
+      finish({q,reason});
+    });
+  });
+}
 async function stockMove(id,dir){
   if(!requirePermission('allowInventory'))return;
   if(!isAdmin() && dir<0){alert('El empleado solo puede registrar entradas de inventario.');return}
   const p=products.find(x=>String(x.id)===String(id));if(!p)return;
-  const q=Number(prompt('Cantidad','1'));
-  if(!Number.isFinite(q)||q<=0)return;
-  if(!isAdmin() && dir>0){
+  const entry=dir>0;
+  const move=await showInventoryMoveDialog(p,entry?'entrada':'salida',isAdmin());
+  if(!move)return;
+  const {q,reason}=move;
+  if(!isAdmin() && entry){
     try{
       const row=await employeeInventoryEntryProductCentral(p,q);
       p.stock=Number(row?.stock ?? (Number(p.stock||0)+q));
@@ -2873,11 +2905,10 @@ async function stockMove(id,dir){
     }catch(e){alert('La entrada no se pudo registrar en Supabase: '+(e.message||e));}
     return;
   }
-  const reason=askReason(dir>0?'Motivo de la entrada de inventario:':'Motivo de la salida de inventario:');if(reason===null)return;
   try{
-    const result=await adminInventoryMoveCentral('product',p,dir>0?'entrada':'salida',q,reason);
+    const result=await adminInventoryMoveCentral('product',p,entry?'entrada':'salida',q,reason);
     p.stock=Number(result.stock);
-    movements.unshift({date:new Date().toISOString(),product:p.name,type:dir>0?'Entrada':'Salida',qty:dir>0?q:-q,stock:p.stock,reason});
+    movements.unshift({date:new Date().toISOString(),product:p.name,type:entry?'Entrada':'Salida',qty:entry?q:-q,stock:p.stock,reason});
     save();adminInventory();
   }catch(e){alert('No se cambió el inventario. Supabase rechazó el movimiento: '+(e.message||e));}
 }
