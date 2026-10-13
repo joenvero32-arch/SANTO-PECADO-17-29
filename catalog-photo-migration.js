@@ -151,22 +151,17 @@
           });
           if (uploadError) throw uploadError;
           const publicUrl = db.storage.from('product-images').getPublicUrl(path).data.publicUrl;
-          const { error: updateError } = await db.rpc('admin_update_product', {
-            p_product_id: p.id,
-            p_name: p.name,
-            p_category_id: p.category_id,
-            p_description: p.description || '',
-            p_price: Number(p.price || 0),
-            p_stock: Number(p.stock || 0),
-            p_minimum_stock: Number(p.minimum_stock || 0),
-            p_sort_order: Number(p.sort_order || 0),
-            p_active: p.active !== false,
-            p_image_url: publicUrl
-          });
+          // Actualizar exclusivamente image_url. No usar admin_update_product:
+          // esa RPC recibe y vuelve a escribir campos ajenos a la fotografía.
+          const { data: updated, error: updateError } = await db.from('products')
+            .update({ image_url: publicUrl })
+            .eq('id', p.id)
+            .select('id,image_url')
+            .maybeSingle();
           if (updateError) throw updateError;
-          const { data: check, error: checkError } = await db.from('products')
-            .select('image_url').eq('id', p.id).maybeSingle();
-          if (checkError || !check || check.image_url !== publicUrl) throw new Error('No se confirmó la dirección de la foto');
+          if (!updated || updated.id !== p.id || updated.image_url !== publicUrl) {
+            throw new Error('No se confirmó la actualización exclusiva de image_url; revise sesión y permisos RLS');
+          }
           done++;
         } catch (e) {
           failed++;
