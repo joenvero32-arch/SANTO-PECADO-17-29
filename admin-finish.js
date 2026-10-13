@@ -243,7 +243,7 @@ window.printComanda = async function(no){
     return [...root.querySelectorAll('*')].find(el=>el.children.length===0 && predicate((el.textContent||'').trim()));
   }
   function dashSetTop(root,total,count){
-    const countEl=dashLeaf(root,t=>/^\d+ venta\(s\) registrada\(s)$/.test(t));
+    const countEl=dashLeaf(root,t=>/^\d+ venta\(s\) registrada\(s\)$/.test(t));
     if(!countEl)return;
     let scope=countEl, amount=null;
     for(let i=0;i<7&&scope;i++,scope=scope.parentElement){
