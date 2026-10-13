@@ -11,11 +11,12 @@
   let checking = false;
 
   async function init() {
-    // La aplicación ya valida el acceso del administrador en su sesión existente.
-    // Esta herramienta no debe exigir una segunda sesión Supabase independiente.
-    if (typeof window.isAdmin !== 'function' || !window.isAdmin()) {
-      const button = document.getElementById('spPhotoMigrationBtn');
-      if (button) button.remove();
+    // El botón Administración solo lo crea admin-finish.js tras validar un admin activo.
+    // Esperamos ese botón para reutilizar la sesión administrativa ya abierta.
+    const adminButton = document.getElementById('spAdminBtn');
+    if (!adminButton) {
+      const migrationButton = document.getElementById('spPhotoMigrationBtn');
+      if (migrationButton) migrationButton.remove();
       return false;
     }
     if (!window.supabase) return false;
