@@ -169,13 +169,15 @@
         .select('id,name,image_url')
         .order('name');
       if (error) throw error;
-      const targets = (products || []).filter(p => typeof p.image_url === 'string' && /^data:image\/(jpeg|jpg|png|webp);base64,/i.test(p.image_url));
+      const pendingTargets = (products || []).filter(p => typeof p.image_url === 'string' && /^data:image\/(jpeg|jpg|png|webp);base64,/i.test(p.image_url));
+      // Primera ejecución limitada deliberadamente a una sola fotografía de prueba.
+      const targets = pendingTargets.slice(0, 1);
       if (!targets.length) {
         report('No hay fotografías Base64 pendientes. No se modificó ningún producto.');
         button.textContent = '✓ Fotos ya optimizadas';
         return;
       }
-      report('Permisos confirmados. Preparando ' + targets.length + ' fotografías. No cierres esta página.');
+      report('Permisos confirmados. PRUEBA CONTROLADA: se procesará 1 sola fotografía de ' + pendingTargets.length + ' pendientes. Producto: ' + targets[0].name + '. No cierres esta página.');
       button.textContent = '⏳ Optimizando fotografías…';
       for (let i = 0; i < targets.length; i++) {
         const p = targets[i];
@@ -222,7 +224,7 @@
           '\nNo cierres esta página hasta terminar.');
       }
       if (failed === 0) {
-        report('✓ Listo: ' + done + ' fotografías convertidas a JPG y verificadas en Supabase Storage.');
+        report('✓ Prueba controlada lista: ' + done + ' fotografía convertida a JPG y verificada en Supabase Storage. Las demás siguen intactas.');
         button.textContent = '✓ Fotos optimizadas';
       } else {
         report('Proceso terminado parcialmente.\nCorrectas: ' + done + ' · Con error: ' + failed +
