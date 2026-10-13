@@ -18,7 +18,7 @@ jobs:
   deploy:
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: \${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Descargar repositorio
@@ -40,21 +40,21 @@ jobs:
 
           # Retirar las etiquetas previas de módulos que el workflow administra.
           for name in ("admin-finish.js", "stats-nav-fix.js", "catalog-image-optimizer.js"):
-              s = re.sub(r'<script[^>]+\\b' + re.escape(name) + r'(?:\\?[^>]*)?>\\s*</script>', '', s)
+              s = re.sub(r'<script[^>]+\b' + re.escape(name) + r'(?:\?[^>]*)?>\s*</script>', '', s)
 
           tag = (
               '<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>'
-              f'<script src="admin-finish.js?v={sha}"></script>\\n'
-              f'<script src="stats-nav-fix.js?v={sha}"></script>\\n'
-              f'<script src="stats-print-fix.js?v={sha}"></script>\\n'
-              f'<script src="catalog-image-optimizer.js?v={sha}"></script>\\n'
+              f'<script src="admin-finish.js?v={sha}"></script>\n'
+              f'<script src="stats-nav-fix.js?v={sha}"></script>\n'
+              f'<script src="stats-print-fix.js?v={sha}"></script>\n'
+              f'<script src="catalog-image-optimizer.js?v={sha}"></script>\n'
           )
 
           if "</body>" in s:
               head, tail = s.rsplit("</body>", 1)
               s = head + tag + "</body>" + tail
           else:
-              s += "\\n" + tag
+              s += "\n" + tag
 
           p.write_text(s, encoding="utf-8")
           PY
