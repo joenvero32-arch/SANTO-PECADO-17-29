@@ -10,13 +10,23 @@
   let client = null;
   let checking = false;
 
+  function hasAdminSession() {
+    try {
+      const raw = sessionStorage.getItem('sp_premium_session_v1');
+      if (!raw) return false;
+      const session = JSON.parse(raw);
+      return !!session && session.role === 'admin';
+    } catch (_) {
+      return false;
+    }
+  }
+
   async function init() {
-    // El botón Administración solo lo crea admin-finish.js tras validar un admin activo.
-    // Esperamos ese botón para reutilizar la sesión administrativa ya abierta.
-    const adminButton = document.getElementById('spAdminBtn');
-    if (!adminButton) {
-      const migrationButton = document.getElementById('spPhotoMigrationBtn');
-      if (migrationButton) migrationButton.remove();
+    // La aplicación valida el PIN y guarda la sesión administrativa en sessionStorage.
+    // No exigir otra sesión de Supabase: el login principal de esta aplicación es local/PIN.
+    if (!hasAdminSession()) {
+      const button = document.getElementById('spPhotoMigrationBtn');
+      if (button) button.remove();
       return false;
     }
     if (!window.supabase) return false;
