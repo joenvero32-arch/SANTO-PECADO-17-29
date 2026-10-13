@@ -49,11 +49,19 @@
   }
 
   function addButton(db) {
-    const panel = document.getElementById('panel');
-    if (!panel) return;
+    const adminPanel = document.getElementById('spAdminPanel');
+    const tabs = adminPanel && adminPanel.querySelector('.spTabs');
+    if (!adminPanel || !tabs) return;
+    let wrap = document.getElementById('spPhotoMigrationWrap');
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = 'spPhotoMigrationWrap';
+      wrap.style.cssText = 'flex:0 0 auto;padding:10px 14px 0;background:#101010;';
+      tabs.insertAdjacentElement('afterend', wrap);
+    }
     const existing = document.getElementById('spPhotoMigrationBtn');
     if (existing) {
-      if (existing.parentElement !== panel) panel.appendChild(existing);
+      if (existing.parentElement !== wrap) wrap.appendChild(existing);
       return;
     }
     const button = document.createElement('button');
@@ -62,26 +70,23 @@
     button.textContent = '⚡ Optimizar fotos del catálogo';
     Object.assign(button.style, {
       display: 'block', position: 'static', boxSizing: 'border-box',
-      width: '100%', maxWidth: '100%', margin: '14px 0 8px',
-      padding: '12px 16px', border: '0', borderRadius: '12px',
+      width: '100%', maxWidth: '100%', margin: '0 0 8px',
+      padding: '11px 14px', border: '0', borderRadius: '10px',
       background: '#176b45', color: '#fff', font: '600 14px system-ui',
       boxShadow: '0 3px 14px #0003', whiteSpace: 'normal'
     });
     button.addEventListener('click', () => migrate(db, button));
-    panel.appendChild(button);
+    wrap.appendChild(button);
   }
 
   function report(message) {
     let el = document.getElementById('spPhotoMigrationStatus');
+    const wrap = document.getElementById('spPhotoMigrationWrap');
     if (!el) {
       el = document.createElement('div');
       el.id = 'spPhotoMigrationStatus';
-      Object.assign(el.style, {
-        position: 'fixed', left: '12px', right: '12px', bottom: '12px', zIndex: '2147483001',
-        padding: '14px', borderRadius: '10px', background: '#111', color: '#fff',
-        font: '14px system-ui', whiteSpace: 'pre-wrap', boxShadow: '0 3px 14px #0005'
-      });
-      document.body.appendChild(el);
+      el.style.cssText = 'display:block;margin:0 0 8px;padding:10px 12px;border-radius:10px;background:#191919;color:#fff;font:13px system-ui;white-space:pre-wrap;overflow-wrap:anywhere;';
+      if (wrap) wrap.appendChild(el);
     }
     el.textContent = message;
   }
