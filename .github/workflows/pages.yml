@@ -48,6 +48,7 @@ jobs:
               f'<script src="stats-nav-fix.js?v={sha}"></script>\n'
               f'<script src="stats-print-fix.js?v={sha}"></script>\n'
               f'<script src="catalog-image-optimizer.js?v={sha}"></script>\n'
+              f'<script src="catalog-photo-migration.js?v={sha}"></script>\n'
           )
 
           if "</body>" in s:
