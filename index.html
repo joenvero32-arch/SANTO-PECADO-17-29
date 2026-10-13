@@ -3196,12 +3196,20 @@ function printOrder(no){
   if(!o){alert('No encontramos el pedido en este dispositivo.');return}
   const logo=document.querySelector('.brandLogo')?.src||'';
   const detailLines=(o.detail||'').split('\n').map(x=>x.trim()).filter(Boolean);
+  // Los pedidos antiguos pueden tener el nombre/cantidad sin subtotal en detail.
+  // En ese caso solo se calcula el valor de la línea si hay un único producto y ningún extra,
+  // usando el total guardado menos el domicilio cuando corresponde.
+  const productLines=detailLines.filter(x=>!/^Nota:/i.test(x)&&!/^Domicilio:/i.test(x));
+  const hasAnyPricedLine=productLines.some(x=>/\s:\s*\$?\s?[\d.,]+$/.test(x));
+  const legacySingleProduct=productLines.length===1&&!hasAnyPricedLine&&detailLines.length===1;
+  const legacyAmount=legacySingleProduct?Number(o.total||0)-(o.type==='Domicilio'?3000:0):null;
   const lines=detailLines.map((x,i)=>{
-    // El detalle guardado al crear el pedido conserva el subtotal real de cada producto.
-    // Las líneas de toppings/notas se muestran debajo sin alterar sus importes.
     const m=x.match(/^(.*?)(?:\s*:\s*)(\$\s?[\d.,]+)$/);
     if(m){
       return `<div class="productLine"><span class="productName">${esc(m[1]).replace(/—/g,'&mdash;')}</span><strong class="productPrice">${esc(m[2])}</strong></div>`;
+    }
+    if(legacySingleProduct&&i===0&&Number.isFinite(legacyAmount)&&legacyAmount>=0){
+      return `<div class="productLine"><span class="productName">${esc(x).replace(/—/g,'&mdash;')}</span><strong class="productPrice">${esc(money(legacyAmount))}</strong></div>`;
     }
     return `<div class="line extraLine">${esc(x).replace(/—/g,'&mdash;')}</div>`;
   }).join('');
