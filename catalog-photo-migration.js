@@ -8,14 +8,13 @@
   let started = false;
 
   async function init() {
+    // admin-finish.js solo crea #spAdminBtn tras validar rol admin y usuario activo.
+    // Reutilizamos esa validación visual para evitar una segunda comprobación de sesión
+    // que podía fallar si Supabase aún estaba restaurando el PIN/sesión en el navegador.
     if (!window.supabase || !document.getElementById('spAdminBtn')) return;
     const client = window.supabase.createClient(URL, KEY, {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
     });
-    const { data: auth } = await client.auth.getUser();
-    if (!auth || !auth.user) return;
-    const { data: profile } = await client.from('app_users').select('role,active').eq('id', auth.user.id).maybeSingle();
-    if (!profile || profile.role !== 'admin' || profile.active !== true) return;
     addButton(client);
   }
 
