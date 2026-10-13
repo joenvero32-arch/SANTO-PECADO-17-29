@@ -2253,13 +2253,29 @@ async function newCategory(){
 }
 function editCategory(i){
   if(!isAdmin()){alert('Solo el administrador o dueño puede modificar categorías.');return}
-  const old=categories[i], name=prompt('Nuevo nombre de la categoría:',old);
-  if(name===null)return;
-  const v=name.trim();
-  if(!v||v===old)return;
-  if(categories.some((c,j)=>j!==i&&c.toLowerCase()===v.toLowerCase())){alert('Esa categoría ya existe.');return}
-  products.forEach(p=>{if(p.cat===old)p.cat=v});
-  categories[i]=v;save();auditLog('Categoría modificada',old+' → '+v);render();adminCategories();
+  const oldName=categories[i];if(oldName===undefined)return;
+  const existing=document.getElementById('spEditCategoryOverlay');if(existing)existing.remove();
+  const overlay=document.createElement('div');overlay.id='spEditCategoryOverlay';
+  overlay.innerHTML=`<style>
+  #spEditCategoryOverlay{position:fixed;inset:0;z-index:2147482000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.82);backdrop-filter:blur(9px);font-family:inherit}
+  #spEditCategoryCard{width:min(440px,100%);box-sizing:border-box;border:1px solid #f7b92866;border-radius:24px;padding:24px;background:linear-gradient(145deg,#191713,#090909 75%);color:#fff;box-shadow:0 24px 80px #000b}
+  #spEditCategoryCard .secIcon{width:48px;height:48px;display:grid;place-items:center;border-radius:15px;background:#f7b92818;border:1px solid #f7b92855;font-size:24px;margin-bottom:16px}
+  #spEditCategoryCard h2{margin:0 0 8px;font-size:22px}#spEditCategoryCard p{margin:0 0 20px;color:#aaa;font-size:14px;line-height:1.5}
+  #spEditCategoryCard label{display:block;margin:13px 0 7px;color:#f7c94f;font-size:11px;font-weight:900;letter-spacing:1.4px}
+  #spEditCategoryCard input{width:100%;box-sizing:border-box;border:1px solid #413a2a;border-radius:12px;background:#080808;color:#fff;padding:14px;font:inherit;outline:none}
+  #spEditCategoryCard input:focus{border-color:#f7b928;box-shadow:0 0 0 3px #f7b92820}
+  #spEditCategoryCard .secActions{display:flex;gap:10px;margin-top:22px}#spEditCategoryCard button{flex:1;border-radius:12px;padding:13px 9px;font-weight:850;cursor:pointer}
+  #spEditCategoryCard .secCancel{background:#1c1c1c;color:#ddd;border:1px solid #393939}#spEditCategoryCard .secSave{background:linear-gradient(135deg,#ffe18a,#f7b928);color:#17120a;border:0}
+  </style><section id="spEditCategoryCard" role="dialog" aria-modal="true" aria-labelledby="spEditCategoryTitle"><div class="secIcon">📂</div><h2 id="spEditCategoryTitle">Editar categoría</h2><p>Cambia el nombre sin perder los productos asociados a esta categoría.</p>
+  <form id="spEditCategoryForm"><label for="spEditCategoryName">NOMBRE DE LA CATEGORÍA</label><input id="spEditCategoryName" maxlength="80" autocomplete="off" required>
+  <div class="secActions"><button type="button" class="secCancel" id="spEditCategoryCancel">Cancelar</button><button type="submit" class="secSave">Guardar cambios</button></div></form></section>`;
+  document.body.appendChild(overlay);const form=overlay.querySelector('#spEditCategoryForm'),input=overlay.querySelector('#spEditCategoryName');input.value=oldName;
+  const close=()=>overlay.remove();overlay.querySelector('#spEditCategoryCancel').onclick=close;overlay.addEventListener('click',e=>{if(e.target===overlay)close()});
+  form.onsubmit=e=>{e.preventDefault();const v=input.value.trim();if(!v){input.focus();return}if(v===oldName){close();return}
+    if(categories.some((c,j)=>j!==i&&c.toLowerCase()===v.toLowerCase())){alert('Esa categoría ya existe.');input.focus();return}
+    products.forEach(p=>{if(p.cat===oldName)p.cat=v});categories[i]=v;close();save();auditLog('Categoría modificada',oldName+' → '+v);render();adminCategories();
+  };
+  setTimeout(()=>input.focus(),60);
 }
 function deleteCategory(i){
   if(!isAdmin()){alert('Solo el administrador o dueño puede modificar categorías.');return}
