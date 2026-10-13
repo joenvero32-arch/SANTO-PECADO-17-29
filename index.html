@@ -1453,13 +1453,49 @@ async function registerOrderIncident(no,type){
   alert('La novedad quedó registrada. El administrador debe revisarla antes de aprobar cualquier devolución o cambio.');
   adminOrders();
 }
-function deleteOrder(no){
+async function deleteOrder(no){
   if(!isAdmin()){alert('Solo el administrador o dueño puede eliminar pedidos.');return}
   const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
   const o=orders.find(x=>x.no===no);if(!o)return;
-  if(!confirm('¿Eliminar el pedido '+no+'? Esta acción quedará registrada en Auditoría.'))return;
-  const reason=askReason('Indica el motivo de la eliminación del pedido:');if(reason===null)return;
-  localStorage.setItem(ORDERS,JSON.stringify(orders.filter(x=>x.no!==no)));
+  const reason=await new Promise(resolve=>{
+    const prev=document.getElementById('spDeleteOrderOverlay');if(prev)prev.remove();
+    const overlay=document.createElement('div');overlay.id='spDeleteOrderOverlay';
+    overlay.innerHTML=`<style>
+      #spDeleteOrderOverlay{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.8);backdrop-filter:blur(9px);font-family:inherit}
+      #spDeleteOrderOverlay *{box-sizing:border-box}
+      #spDeleteOrderCard{width:min(620px,100%);max-height:calc(100dvh - 36px);overflow:auto;border:1px solid #8b6a27;border-radius:28px;padding:clamp(20px,5vw,42px);background:radial-gradient(ellipse at 0 0,#f7b92812,transparent 42%),linear-gradient(145deg,#171511,#0b0b0b 76%);color:#f8f5ed;box-shadow:0 24px 80px #000b}
+      #spDeleteOrderCard .sdoHead{display:flex;align-items:center;gap:17px;margin-bottom:22px}
+      #spDeleteOrderCard .sdoIcon{width:68px;height:68px;flex:0 0 68px;display:grid;place-items:center;border:1px solid #f7b92855;border-radius:20px;background:#f7b92818;font-size:31px}
+      #spDeleteOrderCard .sdoKicker{margin:0 0 7px;color:#f7c94f;font-size:12px;font-weight:900;letter-spacing:2px}
+      #spDeleteOrderCard h2{margin:0;font-size:clamp(22px,5vw,31px);line-height:1.15}
+      #spDeleteOrderCard .sdoWarning{margin:0 0 22px;padding:15px 16px;border:1px solid #57482a;border-radius:15px;background:#f7b9280c;color:#ddd4bf;font-size:15px;line-height:1.5;overflow-wrap:anywhere}
+      #spDeleteOrderCard label{display:block;margin:0 0 10px;font-size:13px;font-weight:900;letter-spacing:.6px}
+      #spDeleteOrderCard textarea{display:block;width:100%;min-height:115px;resize:vertical;border:1px solid #494336;border-radius:16px;padding:15px;background:#0c0c0c;color:#fff;font:inherit;font-size:16px;line-height:1.5;outline:none}
+      #spDeleteOrderCard textarea:focus{border-color:#f7b928;box-shadow:0 0 0 3px #f7b92820}
+      #spDeleteOrderCard .sdoHint{margin:10px 0 0;color:#aaa69c;font-size:13px;line-height:1.45}
+      #spDeleteOrderCard .sdoActions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:26px}
+      #spDeleteOrderCard button{min-height:60px;border-radius:16px;padding:12px 14px;font:inherit;font-weight:900;cursor:pointer}
+      #spDeleteOrderCard .sdoCancel{background:transparent;color:#eee;border:1px solid #5a554a}
+      #spDeleteOrderCard .sdoConfirm{background:linear-gradient(135deg,#ffdc72,#f7b928);color:#17120a;border:0}
+      @media(max-width:390px){#spDeleteOrderCard{padding:20px;border-radius:23px}#spDeleteOrderCard .sdoIcon{width:54px;height:54px;flex-basis:54px;font-size:26px}#spDeleteOrderCard .sdoHead{gap:13px}#spDeleteOrderCard .sdoActions{gap:9px;margin-top:20px}#spDeleteOrderCard button{min-height:56px;padding:10px 8px;font-size:14px}}
+    </style><section id="spDeleteOrderCard" role="dialog" aria-modal="true" aria-labelledby="spDeleteOrderTitle">
+      <div class="sdoHead"><div class="sdoIcon">🗑️</div><div><p class="sdoKicker">SANTO PECADO 17-29 · PEDIDOS</p><h2 id="spDeleteOrderTitle">Eliminar pedido</h2></div></div>
+      <p class="sdoWarning">¿Confirmas que deseas eliminar el pedido <strong>${String(no)}</strong>? Esta acción quedará registrada en Auditoría.</p>
+      <form id="spDeleteOrderForm"><label for="spDeleteOrderReason">MOTIVO DE ELIMINACIÓN · OBLIGATORIO</label><textarea id="spDeleteOrderReason" maxlength="1000" placeholder="Explica por qué se debe eliminar este pedido…" required></textarea><p class="sdoHint">La eliminación no se realizará hasta confirmar el motivo.</p><div class="sdoActions"><button type="button" class="sdoCancel" id="spDeleteOrderCancel">Cancelar</button><button type="submit" class="sdoConfirm">Confirmar eliminación</button></div></form>
+    </section>`;
+    document.body.appendChild(overlay);
+    const form=overlay.querySelector('#spDeleteOrderForm'),field=overlay.querySelector('#spDeleteOrderReason');
+    const finish=value=>{overlay.remove();resolve(value)};
+    overlay.querySelector('#spDeleteOrderCancel').onclick=()=>finish(null);
+    overlay.addEventListener('click',e=>{if(e.target===overlay)finish(null)});
+    overlay.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();finish(null)}});
+    form.onsubmit=e=>{e.preventDefault();const value=field.value.trim();if(!value){field.setCustomValidity('El motivo es obligatorio.');field.reportValidity();return}finish(value)};
+    field.addEventListener('input',()=>field.setCustomValidity(''));setTimeout(()=>field.focus(),60);
+  });
+  if(reason===null)return;
+  const latest=JSON.parse(localStorage.getItem(ORDERS)||'[]');
+  if(!latest.some(x=>x.no===no)){alert('El pedido ya no está disponible. No se realizó ningún cambio.');return}
+  localStorage.setItem(ORDERS,JSON.stringify(latest.filter(x=>x.no!==no)));
   auditLog('Pedido eliminado',reason,no);
   adminOrders();
 }
