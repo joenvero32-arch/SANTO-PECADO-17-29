@@ -2445,8 +2445,7 @@ function printStatsReport(){
     @page{size:auto;margin:12mm}
     @media print{body{padding:0}.statgrid{grid-template-columns:repeat(4,minmax(0,1fr))}.dashSection,.stat,.adminItem{break-inside:avoid;page-break-inside:avoid}}
     @media(max-width:600px){.statgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-  </style></head><body><header style="border-bottom:2px solid #222;padding-bottom:10px;margin-bottom:14px"><b style="font-size:18px">SANTO PECADO 17-29</b><div style="color:#555;margin-top:4px">Reporte de estadísticas · ${new Date().toLocaleString('es-CO')}</div></header>${content}<script src="catalog-photo-migration.js?v=20261012-admin-button1"></script>
-</body></html>`);
+  </style></head><body><header style="border-bottom:2px solid #222;padding-bottom:10px;margin-bottom:14px"><b style="font-size:18px">SANTO PECADO 17-29</b><div style="color:#555;margin-top:4px">Reporte de estadísticas · ${new Date().toLocaleString('es-CO')}</div></header>${content}</body></html>`);
   w.document.close();
   w.onload=()=>{w.focus();setTimeout(()=>{try{w.print()}catch(e){console.warn('No se pudo imprimir Estadísticas:',e)}},300)};
 }
@@ -3502,5 +3501,6 @@ function saveSettings(){
 </script>
 <script src="dashboard-sales-fix.js?v=20261012-finance-pin-recovery3"></script>
 <script src="cash-opening-sync.js?v=20261012-cash5"></script>
+<script src="catalog-photo-migration.js?v=20261012-admin-button1"></script>
 </body>
 </html>
