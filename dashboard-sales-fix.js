@@ -65,6 +65,44 @@
   hook();
 })();
 
+/* Ventana elegante para solicitar PIN financiero sin usar el aviso nativo del navegador. */
+function spAskFinancePin(){
+  return new Promise(resolve=>{
+    const old=document.getElementById('spFinancePinOverlay'); if(old)old.remove();
+    const overlay=document.createElement('div');
+    overlay.id='spFinancePinOverlay';
+    overlay.innerHTML=`<style>
+      #spFinancePinOverlay{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.78);backdrop-filter:blur(9px);font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+      #spFinancePinCard{width:min(440px,100%);border:1px solid rgba(247,185,40,.45);border-radius:24px;padding:25px;background:linear-gradient(145deg,#191713,#090909 72%);color:#fff;box-shadow:0 24px 80px #000b}
+      #spFinancePinCard .spPinIcon{width:48px;height:48px;border-radius:15px;display:grid;place-items:center;background:rgba(247,185,40,.13);border:1px solid rgba(247,185,40,.3);font-size:24px;margin-bottom:17px}
+      #spFinancePinCard h2{margin:0 0 9px;font-size:22px;letter-spacing:.2px}
+      #spFinancePinCard p{margin:0 0 20px;color:#b9b4a8;font-size:14px;line-height:1.55}
+      #spFinancePinCard label{display:block;color:#f7c94f;font-size:11px;font-weight:900;letter-spacing:1.5px;margin-bottom:8px}
+      #spFinancePinInput{display:block;width:100%;box-sizing:border-box;border:1px solid #51452b;border-radius:13px;background:#080808;color:#fff;padding:15px;font-size:20px;letter-spacing:5px;outline:none}
+      #spFinancePinInput:focus{border-color:#f7b928;box-shadow:0 0 0 3px #f7b92820}
+      #spFinancePinCard .spPinActions{display:flex;gap:10px;margin-top:21px}
+      #spFinancePinCard button{flex:1;border-radius:12px;padding:13px 10px;font-weight:850;font-size:14px;cursor:pointer}
+      #spFinancePinCancel{background:#1c1c1c;color:#ddd;border:1px solid #393939}
+      #spFinancePinAccept{background:linear-gradient(135deg,#ffe18a,#f7b928);color:#17120a;border:0}
+    </style><section id="spFinancePinCard" role="dialog" aria-modal="true" aria-labelledby="spFinancePinTitle">
+      <div class="spPinIcon">🔐</div><h2 id="spFinancePinTitle">Verificación del administrador</h2>
+      <p>Ingresa tu PIN para consultar Caja y Ventas centrales. Tu PIN no se guardará.</p>
+      <form id="spFinancePinForm"><label for="spFinancePinInput">PIN DE ADMINISTRADOR</label><input id="spFinancePinInput" type="password" inputmode="numeric" autocomplete="current-password" placeholder="••••••" required>
+      <div class="spPinActions"><button type="button" id="spFinancePinCancel">Cancelar</button><button type="submit" id="spFinancePinAccept">Verificar PIN</button></div></form>
+    </section>`;
+    document.body.appendChild(overlay);
+    const input=overlay.querySelector('#spFinancePinInput'),form=overlay.querySelector('#spFinancePinForm');
+    let done=false;
+    const finish=value=>{if(done)return;done=true;overlay.remove();document.removeEventListener('keydown',onKey);resolve(value)};
+    const onKey=e=>{if(e.key==='Escape')finish(null)};
+    overlay.querySelector('#spFinancePinCancel').onclick=()=>finish(null);
+    overlay.addEventListener('click',e=>{if(e.target===overlay)finish(null)});
+    form.onsubmit=e=>{e.preventDefault();const value=input.value.trim();if(value)finish(value);else input.focus()};
+    document.addEventListener('keydown',onKey);
+    setTimeout(()=>input.focus(),60);
+  });
+}
+
 /* Recuperación de credenciales locales para consultas financieras; no confirma pagos ni modifica datos. */
 (function(){
   if(window.__spFinanceCredentialRecovery) return;
@@ -89,7 +127,7 @@
       // Reutiliza el PIN de la sesión administrativa; solo lo solicita si la sesión no conserva el PIN.
       let pin=active?.pin||storedAdmin?.pin||'';
       if(!pin){
-        pin=prompt('Ingresa el PIN del administrador para consultar Caja/Ventas centrales. No se guardará.');
+        pin=await spAskFinancePin();
         if(pin===null||!String(pin).trim()) throw new Error('Consulta cancelada: no se ingresó el PIN.');
       }
       if(typeof SP_DB==='undefined'||!SP_DB||typeof SP_DB.rpc!=='function') throw new Error('La conexión central de Supabase no está disponible.');
