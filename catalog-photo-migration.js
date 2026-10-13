@@ -274,8 +274,9 @@
         report('✓ Prueba controlada lista: ' + done + ' fotografía convertida a JPG y verificada en Supabase Storage. Las demás siguen intactas.');
         button.textContent = '✓ Fotos optimizadas';
       } else {
-        report('Proceso terminado parcialmente.\nCorrectas: ' + done + ' · Con error: ' + failed +
-          '\nLas direcciones originales de las fotos fallidas se conservan. Revisa la consola antes de reintentar.');
+        const detail = (document.getElementById('spPhotoMigrationStatus') || {}).textContent || 'No se obtuvo detalle del error.';
+        report('Proceso detenido con error.\nCorrectas: ' + done + ' · Con error: ' + failed +
+          '\nLas direcciones originales de las fotos fallidas se conservan.\n\nDetalle del error:\n' + detail);
         button.textContent = '⚠ Revisión necesaria';
       }
     } catch (e) {
