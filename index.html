@@ -3195,7 +3195,16 @@ function printOrder(no){
   const o=JSON.parse(localStorage.getItem(ORDERS)||'[]').find(x=>String(x.no)===String(no));
   if(!o){alert('No encontramos el pedido en este dispositivo.');return}
   const logo=document.querySelector('.brandLogo')?.src||'';
-  const lines=(o.detail||'').split('\n').map(x=>x.trim()).filter(Boolean).map(x=>`<div class="line">${esc(x).replace(/—/g,'&mdash;')}</div>`).join('');
+  const detailLines=(o.detail||'').split('\n').map(x=>x.trim()).filter(Boolean);
+  const lines=detailLines.map((x,i)=>{
+    // El detalle guardado al crear el pedido conserva el subtotal real de cada producto.
+    // Las líneas de toppings/notas se muestran debajo sin alterar sus importes.
+    const m=x.match(/^(.*?)(?:\s*:\s*)(\$\s?[\d.,]+)$/);
+    if(m){
+      return `<div class="productLine"><span class="productName">${esc(m[1]).replace(/—/g,'&mdash;')}</span><strong class="productPrice">${esc(m[2])}</strong></div>`;
+    }
+    return `<div class="line extraLine">${esc(x).replace(/—/g,'&mdash;')}</div>`;
+  }).join('');
   const date=new Date(o.created).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'});
   const driver=o.type==='Domicilio'&&o.driverName?`<div><b>Domiciliario:</b> ${esc(o.driverName)}${o.driverPhone?' · '+esc(o.driverPhone):''}</div>`:'';
   const w=window.open('','_blank','width=420,height=800');
@@ -3216,6 +3225,10 @@ function printOrder(no){
     .items{border-bottom:1px dashed #111;padding:2mm 0 3mm;font-size:10px}
     .itemsTitle{font-size:11px;font-weight:900;margin-bottom:2mm}
     .line{font-size:10px;line-height:1.45;margin:1mm 0;white-space:pre-wrap;overflow-wrap:anywhere}
+    .productLine{display:flex;align-items:flex-start;justify-content:space-between;gap:3mm;font-size:10px;line-height:1.45;margin:1.5mm 0;break-inside:avoid}
+    .productName{flex:1;min-width:0;overflow-wrap:anywhere}
+    .productPrice{white-space:nowrap;text-align:right;font-weight:800}
+    .extraLine{padding-left:3mm;color:#333;font-size:9px}
     .total{font-size:15px;font-weight:900;text-align:right;margin:3mm 0}
     .obs{font-size:9.5px;line-height:1.4;border-top:1px dashed #111;padding-top:2mm;margin-top:2mm}
     .foot{text-align:center;font-size:8.5px;line-height:1.35;color:#444;margin-top:4mm;padding-top:2mm;border-top:1px dashed #111}
