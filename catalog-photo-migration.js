@@ -233,9 +233,11 @@
       }
     } catch (e) {
       console.error('[SP migración de fotos]', e);
-      report('Proceso detenido antes de migrar: ' + (e && e.message ? e.message : String(e)) +
+      const reason = e && e.message ? e.message : String(e);
+      report('Proceso detenido antes de migrar: ' + reason +
         '\nNo se subieron fotografías durante la verificación previa.');
       button.textContent = '⚠ Verificación pendiente';
+      window.alert('La prueba se detuvo antes de subir fotos.\n\nMotivo: ' + reason + '\n\nNo se migraron fotografías.');
     } finally {
       started = false;
       button.disabled = false;
