@@ -213,8 +213,8 @@
         .order('name');
       if (error) throw error;
       const pendingTargets = (products || []).filter(p => typeof p.image_url === 'string' && /^data:image\/(jpeg|jpg|png|webp);base64,/i.test(p.image_url));
-      // Después de validar la prueba inicial, avanzar en lotes pequeños de máximo 5 fotografías.
-      const targets = pendingTargets.slice(0, 5);
+      // Después de validar la prueba inicial, avanzar en lotes controlados de máximo 15 fotografías.
+      const targets = pendingTargets.slice(0, 15);
       if (!targets.length) {
         report('No hay fotografías Base64 pendientes. No se modificó ningún producto.');
         button.textContent = '✓ Fotos ya optimizadas';
