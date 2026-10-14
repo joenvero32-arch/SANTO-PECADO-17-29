@@ -3508,8 +3508,14 @@ async function adminOrders(){
             : null) || currentUser)
         : null;
       const localPin = localAdmin?.pin || currentUser?.pin;
+      const localPinHash = localAdmin?.pinHash || currentUser?.pinHash;
       const localUser = localAdmin?.user || currentUser?.user;
-      if(currentUser?.role==='admin' && localUser && localPin){
+      if(currentUser?.role==='admin' && localUser && localPinHash){
+        ({data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders_hash',{
+          p_username:localUser,
+          p_pin_sha256:localPinHash
+        }));
+      }else if(currentUser?.role==='admin' && localUser && localPin){
         ({data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders_pin',{
           p_username:localUser,
           p_pin:localPin
