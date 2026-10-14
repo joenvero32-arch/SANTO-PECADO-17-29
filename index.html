@@ -2486,19 +2486,8 @@ async function adminCash(){
       const centralOrders=await spGetCashSales(today);
       if(Array.isArray(centralOrders)){
         list=centralOrders
-          .filter(o=>String(o.payment_status||'').toLowerCase()==='pagado')
-          .map(o=>({
-            no:o.order_number,
-            date:o.updated_at||o.created_at,
-            created:o.created_at,
-            name:o.customer_name||'',
-            phone:o.customer_phone||'',
-            type:o.order_type==='delivery'?'Domicilio':o.order_type==='pickup'?'Recoger':'Local',
-            pay:o.payment_method||'',
-            paymentStatus:o.payment_status||'pagado',
-            total:Number(o.total||0),
-            status:o.status||'recibido'
-          }))
+          .filter(o=>String(o.paymentStatus||'').toLowerCase()==='pagado')
+          .map(o=>({...o,no:o.no||o.order_number,date:o.date||o.sold_at,created:o.created||o.date||o.sold_at,pay:o.pay||o.payment_method||'',total:Number(o.total||0)}))
           .filter(o=>dayKey(o.date||o.created)===today)
           .filter(o=>!lastCloseAt||new Date(o.date||o.created||0).getTime()>lastCloseAt);
       }
@@ -2596,7 +2585,7 @@ function openCash(day){
   auditLog('Apertura de caja','Base inicial '+money(opening)); save();
   if(isAdmin()) adminCash(); else employeeCash();
 }
-function employeeCash(){
+async function employeeCash(){
   if(!can('allowCash')){alert('Tu usuario no tiene permiso para operar caja.');return}
   const today=dayKey(new Date());
   const closes=cashClosures.filter(c=>c.day===today&&c.type!=='apertura'&&cashOwns(c)).sort((a,b)=>new Date(b.date)-new Date(a.date));
@@ -2613,12 +2602,12 @@ function employeeCash(){
   const expected=opening+Number(pay['Efectivo']||0)-cashExpenses;
   const transferIncome=Object.entries(pay).filter(([k])=>k.toLowerCase()!=='efectivo').reduce((a,[,v])=>a+Number(v||0),0);
   const transferBalance=transferIncome-transferExpenses;
-  document.getElementById('panel').innerHTML='<div class="panelHead"><div><div class="dashKicker">OPERACIÓN DEL EMPLEADO</div><h2>💵 Mi Caja</h2></div><button class="close" onclick="closeModal()">✕</button></div>'+navTabs('cash')+'<div class="notice" style="margin:12px 0">Caja operativa del empleado. El administrador revisará y aprobará el cierre posteriormente.</div><div class="cashHero"><span>VENTAS DE ESTA CAJA</span><b>'+money(salesTotal)+'</b><small>'+list.length+' operación(es) · Base inicial: '+money(opening)+'</small></div><div class="cashGrid">'+Object.entries(pay).map(([k,v])=>'<div class="cashCard"><small>'+esc(k)+'</small><b>'+money(v)+'</b></div>').join('')+'</div><div class="adminItem"><div class="adminTop"><b>💰 Efectivo esperado</b><b>'+money(expected)+'</b></div><div class="muted">Base inicial + ventas recibidas en efectivo.</div><div class="adminActions"><button class="mini" onclick="openCash(\''+today+'\')">🔓 Abrir caja</button><button class="primary" onclick="closeCash(\''+today+'\','+expected+')">🔐 Cerrar caja</button></div></div>'+(openingRecord?'<div class="notice" style="margin-top:12px">Caja abierta: <b>'+new Date(openingRecord.date).toLocaleString('es-CO')+'</b> · Base: <b>'+money(opening)+'</b></div>':'')+(lastClose?'<div class="notice" style="margin-top:12px">Último cierre: <b>'+new Date(lastClose.date).toLocaleString('es-CO')+'</b> · '+(lastClose.status==='pendiente'?'⏳ Pendiente de revisión':'✅ Aprobado')+' · Contado: <b>'+money(lastClose.counted)+'</b></div>':'');
+  document.getElementById('panel').innerHTML='<div class="panelHead"><div><div class="dashKicker">OPERACIÓN DEL EMPLEADO</div><h2>💵 Mi Caja</h2></div><button class="close" onclick="closeModal()">✕</button></div>'+navTabs('cash')+'<div class="notice" style="margin:12px 0">Caja operativa del empleado. El administrador revisará y aprobará el cierre posteriormente.</div><div class="cashHero"><span>VENTAS DE ESTA CAJA</span><b>'+money(salesTotal)+'</b><small>'+list.length+' operación(es) · Base inicial: '+money(opening)+'</small></div><div class="cashGrid">'+Object.entries(pay).map(([k,v])=>'<div class="cashCard"><small>'+esc(k)+'</small><b>'+money(v)+'</b></div>').join('')+'<div class="cashCard"><small>🏦 Saldo de transferencias</small><b>'+money(transferBalance)+'</b></div></div><div class="adminItem"><div class="adminTop"><b>💰 Efectivo esperado</b><b>'+money(expected)+'</b></div><div class="muted">Base inicial + ventas en efectivo − gastos pagados en efectivo.</div><div class="adminActions"><button class="mini" onclick="openCash(\''+today+'\')">🔓 Abrir caja</button><button class="primary" onclick="closeCash(\''+today+'\','+expected+')">🔐 Cerrar caja</button></div></div>'+(openingRecord?'<div class="notice" style="margin-top:12px">Caja abierta: <b>'+new Date(openingRecord.date).toLocaleString('es-CO')+'</b> · Base: <b>'+money(opening)+'</b></div>':'')+(lastClose?'<div class="notice" style="margin-top:12px">Último cierre: <b>'+new Date(lastClose.date).toLocaleString('es-CO')+'</b> · '+(lastClose.status==='pendiente'?'⏳ Pendiente de revisión':'✅ Aprobado')+' · Contado: <b>'+money(lastClose.counted)+'</b></div>':'');
   document.getElementById('modal').classList.add('open');
 }
 function changeOpeningCash(day){
   if(!isAdmin())return;
-  const rec=cashClosures.find(c=>c.day===day&&c.type==='apertura');
+  const rec=cashClosures.find(c=>c.day===day&&c.type==='apertura'&&cashOwns(c));
   if(!rec){alert('No hay una apertura para modificar.');return}
   const raw=prompt('Nueva base inicial de efectivo:',String(rec.opening||0));if(raw===null)return;
   const opening=Number(raw.replace(/[^0-9.-]/g,''));if(!Number.isFinite(opening)||opening<0){alert('Valor no válido.');return}
