@@ -2127,9 +2127,11 @@ async function syncOneProductCentral(p){
   // las sesiones locales de administrador que no tienen auth.uid() de Supabase.
   const productArgs={p_product_id:productId,p_name:String(p.name||''),p_category_id:categoryId,p_description:String(p.desc||''),p_price:Number(p.price||0),p_stock:Number(p.stock||0),p_minimum_stock:Number(p.minStock||0),p_sort_order:Number(p.sort_order||0),p_active:p.active!==false,p_image_url:(p.img?String(p.img):null)};
   let data,error;
-  if(currentUser?.central){
+  let hasAuthSession=false;
+  try{const authState=await SP_DB.auth.getSession();hasAuthSession=!!authState?.data?.session?.user?.id;}catch(_){}
+  if(currentUser?.central&&hasAuthSession){
     ({data,error}=await SP_DB.rpc('admin_update_product',productArgs));
-  }else if(currentUser?.role==='admin'&&currentUser?.user&&currentUser?.pinHash){
+  }else if(currentUser?.user&&currentUser?.pinHash&&(currentUser?.role==='admin'||currentUser?.central)){
     ({data,error}=await SP_DB.rpc('admin_update_product_pin',{...productArgs,p_username:currentUser.user,p_pin_sha256:currentUser.pinHash}));
   }else{
     throw new Error('Debes iniciar sesión como administrador para sincronizar cambios de productos.');
@@ -3973,6 +3975,6 @@ function saveSettings(){
 </script>
 <script src="dashboard-sales-fix.js?v=20261012-finance-pin-recovery3"></script>
 <script src="cash-opening-sync.js?v=20261012-cash5"></script>
-<script src="catalog-photo-migration.js?v=20261013-batch15-1"></script>
+<script src="catalog-photo-migration.js?v=20261014-product-pin-fix1"></script>
 </body>
 </html>
