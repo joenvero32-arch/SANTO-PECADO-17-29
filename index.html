@@ -2475,16 +2475,15 @@ async function adminExpenses(){
 async function adminCash(){
   if(!isAdmin()){alert('Solo el administrador o dueño puede consultar esta caja.');return}
   const today=dayKey(new Date());
-  const allTodayClosures=cashClosures.filter(c=>c.day===today&&c.type!=='apertura').sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const allTodayClosures=cashClosures.filter(c=>c.day===today&&c.type!=='apertura'&&cashOwns(c)).sort((a,b)=>new Date(b.date)-new Date(a.date));
   const lastClose=allTodayClosures[0]||null;
   const lastCloseAt=lastClose?new Date(lastClose.date).getTime():0;
-  const apertures=cashClosures.filter(c=>c.day===today&&c.type==='apertura'&&(!lastCloseAt||new Date(c.date).getTime()>lastCloseAt)).sort((a,b)=>new Date(b.date)-new Date(a.date));
-  const openingRecord=apertures[0]||null;
+  const openingRecord=cashCurrentOpening(today);
   const opening=openingRecord?Number(openingRecord.opening||0):0;
   let list=SP_DB_ON?[]:salesForDay(today).filter(o=>!lastCloseAt||new Date(o.date||o.created||0).getTime()>lastCloseAt);
   if(SP_DB_ON){
     try{
-      const centralOrders=await spGetFinanceOrders();
+      const centralOrders=await spGetCashSales(today);
       if(Array.isArray(centralOrders)){
         list=centralOrders
           .filter(o=>String(o.payment_status||'').toLowerCase()==='pagado')
@@ -2510,13 +2509,16 @@ async function adminCash(){
   }
   const pay=paymentTotals(list);
   const salesTotal=list.reduce((a,o)=>a+Number(o.total||0),0);
-  let expenses=[]; try{expenses=await getBusinessExpenses(today,today)}catch(e){console.warn('Gastos del día no disponibles:',e.message||e)}
+  let expenses=[]; try{expenses=await spGetCashExpenses(today)}catch(e){console.warn('Gastos de esta caja no disponibles:',e.message||e)}
   const sessionExpenses=expenses.filter(x=>!lastCloseAt||new Date(x.created_at||x.createdAt||x.date||0).getTime()>lastCloseAt);
   const expensesTotal=sessionExpenses.reduce((a,x)=>a+Number(x.amount||0),0);
   const cashExpenses=sessionExpenses.filter(x=>String(x.payment_method||'').trim().toLowerCase()==='efectivo').reduce((a,x)=>a+Number(x.amount||0),0);
   const expected=opening+Number(pay['Efectivo']||0)-cashExpenses;
+  const transferIncome=Object.entries(pay).filter(([k])=>k.toLowerCase()!=='efectivo').reduce((a,[,v])=>a+Number(v||0),0);
+  const transferExpenses=sessionExpenses.filter(x=>String(x.payment_method||'').trim().toLowerCase()!=='efectivo').reduce((a,x)=>a+Number(x.amount||0),0);
+  const transferBalance=transferIncome-transferExpenses;
   document.getElementById('panel').innerHTML=`<div class="panelHead"><div><div class="dashKicker">CONTROL FINANCIERO</div><h2>💵 Caja del día</h2></div><button class="close" onclick="adminDashboard()">✕</button></div>${navTabs('cash')}
-  <div class="cashHero"><span>VENTAS DE ESTA CAJA</span><b>${money(salesTotal)}</b><small>${list.length} operación(es) · Base inicial: ${money(opening)}</small><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="mini" onclick="adminTodaySales()">🧾 Ventas del día</button><button class="primary" onclick="printTodaySales()">🖨️ Imprimir ventas del día</button><button class="primary" style="background:#16a34a!important;color:#fff!important;border-color:#15803d!important;box-shadow:0 4px 12px #16a34a33" onclick="printDailyClose()">🖨️ Imprimir cierre diario</button></div></div><div class="cashGrid"><div class="cashCard"><small>💸 Gastos de hoy</small><b>${money(expensesTotal)}</b></div><div class="cashCard"><small>📊 Neto del día</small><b>${money(salesTotal-expensesTotal)}</b></div></div><div class="dashSection"><div class="dashSectionHead"><h3>📋 Gastos de hoy</h3><button class="mini" onclick="adminExpenses()">Ver gastos</button></div>${sessionExpenses.map(x=>'<div class="alertRow"><span>'+esc(x.expense_type)+' · '+esc(x.category)+' · '+esc(x.description)+'</span><b>-'+money(x.amount)+'</b></div>').join('')||'<div class="empty">No hay gastos registrados en esta caja.</div>'}</div>
+  <div class="cashHero"><span>VENTAS DE ESTA CAJA</span><b>${money(salesTotal)}</b><small>${list.length} operación(es) · Base inicial: ${money(opening)}</small><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="mini" onclick="adminTodaySales()">🧾 Ventas del día</button><button class="primary" onclick="printTodaySales()">🖨️ Imprimir ventas del día</button><button class="primary" style="background:#16a34a!important;color:#fff!important;border-color:#15803d!important;box-shadow:0 4px 12px #16a34a33" onclick="printDailyClose()">🖨️ Imprimir cierre diario</button></div></div><div class="cashGrid"><div class="cashCard"><small>💸 Gastos de esta caja</small><b>${money(expensesTotal)}</b></div><div class="cashCard"><small>📊 Neto del negocio en esta caja</small><b>${money(salesTotal-expensesTotal)}</b></div><div class="cashCard"><small>🏦 Saldo de transferencias</small><b>${money(transferBalance)}</b></div></div><div class="dashSection"><div class="dashSectionHead"><h3>📋 Gastos de hoy</h3><button class="mini" onclick="adminExpenses()">Ver gastos</button></div>${sessionExpenses.map(x=>'<div class="alertRow"><span>'+esc(x.expense_type)+' · '+esc(x.category)+' · '+esc(x.description)+'</span><b>-'+money(x.amount)+'</b></div>').join('')||'<div class="empty">No hay gastos registrados en esta caja.</div>'}</div>
   <div class="cashGrid">${Object.entries(pay).map(([k,v])=>`<div class="cashCard"><small>${esc(k)}</small><b>${money(v)}</b></div>`).join('')||'<div class="empty">No hay ventas registradas en esta caja.</div>'}</div>
   <div class="adminItem"><div class="adminTop"><b>💰 Efectivo esperado</b><b>${money(expected)}</b></div><div class="muted">Ventas en efectivo de esta caja + base inicial − gastos pagados en efectivo de esta caja.</div><div class="adminActions">${!openingRecord?'<button class="mini" onclick="openCash(\''+today+'\')">🔓 Abrir caja</button>':''}${openingRecord&&!list.length&&!sessionExpenses.length?'<button class="mini" onclick="changeOpeningCash(\''+today+'\')">✏️ Cambiar base</button>':''}${openingRecord?'<button class="primary" onclick="closeCash(\''+today+'\','+expected+')">🔐 Registrar cierre de caja</button>':''}</div></div>
   ${lastClose?`<div class="notice" style="margin-top:12px">Último cierre de hoy: <b>${new Date(lastClose.date).toLocaleString('es-CO')}</b> · Efectivo contado: <b>${money(lastClose.counted)}</b> · Diferencia: <b>${money(lastClose.difference)}</b> · ${esc(lastClose.user)}</div>`:''}
@@ -2576,27 +2578,41 @@ async function printDailyClose(){
     w.document.close();
   }).catch(e=>alert('No se pudo preparar el cierre: '+(e?.message||e)));
 }
+function cashUserKey(){return String(currentUser?.user||currentUser?.username||currentUser?.name||'administrador').trim().toLowerCase()}
+function cashUserLabel(){return String(currentUser?.name||currentUser?.full_name||currentUser?.user||'Administrador')}
+function cashOwns(rec){if(!rec)return false;const key=cashUserKey();if(rec.userKey)return String(rec.userKey).toLowerCase()===key;return String(rec.user||'').trim().toLowerCase()===key||String(rec.user||'').trim().toLowerCase()===cashUserLabel().trim().toLowerCase()}
+function cashCurrentOpening(day){const list=cashClosures.filter(c=>c.day===day&&c.type==='apertura'&&cashOwns(c)).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0));const closes=cashClosures.filter(c=>c.day===day&&c.type!=='apertura'&&cashOwns(c)).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0));const lastCloseAt=closes.length?new Date(closes[0].date||0).getTime():0;return list.find(c=>new Date(c.date||0).getTime()>lastCloseAt)||null}
+async function spGetCashSales(day){if(!SP_DB_ON||!SP_DB?.rpc)return [];const user=currentUser||{};const username=String(user.user||user.username||'').trim();const pin=String(user.pinHash||user.pin||'').trim();if(!username||!pin)throw Error('La sesión no contiene la credencial PIN para consultar las ventas de esta caja. Vuelve a ingresar con tu PIN.');const {data,error}=await SP_DB.rpc('sp_get_cash_sales_by_pin',{p_username:username,p_pin:pin,p_from:day,p_to:day});if(error)throw error;return Array.isArray(data)?data:(data&&Array.isArray(data.result)?data.result:[])}
+async function spGetCashExpenses(day){if(!SP_DB_ON||!SP_DB?.rpc)return [];const user=currentUser||{};const username=String(user.user||user.username||'').trim();const pin=String(user.pinHash||user.pin||'').trim();if(!username||!pin)throw Error('La sesión no contiene la credencial PIN para consultar gastos de esta caja. Vuelve a ingresar con tu PIN.');const {data,error}=await SP_DB.rpc('sp_get_cash_expenses_by_pin',{p_username:username,p_pin:pin,p_from:day,p_to:day});if(error)throw error;return Array.isArray(data)?data:(data&&Array.isArray(data.result)?data.result:[])}
 function openCash(day){
   if(!can('allowCash')){alert('Tu usuario no tiene permiso para operar caja.');return}
-  const previousClosures=cashClosures.filter(c=>c.day===day&&c.type!=='apertura').sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const previousClosures=cashClosures.filter(c=>c.day===day&&c.type!=='apertura'&&cashOwns(c)).sort((a,b)=>new Date(b.date)-new Date(a.date));
   const lastCloseAt=previousClosures[0]?new Date(previousClosures[0].date).getTime():0;
-  const existing=cashClosures.find(c=>c.day===day&&c.type==='apertura'&&(!lastCloseAt||new Date(c.date).getTime()>lastCloseAt));
-  if(existing){alert('La caja de hoy ya tiene una apertura registrada por '+existing.user+'.');return}
+  const existing=cashClosures.find(c=>c.day===day&&c.type==='apertura'&&cashOwns(c)&&(!lastCloseAt||new Date(c.date).getTime()>lastCloseAt));
+  if(existing){alert('Tu caja de hoy ya tiene una apertura registrada. Debes cerrar esa sesión antes de abrir otra.');return}
   const raw=prompt('Base inicial de efectivo en caja:', '0'); if(raw===null)return;
   const opening=Number(raw.replace(/[^0-9.-]/g,'')); if(!Number.isFinite(opening)||opening<0){alert('Valor no válido.');return}
-  cashClosures.unshift({id:Date.now(),day,type:'apertura',opening,date:new Date().toISOString(),user:currentUser?.name||'Administrador'});
+  cashClosures.unshift({id:Date.now(),day,type:'apertura',opening,date:new Date().toISOString(),user:cashUserLabel(),userKey:cashUserKey(),sessionId:'cash-'+cashUserKey()+'-'+Date.now()});
   auditLog('Apertura de caja','Base inicial '+money(opening)); save();
   if(isAdmin()) adminCash(); else employeeCash();
 }
 function employeeCash(){
   if(!can('allowCash')){alert('Tu usuario no tiene permiso para operar caja.');return}
   const today=dayKey(new Date());
-  const closes=cashClosures.filter(c=>c.day===today&&c.type!=='apertura').sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const closes=cashClosures.filter(c=>c.day===today&&c.type!=='apertura'&&cashOwns(c)).sort((a,b)=>new Date(b.date)-new Date(a.date));
   const lastClose=closes[0]||null,lastCloseAt=lastClose?new Date(lastClose.date).getTime():0;
-  const openingRecord=cashClosures.filter(c=>c.day===today&&c.type==='apertura'&&(!lastCloseAt||new Date(c.date).getTime()>lastCloseAt)).sort((a,b)=>new Date(b.date)-new Date(a.date))[0]||null;
+  const openingRecord=cashCurrentOpening(today);
   const opening=Number(openingRecord?.opening||0);
-  const list=salesForDay(today).filter(o=>!lastCloseAt||new Date(o.date||o.created||0).getTime()>lastCloseAt);
-  const pay=paymentTotals(list),salesTotal=list.reduce((a,o)=>a+Number(o.total||0),0),expected=opening+Number(pay['Efectivo']||0);
+  let list=[];try{list=await spGetCashSales(today)}catch(e){console.warn('Mi Caja: no se pudieron consultar ventas del usuario',e);alert('No se pudieron cargar las ventas asignadas a tu usuario: '+(e?.message||e))}
+  list=list.filter(o=>!lastCloseAt||new Date(o.date||o.created||0).getTime()>lastCloseAt);
+  const pay=paymentTotals(list),salesTotal=list.reduce((a,o)=>a+Number(o.total||0),0);
+  let expenses=[];try{expenses=await spGetCashExpenses(today)}catch(e){console.warn('Mi Caja: no se pudieron consultar gastos del usuario',e)}
+  const sessionExpenses=expenses.filter(x=>!lastCloseAt||new Date(x.created_at||x.createdAt||x.date||0).getTime()>lastCloseAt);
+  const cashExpenses=sessionExpenses.filter(x=>String(x.payment_method||'').trim().toLowerCase()==='efectivo').reduce((a,x)=>a+Number(x.amount||0),0);
+  const transferExpenses=sessionExpenses.filter(x=>String(x.payment_method||'').trim().toLowerCase()!=='efectivo').reduce((a,x)=>a+Number(x.amount||0),0);
+  const expected=opening+Number(pay['Efectivo']||0)-cashExpenses;
+  const transferIncome=Object.entries(pay).filter(([k])=>k.toLowerCase()!=='efectivo').reduce((a,[,v])=>a+Number(v||0),0);
+  const transferBalance=transferIncome-transferExpenses;
   document.getElementById('panel').innerHTML='<div class="panelHead"><div><div class="dashKicker">OPERACIÓN DEL EMPLEADO</div><h2>💵 Mi Caja</h2></div><button class="close" onclick="closeModal()">✕</button></div>'+navTabs('cash')+'<div class="notice" style="margin:12px 0">Caja operativa del empleado. El administrador revisará y aprobará el cierre posteriormente.</div><div class="cashHero"><span>VENTAS DE ESTA CAJA</span><b>'+money(salesTotal)+'</b><small>'+list.length+' operación(es) · Base inicial: '+money(opening)+'</small></div><div class="cashGrid">'+Object.entries(pay).map(([k,v])=>'<div class="cashCard"><small>'+esc(k)+'</small><b>'+money(v)+'</b></div>').join('')+'</div><div class="adminItem"><div class="adminTop"><b>💰 Efectivo esperado</b><b>'+money(expected)+'</b></div><div class="muted">Base inicial + ventas recibidas en efectivo.</div><div class="adminActions"><button class="mini" onclick="openCash(\''+today+'\')">🔓 Abrir caja</button><button class="primary" onclick="closeCash(\''+today+'\','+expected+')">🔐 Cerrar caja</button></div></div>'+(openingRecord?'<div class="notice" style="margin-top:12px">Caja abierta: <b>'+new Date(openingRecord.date).toLocaleString('es-CO')+'</b> · Base: <b>'+money(opening)+'</b></div>':'')+(lastClose?'<div class="notice" style="margin-top:12px">Último cierre: <b>'+new Date(lastClose.date).toLocaleString('es-CO')+'</b> · '+(lastClose.status==='pendiente'?'⏳ Pendiente de revisión':'✅ Aprobado')+' · Contado: <b>'+money(lastClose.counted)+'</b></div>':'');
   document.getElementById('modal').classList.add('open');
 }
@@ -2617,6 +2633,9 @@ function closeCash(day,expected){
   const counted=Number(raw.replace(/[^0-9.-]/g,''));if(!Number.isFinite(counted)||counted<0){alert('Valor no válido.');return}
   const reason=prompt('Observación del cierre (opcional):','')||'';
   const rec={id:Date.now(),day,date:new Date().toISOString(),expected,counted,difference:counted-expected,reason,user:currentUser?.name||'Administrador',status:isAdmin()?'aprobado':'pendiente',approvedBy:isAdmin()?(currentUser?.name||'Administrador'):null,approvedAt:isAdmin()?new Date().toISOString():null};
+    const openingRecord=cashCurrentOpening(day);
+  if(!openingRecord){alert('No puedes cerrar esta caja porque no tienes una apertura activa asociada a tu usuario.');return}
+  rec.userKey=cashUserKey();rec.sessionId=openingRecord.sessionId||('cash-'+cashUserKey()+'-'+openingRecord.id);
   cashClosures.unshift(rec);cashClosures=cashClosures.slice(0,365);auditLog('Cierre de caja',`Efectivo esperado ${money(expected)} · Contado ${money(counted)} · Diferencia ${money(counted-expected)}`);save();
   if(isAdmin()) adminCash(); else employeeCash();
 }
@@ -3974,7 +3993,7 @@ function saveSettings(){
 })();
 </script>
 <script src="dashboard-sales-fix.js?v=20261012-finance-pin-recovery3"></script>
-<script src="cash-opening-sync.js?v=20261014-cash-close-sync1"></script>
+<script src="cash-opening-sync.js?v=20261014-cash-user-sessions2"></script>
 <script src="catalog-photo-migration.js?v=20261014-product-pin-fix1"></script>
 </body>
 </html>
