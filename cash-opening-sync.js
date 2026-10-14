@@ -9,11 +9,13 @@
  function readClosures(){
   try{const a=JSON.parse(localStorage.getItem(KEY)||'[]');return Array.isArray(a)?a:[]}catch(e){return []}
  }
+ function currentKey(){const u=(typeof currentUser!=='undefined'&&currentUser)||{};return String(u.user||u.username||u.name||'administrador').trim().toLowerCase()}
+ function owns(x){const u=(typeof currentUser!=='undefined'&&currentUser)||{};const key=currentKey();if(x&&x.userKey)return String(x.userKey).toLowerCase()===key;return !!x&&(String(x.user||'').trim().toLowerCase()===key||String(x.user||'').trim().toLowerCase()===String(u.name||u.full_name||'').trim().toLowerCase())}
  function latestOpen(){
   const list=readClosures(),day=localDay();
-  const closes=list.filter(x=>x&&x.day===day&&x.type!=='apertura').sort((a,b)=>new Date(b.date||0)-new Date(a.date||0));
+  const closes=list.filter(x=>x&&x.day===day&&x.type!=='apertura'&&owns(x)).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0));
   const closeAt=closes.length?new Date(closes[0].date||0).getTime():0;
-  return list.filter(x=>x&&x.type==='apertura'&&x.day===day&&new Date(x.date||0).getTime()>closeAt)
+  return list.filter(x=>x&&x.type==='apertura'&&x.day===day&&owns(x)&&new Date(x.date||0).getTime()>closeAt)
    .sort((a,b)=>new Date(b.date||0)-new Date(a.date||0))[0]||null;
  }
  async function syncCurrent(){
@@ -53,7 +55,7 @@
 
  async function syncLatestClose(){
   const list=readClosures(),day=localDay();
-  const closes=list.filter(x=>x&&x.type!=='apertura'&&x.day===day&&x.date)
+  const closes=list.filter(x=>x&&x.type!=='apertura'&&x.day===day&&x.date&&owns(x))
    .sort((a,b)=>new Date(b.date||0)-new Date(a.date||0));
   const rec=closes[0]||null;
   if(!rec||!rec.id||!Number.isFinite(Number(rec.expected))||!Number.isFinite(Number(rec.counted)))return;
