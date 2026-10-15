@@ -118,6 +118,23 @@ button{cursor:pointer}
 @media(max-width:680px){.heroBrand{min-height:620px;display:flex;flex-direction:column;justify-content:center;padding:20px 18px 28px;gap:2px;text-align:center}.heroLogoWrap{height:330px;width:100%}.heroLogo{width:min(290px,76vw);max-height:320px}.heroBrandContent{padding:4px 8px 0;max-width:100%}.heroBrand h1{font-size:38px;letter-spacing:-1.8px}.heroBrand .heroBtns{justify-content:center}.heroBrand p{margin-left:auto;margin-right:auto}}
 
 .dashboardHero{margin:16px 0;padding:22px;border-radius:22px;border:1px solid rgba(247,185,40,.22);background:radial-gradient(circle at 85% 20%,rgba(139,44,255,.28),transparent 35%),linear-gradient(135deg,rgba(247,185,40,.10),rgba(255,255,255,.025));display:flex;justify-content:space-between;align-items:center}.dashboardHero span,.cashHero span,.dashKicker{display:block;color:#a8a8a8;font-size:10px;font-weight:950;letter-spacing:1.8px}.dashboardHero strong{display:block;font-size:34px;color:#ffd66d;margin:6px 0}.dashboardHero small{color:#888}.heroPulse{font-size:26px;color:#20d47a;text-shadow:0 0 22px rgba(32,212,122,.8)}.dashGrid{margin:0 0 14px}.dashSection{margin-top:14px;padding:16px;border:1px solid #252525;border-radius:18px;background:linear-gradient(180deg,#141414,#101010)}.dashSectionHead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}.dashSectionHead h3{margin:0;font-size:16px}.barRow{display:grid;grid-template-columns:1fr auto;gap:8px;padding:9px 0;border-bottom:1px solid #222}.barRow:last-child{border-bottom:0}.barRow i{grid-column:1/-1;height:6px;background:#222;border-radius:99px;overflow:hidden}.barRow em{display:block;height:100%;background:linear-gradient(90deg,#8b2cff,#ffd66d);border-radius:99px}.alertRow{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #222;font-size:13px}.alertRow:last-child{border-bottom:0}.successBox{padding:12px;border-radius:12px;background:rgba(32,212,122,.08);color:#7ef0b1;border:1px solid rgba(32,212,122,.2)}.cashHero{padding:20px;border-radius:20px;margin:15px 0;background:linear-gradient(135deg,#171717,#101010);border:1px solid #2b2b2b}.cashHero b{display:block;font-size:32px;color:#ffd66d;margin:5px 0}.cashHero small{color:#888}.cashGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}.cashCard{padding:15px;border-radius:15px;border:1px solid #282828;background:#151515}.cashCard small{display:block;color:#888;margin-bottom:5px}.cashCard b{font-size:18px}@media(max-width:650px){.cashGrid{grid-template-columns:1fr 1fr}.dashboardHero strong{font-size:28px}}
+
+/* Santo Pecado · sistema visual unificado de avisos */
+#spNoticeStack{position:fixed;z-index:2147483600;top:18px;right:18px;width:min(390px,calc(100vw - 28px));display:flex;flex-direction:column;gap:10px;pointer-events:none;font-family:inherit}
+.sp-notice{pointer-events:auto;display:grid;grid-template-columns:42px minmax(0,1fr) 30px;align-items:start;gap:11px;padding:15px 13px;border:1px solid rgba(247,185,40,.35);border-radius:16px;background:linear-gradient(145deg,rgba(25,24,22,.98),rgba(12,12,12,.98));color:#f7f3e9;box-shadow:0 18px 50px rgba(0,0,0,.48),inset 0 1px rgba(255,255,255,.045);backdrop-filter:blur(16px);animation:spNoticeIn .22s ease-out}
+.sp-notice-icon{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:rgba(247,185,40,.13);color:#f7c94b;font-size:20px;font-weight:900}
+.sp-notice[data-kind="error"] .sp-notice-icon{background:rgba(255,99,99,.13);color:#ff8585}
+.sp-notice[data-kind="success"] .sp-notice-icon{background:rgba(75,210,139,.13);color:#70e3a7}
+.sp-notice-title{font-size:11px;letter-spacing:1.35px;font-weight:900;color:#f7c94b;text-transform:uppercase;margin:1px 0 5px}
+.sp-notice[data-kind="error"] .sp-notice-title{color:#ff9999}.sp-notice[data-kind="success"] .sp-notice-title{color:#70e3a7}
+.sp-notice-message{font-size:13px;line-height:1.5;color:#f2eee5;overflow-wrap:anywhere;white-space:pre-wrap}
+.sp-notice-close{width:28px;height:28px;border:1px solid rgba(255,255,255,.12);border-radius:9px;background:rgba(255,255,255,.04);color:#c9c2b5;cursor:pointer;font-size:18px;line-height:1}
+.sp-notice-close:hover{background:rgba(255,255,255,.1);color:#fff}
+.sp-notice-progress{height:2px;grid-column:1/-1;margin:4px 0 -5px;border-radius:4px;background:rgba(247,185,40,.55);transform-origin:left;animation:spNoticeProgress 7s linear forwards}
+@keyframes spNoticeIn{from{opacity:0;transform:translateY(-8px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes spNoticeProgress{to{transform:scaleX(0)}}
+@media(max-width:520px){#spNoticeStack{top:10px;right:10px;width:calc(100vw - 20px)}.sp-notice{padding:12px;border-radius:14px}}
+@media(prefers-reduced-motion:reduce){.sp-notice,.sp-notice-progress{animation:none}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
@@ -4192,5 +4209,35 @@ function saveSettings(){
 <script src="dashboard-sales-fix.js?v=20261012-finance-pin-recovery3"></script>
 <script src="cash-opening-sync.js?v=20261014-cash-user-sessions2"></script>
 <script src="catalog-photo-migration.js?v=20261014-product-pin-fix1"></script>
+
+<script>
+/* Unificar avisos del POS con la identidad visual negro/dorado. */
+(function(){
+  if(window.__spNoticeSystemReady)return;
+  window.__spNoticeSystemReady=true;
+  function spNotice(message){
+    try{
+      let stack=document.getElementById('spNoticeStack');
+      if(!stack){stack=document.createElement('div');stack.id='spNoticeStack';stack.setAttribute('role','region');stack.setAttribute('aria-label','Notificaciones del sistema');stack.setAttribute('aria-live','polite');document.body.appendChild(stack)}
+      const msg=String(message==null?'':message);
+      const lower=msg.toLowerCase();
+      const kind=/error|no se pudo|no puedes|no se puede|no encontrado|no válida|denegado|falló|fallo|incorrecto|inválid|inválido|sin permiso|no tiene permiso/.test(lower)?'error':(/correctamente|guardado|registrado|éxito|exitoso|aprobado|activado|actualizado|completado|\u2705/.test(lower)?'success':'info');
+      const card=document.createElement('section');card.className='sp-notice';card.dataset.kind=kind;
+      const icon=document.createElement('div');icon.className='sp-notice-icon';icon.setAttribute('aria-hidden','true');icon.textContent=kind==='error'?'!':kind==='success'?'✓':'✦';
+      const body=document.createElement('div');
+      const title=document.createElement('div');title.className='sp-notice-title';title.textContent=kind==='error'?'Atención':kind==='success'?'Operación':'Santo Pecado 17-29';
+      const text=document.createElement('div');text.className='sp-notice-message';text.textContent=msg;
+      body.appendChild(title);body.appendChild(text);
+      const close=document.createElement('button');close.type='button';close.className='sp-notice-close';close.setAttribute('aria-label','Cerrar aviso');close.textContent='×';
+      const dismiss=()=>{if(card.parentNode)card.remove();if(!stack.childElementCount)stack.remove()};close.addEventListener('click',dismiss);
+      card.appendChild(icon);card.appendChild(body);card.appendChild(close);
+      const progress=document.createElement('div');progress.className='sp-notice-progress';card.appendChild(progress);
+      stack.appendChild(card);
+      window.setTimeout(dismiss,7000);
+    }catch(e){console.warn('No se pudo mostrar la notificación visual:',e);}
+  }
+  window.alert=spNotice;
+})();
+</script>
 </body>
 </html>
