@@ -135,6 +135,12 @@ button{cursor:pointer}
 @keyframes spNoticeProgress{to{transform:scaleX(0)}}
 @media(max-width:520px){#spNoticeStack{top:10px;right:10px;width:calc(100vw - 20px)}.sp-notice{padding:12px;border-radius:14px}}
 @media(prefers-reduced-motion:reduce){.sp-notice,.sp-notice-progress{animation:none}}
+
+/* Diálogo premium para credenciales/consultas sensibles */
+.sp-input-backdrop{position:fixed;inset:0;z-index:2147483590;display:grid;place-items:center;padding:18px;background:rgba(0,0,0,.76);backdrop-filter:blur(9px);}
+.sp-input-card{width:min(440px,100%);border:1px solid rgba(247,185,40,.28);border-radius:20px;padding:22px;background:linear-gradient(145deg,#191817,#0e0e0e);color:#f6f1e7;box-shadow:0 28px 90px rgba(0,0,0,.65);font-family:inherit;}
+.sp-input-brand{font-size:10px;font-weight:900;letter-spacing:1.8px;color:#f7c94b;text-transform:uppercase;margin-bottom:8px}.sp-input-title{font-size:21px;font-weight:900;margin:0 0 8px}.sp-input-copy{font-size:13px;line-height:1.55;color:#c6c0b5;margin:0 0 16px}.sp-input-field{width:100%;box-sizing:border-box;background:#0b0b0b;color:#fff;border:1px solid #39352b;border-radius:12px;padding:13px 14px;font:inherit;outline:none}.sp-input-field:focus{border-color:#f7c94b;box-shadow:0 0 0 3px rgba(247,201,75,.13)}.sp-input-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:18px}.sp-input-btn{border:1px solid #39352b;border-radius:11px;padding:11px 16px;font-weight:800;cursor:pointer;background:#191919;color:#eee}.sp-input-btn.primary{background:linear-gradient(135deg,#ffe36b,#f5b91d);border-color:#f7c94b;color:#17130a}.sp-input-btn:hover{filter:brightness(1.08)}
+@media(max-width:480px){.sp-input-card{padding:18px;border-radius:17px}.sp-input-title{font-size:19px}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
@@ -2761,7 +2767,28 @@ function cashUserKey(){return String(currentUser?.user||currentUser?.username||c
 function cashUserLabel(){return String(currentUser?.name||currentUser?.full_name||currentUser?.user||'Administrador')}
 function cashOwns(rec){if(!rec)return false;const key=cashUserKey();if(rec.userKey)return String(rec.userKey).toLowerCase()===key;return String(rec.user||'').trim().toLowerCase()===key||String(rec.user||'').trim().toLowerCase()===cashUserLabel().trim().toLowerCase()}
 function cashCurrentOpening(day){const list=cashClosures.filter(c=>c.day===day&&c.type==='apertura'&&cashOwns(c)).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0));const closes=cashClosures.filter(c=>c.day===day&&c.type!=='apertura'&&cashOwns(c)).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0));const lastCloseAt=closes.length?new Date(closes[0].date||0).getTime():0;return list.find(c=>new Date(c.date||0).getTime()>lastCloseAt)||null}
-async function spGetCashSales(day){if(!SP_DB_ON||!SP_DB?.rpc)return [];const user=currentUser||{};let username=String(user.user||user.username||'').trim();let pin=String(user.pinHash||user.pin||'').trim();if(!username)username=String(prompt('Usuario autorizado para consultar las ventas del día:')||'').trim();if(!pin)pin=String(prompt('Ingresa tu PIN para consultar las ventas del día. No se guardará:')||'').trim();if(!username||!pin)throw Error('Consulta cancelada: falta usuario o PIN.');const {data,error}=await SP_DB.rpc('sp_get_cash_sales_by_pin',{p_username:username,p_pin:pin,p_from:day,p_to:day});if(error)throw error;return Array.isArray(data)?data:(data&&Array.isArray(data.result)?data.result:[])}
+
+function spAskInput({title='Verificación requerida',message='',defaultValue='',password=false,placeholder='',confirmText='Continuar'}={}){
+ return new Promise(resolve=>{
+  const backdrop=document.createElement('div');backdrop.className='sp-input-backdrop';backdrop.setAttribute('role','presentation');
+  const card=document.createElement('form');card.className='sp-input-card';card.setAttribute('role','dialog');card.setAttribute('aria-modal','true');card.setAttribute('aria-label',title);
+  const brand=document.createElement('div');brand.className='sp-input-brand';brand.textContent='Santo Pecado 17-29';
+  const heading=document.createElement('h2');heading.className='sp-input-title';heading.textContent=title;
+  const copy=document.createElement('p');copy.className='sp-input-copy';copy.textContent=message;
+  const field=document.createElement('input');field.className='sp-input-field';field.type=password?'password':'text';field.value=defaultValue;field.placeholder=placeholder;field.autocomplete=password?'current-password':'off';field.setAttribute('aria-label',title);field.required=true;
+  const actions=document.createElement('div');actions.className='sp-input-actions';
+  const cancel=document.createElement('button');cancel.type='button';cancel.className='sp-input-btn';cancel.textContent='Cancelar';
+  const submit=document.createElement('button');submit.type='submit';submit.className='sp-input-btn primary';submit.textContent=confirmText;
+  actions.append(cancel,submit);card.append(brand,heading,copy,field,actions);backdrop.appendChild(card);document.body.appendChild(backdrop);
+  let done=false;const finish=value=>{if(done)return;done=true;document.removeEventListener('keydown',onKey);backdrop.remove();resolve(value)};
+  const onKey=e=>{if(e.key==='Escape'){e.preventDefault();finish(null)}};document.addEventListener('keydown',onKey);
+  cancel.addEventListener('click',()=>finish(null));backdrop.addEventListener('click',e=>{if(e.target===backdrop)finish(null)});
+  card.addEventListener('submit',e=>{e.preventDefault();finish(field.value)});
+  requestAnimationFrame(()=>{field.focus();field.select()});
+ });
+}
+
+async function spGetCashSales(day){if(!SP_DB_ON||!SP_DB?.rpc)return [];const user=currentUser||{};let username=String(user.user||user.username||'').trim();let pin=String(user.pinHash||user.pin||'').trim();if(!username)username=String(await spAskInput({title:'Consultar ventas del día',message:'Ingresa el usuario autorizado para consultar las ventas. No se guardará.',placeholder:'Usuario'} )||'').trim();if(!pin)pin=String(await spAskInput({title:'Verificación de seguridad',message:'Ingresa tu PIN para consultar las ventas del día. No se guardará.',password:true,placeholder:'PIN de acceso',confirmText:'Validar PIN'})||'').trim();if(!username||!pin)throw Error('Consulta cancelada: falta usuario o PIN.');const {data,error}=await SP_DB.rpc('sp_get_cash_sales_by_pin',{p_username:username,p_pin:pin,p_from:day,p_to:day});if(error)throw error;return Array.isArray(data)?data:(data&&Array.isArray(data.result)?data.result:[])}
 async function spGetCashExpenses(day){if(!SP_DB_ON||!SP_DB?.rpc)return [];const user=currentUser||{};const username=String(user.user||user.username||'').trim();const pin=String(user.pinHash||user.pin||'').trim();if(!username||!pin)throw Error('La sesión no contiene la credencial PIN para consultar gastos de esta caja. Vuelve a ingresar con tu PIN.');const {data,error}=await SP_DB.rpc('sp_get_cash_expenses_by_pin',{p_username:username,p_pin:pin,p_from:day,p_to:day});if(error)throw error;return Array.isArray(data)?data:(data&&Array.isArray(data.result)?data.result:[])}
 function openCash(day){
   if(!can('allowCash')){alert('Tu usuario no tiene permiso para operar caja.');return}
