@@ -815,7 +815,7 @@ function isEmployeeOrderMode(){return sessionStorage.getItem('SP_EMPLOYEE_ORDER_
 function clearEmployeeOrderMode(){sessionStorage.removeItem('SP_EMPLOYEE_ORDER_MODE')}
 function navTabs(active){
   if(!currentUser)return '';
-  if(!isAdmin()) return `<div class="adminTabs"><button class="tab ${active==='orders'?'active':''}" onclick="adminOrders()">📋 Pedidos</button>${can('allowOrders')&&can('allowCash')?`<button class="tab" onclick="startEmployeeOrder()">＋ Registrar pedido</button>`:''}<button class="tab ${active==='kitchen'?'active':''}" onclick="adminKitchen()">🍳 Cocina</button>${can('allowInventory')?`<button class="tab ${active==='inventory'?'active':''}" onclick="adminInventory()">📦 Inventario</button>`:''}${can('allowCash')?`<button class="tab ${active==='cash'?'active':''}" onclick="employeeCash()">💵 Mi Caja</button>`:''}<button class="tab" onclick="logoutUser()">🚪 Cerrar sesión</button></div>`;
+  if(!isAdmin()) return `<div class="adminTabs">${can('allowOrders')?`<button class="tab ${active==='orders'?'active':''}" onclick="adminOrders()">📋 Pedidos</button>`:''}${can('allowOrders')&&can('allowCash')?`<button class="tab" onclick="startEmployeeOrder()">＋ Registrar pedido</button>`:''}<button class="tab ${active==='kitchen'?'active':''}" onclick="adminKitchen()">🍳 Cocina</button>${can('allowInventory')?`<button class="tab ${active==='inventory'?'active':''}" onclick="adminInventory()">📦 Inventario</button>`:''}${can('allowDomicilios')?`<button class="tab ${active==='delivery'?'active':''}" onclick="adminDomicilios()">🛵 Domicilios</button>`:''}${can('allowCash')?`<button class="tab ${active==='cash'?'active':''}" onclick="employeeCash()">💵 Mi Caja</button>`:''}<button class="tab" onclick="logoutUser()">🚪 Cerrar sesión</button></div>`;
   const btn=(key,label,fn)=>`<button class="tab ${active===key?'active':''}" onclick="${fn}">${label}</button>`;
   return `<div class="adminTabs sp-admin-groups">
     <section class="sp-admin-group"><h3>GENERAL</h3><div class="sp-admin-group-grid">${btn('dashboard','📊 Inicio','adminDashboard()')}${btn('products','Productos','adminProducts()')}${btn('categories','Categorías','adminCategories()')}</div></section>
@@ -1393,7 +1393,7 @@ function statusMarkup(order){
 }
 
 async function selectAndAssignActiveDriver(order,orders){
-  if(!can('allowOrders'))return false;
+  if(!can('allowDomicilios'))return false;
   let drivers=[];
   const pinHash=currentUser?.pinHash||(currentUser?.pin?await spSha256(currentUser.pin):'');
   if(SP_DB_ON){
@@ -1472,6 +1472,7 @@ async function setOrderStatus(no,status,stayDetail=false){
   if(!isAdmin()){reason=await askOrderStatusReason(status);if(reason===null)return;}
   // Al poner un domicilio En camino, asignar desde aquí un domiciliario activo del turno.
   if(o.type==='Domicilio' && status==='camino' && !o.driverId){
+    if(!can('allowDomicilios')){alert('Tu usuario no tiene permiso para asignar domiciliarios. Solicita al administrador el permiso Domicilios.');return;}
     const assigned=await selectAndAssignActiveDriver(o,orders);
     if(!assigned)return;
   }
@@ -1983,7 +1984,9 @@ async function spLocalUserLogin(user,pin){
   if(error)throw error;
   const row=Array.isArray(data)?data[0]:data;
   if(!row)return null;
-  return {...row,user:row.username,name:row.full_name,allowOrders:!!row.can_manage_orders,allowInventory:!!row.can_manage_inventory,allowCash:!!row.can_manage_cash,pinHash,central:true};
+  let allowDomicilios=false;
+  try{const perm=await SP_DB.rpc('sp_local_user_domicilios_permission_by_pin',{p_username:row.username,p_pin_sha256:pinHash});if(perm.error)throw perm.error;allowDomicilios=perm.data===true;}catch(e){console.warn('No se pudo cargar el permiso Domicilios:',e)}
+  return {...row,user:row.username,name:row.full_name,allowOrders:!!row.can_manage_orders,allowInventory:!!row.can_manage_inventory,allowCash:!!row.can_manage_cash,allowDomicilios,pinHash,central:true};
 }
 async function spCentralAdminList(){
   if(!SP_DB_ON||!currentUser)return false;
@@ -1992,6 +1995,12 @@ async function spCentralAdminList(){
   const {data,error}=await SP_DB.rpc('sp_local_users_list',{p_admin_username:currentUser.user||'admin',p_admin_pin_sha256:pinHash});
   if(error)throw error;
   const rows=Array.isArray(data)?data:[];
+  let domiciliosPerms={};
+  try{
+    const dp=await SP_DB.rpc('sp_admin_local_user_domicilios_list_by_pin',{p_admin_username:currentUser.user||'admin',p_admin_pin_sha256:pinHash});
+    if(dp.error)throw dp.error;
+    for(const p of (Array.isArray(dp.data)?dp.data:[]))domiciliosPerms[String(p.username||'').toLowerCase()]=!!p.can_manage_domicilios;
+  }catch(e){console.warn('No se pudieron cargar los permisos Domicilios:',e)}
   const localEmployees=users.filter(u=>u.role!=='admin' && String(u.user||'').toLowerCase()!=='prueba');
   const centralHasEmployees=rows.some(u=>u.role==='employee');
   if(!centralHasEmployees && localEmployees.length){
@@ -2011,7 +2020,7 @@ async function spCentralAdminList(){
     if(again.error)throw again.error;
     rows.splice(0,rows.length,...(Array.isArray(again.data)?again.data:[]));
   }
-  users=rows.map(u=>({id:u.id,user:u.username,name:u.full_name,pin:'',pinHash:'',role:u.role,allowOrders:!!u.can_manage_orders,allowInventory:!!u.can_manage_inventory,allowCash:!!u.can_manage_cash,active:u.active!==false}));
+  users=rows.map(u=>({id:u.id,user:u.username,name:u.full_name,pin:'',pinHash:'',role:u.role,allowOrders:!!u.can_manage_orders,allowInventory:!!u.can_manage_inventory,allowCash:!!u.can_manage_cash,allowDomicilios:!!domiciliosPerms[String(u.username||'').toLowerCase()],active:u.active!==false}));
   users=users.filter(u=>String(u.user||'').toLowerCase()!=='prueba');
   const admin=users.find(u=>u.role==='admin'&&String(u.user).toLowerCase()==='admin');
   if(admin){admin.pin=currentUser.pin||'';admin.pinHash=pinHash;}
@@ -2090,7 +2099,7 @@ async function adminUsers(){
     <div class="notice" style="margin-top:14px">Los trabajadores son usuarios transitorios. Tú puedes crear, cambiar permisos o desactivar a quien esté trabajando. Los usuarios operativos se sincronizan con Supabase; <b>Prueba</b> no es operativo.</div>
     ${navTabs('users')}
     <button class="primary" onclick="newEmployee()">＋ Nuevo empleado</button>
-    <div style="margin-top:14px">${users.map(u=>`<div class="adminItem"><div class="adminTop"><div class="adminName">${esc(u.name)} </div><span class="muted">${u.role==='admin'?'ADMINISTRADOR / DUEÑO':'EMPLEADO'}</span></div><div class="muted">Usuario: <b>${esc(u.user)}</b> · ${u.role==='admin'?'Acceso total':`Pedidos: ${u.allowOrders?'Sí':'No'} · Inventario: ${u.allowInventory?'Sí':'No'} · Caja: ${u.allowCash!==false?'Sí':'No'}`}</div>${u.role!=='admin'?`<div class="adminActions"><button class="mini" onclick="editEmployee('${esc(String(u.id))}')">✏️ Permisos</button><button class="mini" onclick="deleteEmployee('${u.id}')">🗑️ Eliminar</button></div>`:''}</div>`).join('')}</div>
+    <div style="margin-top:14px">${users.map(u=>`<div class="adminItem"><div class="adminTop"><div class="adminName">${esc(u.name)} </div><span class="muted">${u.role==='admin'?'ADMINISTRADOR / DUEÑO':'EMPLEADO'}</span></div><div class="muted">Usuario: <b>${esc(u.user)}</b> · ${u.role==='admin'?'Acceso total':`Pedidos: ${u.allowOrders?'Sí':'No'} · Inventario: ${u.allowInventory?'Sí':'No'} · Caja: ${u.allowCash!==false?'Sí':'No'} · Domicilios: ${u.allowDomicilios?'Sí':'No'}`}</div>${u.role!=='admin'?`<div class="adminActions"><button class="mini" onclick="editEmployee('${esc(String(u.id))}')">✏️ Permisos</button><button class="mini" onclick="deleteEmployee('${u.id}')">🗑️ Eliminar</button></div>`:''}</div>`).join('')}</div>
     <div class="modalBtns"><button class="secondary" onclick="logoutUser()">Cerrar sesión</button></div>`;
   document.getElementById('modal').classList.add('open');
 }
@@ -2108,6 +2117,7 @@ function newEmployee(){
     <label class="adminItem" style="display:block;cursor:pointer"><input id="un_orders" type="checkbox" style="width:20px;height:20px;vertical-align:middle;margin-right:10px"> 📋 Gestionar pedidos y cambiar estados</label>
     <label class="adminItem" style="display:block;cursor:pointer"><input id="un_inventory" type="checkbox" style="width:20px;height:20px;vertical-align:middle;margin-right:10px"> 📦 Ingresar y gestionar inventario</label>
     <label class="adminItem" style="display:block;cursor:pointer"><input id="un_cash" type="checkbox" style="width:20px;height:20px;vertical-align:middle;margin-right:10px"> 💵 Abrir, operar y cerrar su caja</label>
+    <label class="adminItem" style="display:block;cursor:pointer"><input id="un_domicilios" type="checkbox" style="width:20px;height:20px;vertical-align:middle;margin-right:10px"> 🛵 Acceder al módulo Domicilios y asignar domiciliarios</label>
     <div class="modalBtns"><button class="primary" onclick="saveNewEmployee()">Guardar empleado</button><button class="secondary" onclick="adminUsers()">Cancelar</button></div>`;
 }
 async function saveNewEmployee(){
@@ -2118,12 +2128,13 @@ async function saveNewEmployee(){
   if(!name||!user||!pin){alert('Completa nombre, usuario y PIN.');return}
   if(String(user).toLowerCase()==='admin'||String(user).toLowerCase()==='prueba'){alert('Ese usuario está reservado y no puede crearse.');return}
   if(users.some(x=>x.active!==false&&String(x.user).toLowerCase()===user.toLowerCase())){alert('Ese usuario ya existe.');return}
-  const row={user,name,pin,role:'employee',allowOrders:document.getElementById('un_orders').checked,allowInventory:document.getElementById('un_inventory').checked,allowCash:document.getElementById('un_cash').checked,active:true};
+  const row={user,name,pin,role:'employee',allowOrders:document.getElementById('un_orders').checked,allowInventory:document.getElementById('un_inventory').checked,allowCash:document.getElementById('un_cash').checked,allowDomicilios:document.getElementById('un_domicilios').checked,active:true};
   if(SP_DB_ON){
     try{
       const pinHash=currentUser.pinHash||await spSha256(currentUser.pin||'');
       const {data,error}=await SP_DB.rpc('sp_local_user_upsert',{p_admin_username:currentUser.user||'admin',p_admin_pin_sha256:pinHash,p_id:null,p_username:user,p_full_name:name,p_pin_sha256:await spSha256(pin),p_role:'employee',p_can_manage_orders:row.allowOrders,p_can_manage_inventory:row.allowInventory,p_can_manage_cash:row.allowCash,p_active:true});
       if(error)throw error;
+      const domPerm=await SP_DB.rpc('sp_set_local_user_domicilios_permission_by_pin',{p_admin_username:currentUser.user||'admin',p_admin_pin_sha256:pinHash,p_username:user,p_can_manage_domicilios:row.allowDomicilios});if(domPerm.error)throw domPerm.error;
       row.id=data?.id||('u_'+Date.now());
       row.pinHash=await spSha256(pin);
     }catch(e){alert('No se pudo guardar el usuario en Supabase: '+(e.message||e));return}
@@ -2148,6 +2159,7 @@ function editEmployee(id){
     <label class="adminItem" style="display:block;cursor:pointer"><input id="eu_orders" type="checkbox" style="width:20px;height:20px;vertical-align:middle;margin-right:10px" ${u.allowOrders?'checked':''}> 📋 Gestionar pedidos y cambiar estados</label>
     <label class="adminItem" style="display:block;cursor:pointer"><input id="eu_inventory" type="checkbox" style="width:20px;height:20px;vertical-align:middle;margin-right:10px" ${u.allowInventory?'checked':''}> 📦 Ingresar y gestionar inventario</label>
     <label class="adminItem" style="display:block;cursor:pointer"><input id="eu_cash" type="checkbox" style="width:20px;height:20px;vertical-align:middle;margin-right:10px" ${u.allowCash!==false?'checked':''}> 💵 Abrir, operar y cerrar su caja</label>
+    <label class="adminItem" style="display:block;cursor:pointer"><input id="eu_domicilios" type="checkbox" style="width:20px;height:20px;vertical-align:middle;margin-right:10px" ${u.allowDomicilios?'checked':''}> 🛵 Acceder al módulo Domicilios y asignar domiciliarios</label>
     <div class="modalBtns"><button type="button" class="primary" onclick="saveEmployee('${u.id}')">Guardar cambios</button><button class="secondary" onclick="adminUsers()">Cancelar</button></div>`;
 }
 async function saveEmployee(id){
@@ -2167,6 +2179,7 @@ async function saveEmployee(id){
     const allowOrders=!!document.getElementById('eu_orders')?.checked;
     const allowInventory=!!document.getElementById('eu_inventory')?.checked;
     const allowCash=!!document.getElementById('eu_cash')?.checked;
+    const allowDomicilios=!!document.getElementById('eu_domicilios')?.checked;
     if(String(u.user).toLowerCase()==='admin'){
       alert('El administrador se gestiona como dueño y no se puede editar aquí.');
       return;
@@ -2190,7 +2203,8 @@ async function saveEmployee(id){
         }));
       }
       if(error)throw error;
-      u.name=name;u.allowOrders=allowOrders;u.allowInventory=allowInventory;u.allowCash=allowCash;u.active=true;
+      const domPerm=await SP_DB.rpc('sp_set_local_user_domicilios_permission_by_pin',{p_admin_username:currentUser.user||'admin',p_admin_pin_sha256:pinHash,p_username:u.user,p_can_manage_domicilios:allowDomicilios});if(domPerm.error)throw domPerm.error;
+      u.name=name;u.allowOrders=allowOrders;u.allowInventory=allowInventory;u.allowCash=allowCash;u.allowDomicilios=allowDomicilios;u.active=true;
       if(pin){u.pin=pin;u.pinHash=newPinHash;}
       localStorage.setItem(USERS,JSON.stringify(users));
       auditLog('Empleado modificado',u.name+' · permisos actualizados');
@@ -2198,7 +2212,7 @@ async function saveEmployee(id){
       await adminUsers();
       return;
     }
-    u.name=name;u.allowOrders=allowOrders;u.allowInventory=allowInventory;u.allowCash=allowCash;u.active=true;
+    u.name=name;u.allowOrders=allowOrders;u.allowInventory=allowInventory;u.allowCash=allowCash;u.allowDomicilios=allowDomicilios;u.active=true;
     if(pin){u.pin=pin;u.pinHash=await spSha256(pin);}
     localStorage.setItem(USERS,JSON.stringify(users));
     auditLog('Empleado modificado',u.name+' · permisos actualizados');
@@ -2906,7 +2920,7 @@ async function adminStats(){
   document.getElementById('modal').classList.add('open');
 }
 async function adminDomicilios(search=''){
-  if(!can('allowOrders')){alert('Tu usuario no tiene permiso para gestionar pedidos.');return}
+  if(!can('allowDomicilios')){alert('Tu usuario no tiene permiso para acceder al módulo Domicilios.');return}
   let orders=JSON.parse(localStorage.getItem(ORDERS)||'[]'),centralError='',localPin='',localUser='';
   if(SP_DB_ON){
     try{
