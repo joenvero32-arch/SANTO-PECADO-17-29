@@ -223,9 +223,18 @@ window.loadPublicCatalog=async function(){
       }
     }
 
-    // 2) Si el RPC devuelve JSON como texto, convertirlo a objeto.
-    if(typeof payload==='string'){
-      try{payload=JSON.parse(payload)}catch(e){payload=null}
+    // 2) Normalizar respuestas JSON, texto JSON o RPC envuelto en arreglo.
+    for(let unwrap=0;unwrap<3;unwrap++){
+      if(typeof payload==='string'){
+        try{payload=JSON.parse(payload)}catch(e){payload=null;break}
+        continue;
+      }
+      if(Array.isArray(payload)&&payload.length===1){payload=payload[0];continue}
+      if(payload&&typeof payload==='object'&&!Array.isArray(payload)&&!payload.categories&&!payload.products){
+        const key=Object.keys(payload).find(k=>/sp_get_public_catalog/i.test(k));
+        if(key){payload=payload[key];continue}
+      }
+      break;
     }
 
     // 3) Respaldo directo REST del RPC.
@@ -246,8 +255,17 @@ window.loadPublicCatalog=async function(){
       }
     }
 
-    if(typeof payload==='string'){
-      try{payload=JSON.parse(payload)}catch(e){payload=null}
+    for(let unwrap=0;unwrap<3;unwrap++){
+      if(typeof payload==='string'){
+        try{payload=JSON.parse(payload)}catch(e){payload=null;break}
+        continue;
+      }
+      if(Array.isArray(payload)&&payload.length===1){payload=payload[0];continue}
+      if(payload&&typeof payload==='object'&&!Array.isArray(payload)&&!payload.categories&&!payload.products){
+        const key=Object.keys(payload).find(k=>/sp_get_public_catalog/i.test(k));
+        if(key){payload=payload[key];continue}
+      }
+      break;
     }
 
     let centralCats=Array.isArray(payload?.categories)?payload.categories:[];
