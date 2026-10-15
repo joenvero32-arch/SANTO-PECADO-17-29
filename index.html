@@ -3620,14 +3620,25 @@ async function confirmOrderPayment(no){
           ? users.find(x=>String(x.user||'').toLowerCase()===String(currentUser?.user||'').toLowerCase())
           : null) || currentUser;
         const pinSource=localAdmin?.pin||currentUser?.pin;
-        const pinHash=currentUser?.pinHash||(pinSource?await spSha256(pinSource):'');
-        if(!currentUser?.user||!pinHash){
-          alert('No se puede validar tu usuario y PIN con el sistema central. Vuelve a entrar con tu usuario y PIN e inténtalo de nuevo.');
+        let pinHash=currentUser?.pinHash||(pinSource?await spSha256(pinSource):'');
+        let paymentUser=currentUser?.user||localAdmin?.user||'';
+        // Recuperar las credenciales de la sesión PIN validada, igual que en Domicilios.
+        try{
+          const savedSession=JSON.parse(sessionStorage.getItem(SESSION)||'null');
+          pinHash=pinHash||sessionStorage.getItem('sp_validated_pin_hash')||savedSession?.pinHash||'';
+          paymentUser=paymentUser||sessionStorage.getItem('sp_validated_pin_username')||savedSession?.user||savedSession?.username||'';
+          if(pinHash&&paymentUser&&currentUser){
+            currentUser.pinHash=pinHash;
+            currentUser.user=paymentUser;
+          }
+        }catch(_){}
+        if(!paymentUser||!pinHash){
+          alert('No se encontró la validación PIN de esta sesión. Cierra sesión y vuelve a ingresar con tu usuario y PIN antes de confirmar el pago.');
           return;
         }
         result=await SP_DB.rpc('sp_confirm_order_payment_pin',{
           p_order_id:o.centralId,
-          p_username:currentUser.user,
+          p_username:paymentUser,
           p_pin_sha256:pinHash,
           p_payment_method:method.trim(),
           p_notes:note.trim()
