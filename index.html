@@ -1371,17 +1371,42 @@ async function setOrderStatus(no,status,stayDetail=false){
   if(SP_DB_ON && o.centralId){
     let result=null;
     try{
-      if(currentUser?.user && currentUser?.pinHash){
-        // Usar la RPC que acepta el hash de sesión y valida tanto al dueño como
-        // a empleados autorizados. Evita depender de la etiqueta de rol del navegador.
+      // Recuperar la credencial de la sesión si el usuario entró antes de la
+      // última actualización y el objeto global quedó incompleto.
+      let __statusUser=currentUser?.user||'';
+      let __statusPinHash=currentUser?.pinHash||'';
+      if(!__statusPinHash){
+        try{
+          const __savedSession=JSON.parse(sessionStorage.getItem(SESSION)||'null');
+          if(__savedSession){
+            __statusUser=__statusUser||__savedSession.user||'';
+            __statusPinHash=__savedSession.pinHash||'';
+            if(currentUser&&__statusPinHash){
+              currentUser.pinHash=__statusPinHash;
+              sessionStorage.setItem(SESSION,JSON.stringify(currentUser));
+            }
+          }
+        }catch(_){}
+      }
+      if(!__statusPinHash&&__statusUser){
+        const __cachedUser=Array.isArray(users)?users.find(u=>String(u.user||'').toLowerCase()===String(__statusUser).toLowerCase()):null;
+        if(__cachedUser?.pinHash)__statusPinHash=__cachedUser.pinHash;
+        else if(__cachedUser?.pin) __statusPinHash=await spSha256(__cachedUser.pin);
+      }
+      if(__statusUser&&__statusPinHash){
+        if(currentUser){
+          currentUser.pinHash=__statusPinHash;
+          sessionStorage.setItem(SESSION,JSON.stringify(currentUser));
+        }
+        // RPC segura: valida el PIN/hash y los permisos en Supabase.
         result=await SP_DB.rpc('sp_update_order_status_pin',{
-          p_username:currentUser.user,
-          p_pin:currentUser.pinHash,
+          p_username:__statusUser,
+          p_pin:__statusPinHash,
           p_order_id:o.centralId,
           p_status:status
         });
       }else{
-        alert('No se pudo sincronizar el estado: la sesión no tiene credenciales válidas para Supabase. No se guardó el cambio.');return;
+        alert('La sesión de empleado no conserva la validación de PIN. Cierra sesión e ingresa una sola vez con el PIN actual para renovar la sesión; después podrás volver a Administración sin repetirlo. No se cambió el pedido.');return;
       }
     }catch(e){
       alert('No se pudo actualizar el estado central: '+(e?.message||String(e))+' . No se guardó el cambio.');return;
@@ -3949,8 +3974,18 @@ function saveSettings(){
     try{if(typeof spTrackRequestId!=='undefined')spTrackRequestId++;}catch(e){}
     try{if(typeof spStatusPollTimer!=='undefined'&&spStatusPollTimer){clearInterval(spStatusPollTimer);spStatusPollTimer=null;}}catch(e){}
     try{
-      if(typeof currentUser!=='undefined'&&currentUser&&currentUser.role==='admin'&&typeof adminProducts==='function'){
-        adminProducts();return;
+      if(typeof currentUser!=='undefined'&&currentUser){
+        if(currentUser.role==='admin'&&typeof adminProducts==='function'){
+          adminProducts();return;
+        }
+        // Para empleados autenticados por PIN, volver a Administración significa
+        // regresar al panel operativo; no debe pedir el PIN otra vez.
+        if(currentUser.allowOrders&&typeof adminOrders==='function'){
+          adminOrders();return;
+        }
+        if(currentUser.allowCash&&typeof employeeCash==='function'){
+          employeeCash();return;
+        }
       }
     }catch(e){}
     if(typeof openAdmin==='function')openAdmin();
