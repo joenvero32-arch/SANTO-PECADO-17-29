@@ -210,56 +210,108 @@ async function spSyncPromotions(){
 }
 window.SantoPecadoCentral={get db(){return SP_DB},get connected(){return SP_DB_ON&&!!SP_DB},get lastSync(){return SP_DB_LAST||localStorage.getItem('sp_central_last_sync')||''},rpc:async(name,args)=>{if(!SP_DB_ON||!SP_DB)throw new Error('Conexión central Supabase no disponible');return await SP_DB.rpc(name,args)},from:(table)=>{if(!SP_DB_ON||!SP_DB)throw new Error('Conexión central Supabase no disponible');return SP_DB.from(table)},sync:async()=>{await spSyncCatalog();await spSyncCustomers();await spSyncPromotions()}};
 window.loadPublicCatalog=async function(){
-  try{
-    let centralCats=[],centralProducts=[],centralToppings=[];
-    // Cargar primero las tablas públicas en paralelo; evita esperar un RPC lento.
-    if(SP_DB_ON && SP_DB){
-      const results=await Promise.allSettled([
-        SP_DB.from('categories').select('id,name,sort_order,active').eq('active',true).order('sort_order',{ascending:true}),
-        SP_DB.from('products').select('id,category_id,name,description,price,image_url,stock,minimum_stock,active,sort_order').eq('active',true).order('sort_order',{ascending:true}),
-        SP_DB.from('toppings').select('id,name,description,price,unit,consumption_per_addition,stock,minimum_stock,active').eq('active',true).order('name',{ascending:true})
-      ]);
-      const cr=results[0].status==='fulfilled'?results[0].value:null;
-      const pr=results[1].status==='fulfilled'?results[1].value:null;
-      const tr=results[2].status==='fulfilled'?results[2].value:null;
-      if(cr&&!cr.error)centralCats=cr.data||[];
-      if(pr&&!pr.error)centralProducts=pr.data||[];
-      if(tr&&!tr.error)centralToppings=tr.data||[];
-    }
-    // RPC solo como respaldo si la lectura directa no entregó categorías o productos.
-    if(!centralCats.length||!centralProducts.length){
+  // Evitar llamadas concurrentes desde el arranque, el reintento y el panel.
+  if(window.__spPublicCatalogLoading) return window.__spPublicCatalogLoading;
+  window.__spPublicCatalogLoading=(async()=>{
+    const pick=(obj,...keys)=>{for(const key of keys){if(obj&&obj[key]!==undefined&&obj[key]!==null)return obj[key]}return undefined};
+    const normalizeCategories=arr=>(Array.isArray(arr)?arr:[]).map(c=>({
+      ...c,id:pick(c,'id','category_id'),name:String(pick(c,'name','category_name','title')||''),
+      active:pick(c,'active','is_active')!==false,sort_order:pick(c,'sort_order','position','sortOrder')??0
+    })).filter(c=>c.name&&c.active);
+    const normalizeProducts=(arr,cats)=> {
+      const catMap=Object.fromEntries(cats.map(c=>[String(c.id??''),String(c.name)]));
+      return (Array.isArray(arr)?arr:[]).map((p,i)=>({
+        id:pick(p,'id','product_id')??('central-product-'+i),
+        cat:String(pick(p,'category_name','categoryName','category_label','cat')||catMap[String(pick(p,'category_id','categoryId','category','cat_id'))]||'Sin categoría'),
+        name:String(pick(p,'name','product_name','title')||'Producto'),
+        desc:String(pick(p,'description','desc','details')||''),
+        price:Number(pick(p,'price','unit_price','sale_price'))||0,
+        img:String(pick(p,'image_url','imageUrl','image','photo','img')||''),
+        stock:Number(pick(p,'stock','quantity'))||0,
+        minStock:Number(pick(p,'minimum_stock','min_stock','minStock'))||0,
+        active:pick(p,'active','is_active')!==false,
+        sort_order:pick(p,'sort_order','position','sortOrder')??i
+      })).filter(p=>p.active);
+    };
+    try{
+      const db=window.SantoPecadoCentral?.db||SP_DB;
+      const connected=!!(window.SantoPecadoCentral?.connected||SP_DB_ON)&&!!db;
+      let rawCats=[],rawProducts=[],rawToppings=[],rpcError=null;
+
+      // Primero usar la RPC pública, que ya está confirmada y entrega el catálogo completo.
+      if(connected&&typeof db.rpc==='function'){
+        try{
+          const {data,error}=await db.rpc('sp_get_public_catalog');
+          if(error) throw error;
+          let payload=data;
+          if(typeof payload==='string') payload=JSON.parse(payload);
+          if(payload&&typeof payload==='object'&&!Array.isArray(payload)){
+            if(payload.data&&typeof payload.data==='object'){
+              rawCats=payload.categories||payload.data.categories||[];
+              rawProducts=payload.products||payload.data.products||[];
+              rawToppings=payload.toppings||payload.data.toppings||[];
+            }else{
+              rawCats=payload.categories||[];
+              rawProducts=payload.products||[];
+              rawToppings=payload.toppings||[];
+            }
+          }
+        }catch(e){rpcError=e;console.warn('RPC catálogo público pendiente; se probará lectura directa:',e?.message||e)}
+      }
+
+      let cats=normalizeCategories(rawCats);
+      let prods=normalizeProducts(rawProducts,cats);
+
+      // Respaldo sin seleccionar columnas concretas: evita fallar si el esquema cambió.
+      if(connected&&(!cats.length||!prods.length)&&typeof db.from==='function'){
+        const reads=await Promise.allSettled([
+          db.from('categories').select('*').order('sort_order',{ascending:true}),
+          db.from('products').select('*').order('sort_order',{ascending:true}),
+          db.from('toppings').select('*').order('name',{ascending:true})
+        ]);
+        const cr=reads[0].status==='fulfilled'?reads[0].value:null;
+        const pr=reads[1].status==='fulfilled'?reads[1].value:null;
+        const tr=reads[2].status==='fulfilled'?reads[2].value:null;
+        if(cr&&!cr.error&&Array.isArray(cr.data)&&cr.data.length) rawCats=cr.data;
+        if(pr&&!pr.error&&Array.isArray(pr.data)&&pr.data.length) rawProducts=pr.data;
+        if(tr&&!tr.error&&Array.isArray(tr.data)&&tr.data.length) rawToppings=tr.data;
+        cats=normalizeCategories(rawCats);
+        prods=normalizeProducts(rawProducts,cats);
+      }
+
+      // Nunca sustituir un catálogo válido por una respuesta vacía.
+      if(!cats.length||!prods.length){
+        console.warn('Catálogo central sin datos utilizables; se conserva el catálogo vigente.',rpcError?.message||'Respuesta sin categorías/productos');
+        return false;
+      }
+
+      categories=cats.sort((a,b)=>(Number(a.sort_order)||0)-(Number(b.sort_order)||0)).map(c=>c.name);
+      products=prods.sort((a,b)=>(Number(a.sort_order)||0)-(Number(b.sort_order)||0));
+
+      const normalizedToppings=(Array.isArray(rawToppings)?rawToppings:[]).map((t,i)=>({
+        ...t,id:pick(t,'id','topping_id')??('central-topping-'+i),
+        name:String(pick(t,'name','topping_name','title')||''),
+        description:String(pick(t,'description','desc')||''),
+        price:Number(pick(t,'price','unit_price'))||0,
+        unit:pick(t,'unit','unit_name')||'Porción',
+        usage:Number(pick(t,'consumption_per_addition','usage','quantity_per_addition'))||1,
+        stock:Number(pick(t,'stock','quantity'))||0,
+        minStock:Number(pick(t,'minimum_stock','min_stock','minStock'))||0,
+        tracked:true,active:pick(t,'active','is_active')!==false
+      })).filter(t=>t.name&&t.active);
+      if(normalizedToppings.length) toppings=normalizedToppings;
+
       try{
-        const r=SP_DB_ON&&SP_DB?.rpc?await SP_DB.rpc('sp_get_public_catalog'):{data:null,error:true};
-        let payload=!r.error?r.data:null;
-        if(typeof payload==='string'){try{payload=JSON.parse(payload)}catch(_){payload=null}}
-        if(payload&&typeof payload==='object'){
-          if(!centralCats.length&&Array.isArray(payload.categories))centralCats=payload.categories;
-          if(!centralProducts.length&&Array.isArray(payload.products))centralProducts=payload.products;
-          if(!centralToppings.length&&Array.isArray(payload.toppings))centralToppings=payload.toppings;
-        }
-      }catch(e){console.warn('RPC de catálogo no disponible; se conserva el catálogo local:',e?.message||e)}
-    }
-    if(!centralCats.length||!centralProducts.length){
-      console.warn('Catálogo central no respondió; se conserva el catálogo local.');
-      return false;
-    }
-    const catMap=Object.fromEntries(centralCats.map(x=>[String(x?.id??''),String(x?.name??'')]));
-    categories=centralCats.filter(x=>x?.name&&x.active!==false).map(x=>String(x.name));
-    products=centralProducts.filter(p=>p&&p.active!==false).map((p,i)=>({
-      id:p.id,cat:catMap[String(p.category_id)]||'Sin categoría',
-      name:String(p.name||'Producto'),desc:String(p.description||''),
-      price:Number(p.price)||0,img:String(p.image_url||''),stock:Number(p.stock)||0,
-      minStock:Number(p.minimum_stock)||0,active:true,sort_order:p.sort_order??i
-    }));
-    if(centralToppings.length)toppings=centralToppings.filter(t=>t&&t.active!==false).map(t=>({
-      id:t.id,name:String(t.name||''),description:String(t.description||''),price:Number(t.price)||0,
-      unit:t.unit||'Porción',usage:Number(t.consumption_per_addition)||1,stock:Number(t.stock)||0,
-      minStock:Number(t.minimum_stock)||0,tracked:true,active:true
-    }));
-    try{spSaveProductsLocal();localStorage.setItem(CATS,JSON.stringify(categories));localStorage.setItem(TOP,JSON.stringify(toppings))}catch(e){console.warn('Catálogo cargado en memoria:',e?.message||e)}
-    console.log('Catálogo central cargado:',categories.length,'categorías,',products.length,'productos,',toppings.length,'adicionales');
-    return true;
-  }catch(e){console.error('Error cargando catálogo:',e?.message||e);return false}
+        spSaveProductsLocal();
+        localStorage.setItem(CATS,JSON.stringify(categories));
+        localStorage.setItem(TOP,JSON.stringify(toppings));
+      }catch(e){console.warn('Catálogo cargado en memoria:',e?.message||e)}
+      console.log('Catálogo central cargado:',categories.length,'categorías,',products.length,'productos,',toppings.length,'adicionales');
+      return true;
+    }catch(e){console.error('Error cargando catálogo público:',e?.message||e);return false}
+  })();
+  try{return await window.__spPublicCatalogLoading}
+  finally{window.__spPublicCatalogLoading=null}
 };
 </script>
 
