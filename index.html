@@ -1925,15 +1925,24 @@ async function trackOrder(noFromButton){
 }function openAdmin(){
   document.getElementById('panel').innerHTML=`
     <div class="panelHead"><h2>🔐 Acceso al sistema</h2><button class="close" onclick="closeModal()">✕</button></div>
-    <div class="notice" style="margin:12px 0">Acceso centralizado. Usa el correo y contraseña de tu cuenta de Supabase.</div>
+    <div class="notice" style="margin:12px 0">Ingresa con tu usuario y PIN autorizado.</div>
     <div class="formGrid">
-      <div class="field full"><label>📧 CORREO</label><input id="login_email" type="email" autocomplete="username" placeholder="Tu correo de administrador"></div>
-      <div class="field full"><label>🔐 CONTRASEÑA</label><input id="login_password" type="password" autocomplete="current-password" placeholder="Contraseña de Supabase"></div>
+      <div class="field full"><label>👤 USUARIO</label><input id="login_user" type="text" autocomplete="username" placeholder="Tu usuario" onkeydown="if(event.key==='Enter')document.getElementById('login_pin')?.focus()"></div>
+      <div class="field full"><label>🔐 PIN</label><input id="login_pin" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Tu PIN" onkeydown="if(event.key==='Enter')submitLogin()"></div>
     </div>
-    <div class="modalBtns"><button class="primary" onclick="submitCentralLogin()">Ingresar</button><button class="secondary" onclick="closeModal()">Cancelar</button></div>
-    <div class="notice" style="margin-top:12px;font-size:12px">Acceso seguro centralizado. Los usuarios operativos ingresan desde sus accesos autorizados.</div>`;
+    <div class="modalBtns"><button class="primary" onclick="submitLogin()">Ingresar con PIN</button><button class="secondary" onclick="closeModal()">Cancelar</button></div>
+    <div style="margin-top:12px;text-align:center"><button type="button" class="secondary" id="showCentralLoginBtn" onclick="document.getElementById('centralLoginFields').hidden=false;this.hidden=true">Usar correo y contraseña de Supabase</button></div>
+    <div id="centralLoginFields" hidden style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line,#333)">
+      <div class="notice" style="margin-bottom:10px">Acceso central alternativo.</div>
+      <div class="formGrid">
+        <div class="field full"><label>📧 CORREO</label><input id="login_email" type="email" autocomplete="username" placeholder="Tu correo de administrador"></div>
+        <div class="field full"><label>🔐 CONTRASEÑA</label><input id="login_password" type="password" autocomplete="current-password" placeholder="Contraseña de Supabase"></div>
+      </div>
+      <div class="modalBtns"><button class="primary" onclick="submitCentralLogin()">Ingresar con Supabase</button></div>
+    </div>
+    <div class="notice" style="margin-top:12px;font-size:12px">El acceso depende del usuario y los permisos ya registrados. No se crean usuarios ni se modifican datos desde esta ventana.</div>`;
   document.getElementById('modal').classList.add('open');
-  setTimeout(()=>document.getElementById('login_email')?.focus(),50);
+  setTimeout(()=>document.getElementById('login_user')?.focus(),50);
 }
 async function submitCentralLogin(){
   const email=(document.getElementById('login_email')?.value||'').trim();
