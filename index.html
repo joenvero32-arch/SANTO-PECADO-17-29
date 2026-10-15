@@ -211,140 +211,55 @@ async function spSyncPromotions(){
 window.SantoPecadoCentral={get db(){return SP_DB},get connected(){return SP_DB_ON&&!!SP_DB},get lastSync(){return SP_DB_LAST||localStorage.getItem('sp_central_last_sync')||''},rpc:async(name,args)=>{if(!SP_DB_ON||!SP_DB)throw new Error('Conexión central Supabase no disponible');return await SP_DB.rpc(name,args)},from:(table)=>{if(!SP_DB_ON||!SP_DB)throw new Error('Conexión central Supabase no disponible');return SP_DB.from(table)},sync:async()=>{await spSyncCatalog();await spSyncCustomers();await spSyncPromotions()}};
 window.loadPublicCatalog=async function(){
   try{
-    let payload=null;
-
-    // 1) Fuente principal: RPC central de Supabase.
-    if(SP_DB_ON && SP_DB?.rpc){
+    let centralCats=[],centralProducts=[],centralToppings=[];
+    // Cargar primero las tablas públicas en paralelo; evita esperar un RPC lento.
+    if(SP_DB_ON && SP_DB){
+      const results=await Promise.allSettled([
+        SP_DB.from('categories').select('id,name,sort_order,active').eq('active',true).order('sort_order',{ascending:true}),
+        SP_DB.from('products').select('id,category_id,name,description,price,image_url,stock,minimum_stock,active,sort_order').eq('active',true).order('sort_order',{ascending:true}),
+        SP_DB.from('toppings').select('id,name,description,price,unit,consumption_per_addition,stock,minimum_stock,active').eq('active',true).order('name',{ascending:true})
+      ]);
+      const cr=results[0].status==='fulfilled'?results[0].value:null;
+      const pr=results[1].status==='fulfilled'?results[1].value:null;
+      const tr=results[2].status==='fulfilled'?results[2].value:null;
+      if(cr&&!cr.error)centralCats=cr.data||[];
+      if(pr&&!pr.error)centralProducts=pr.data||[];
+      if(tr&&!tr.error)centralToppings=tr.data||[];
+    }
+    // RPC solo como respaldo si la lectura directa no entregó categorías o productos.
+    if(!centralCats.length||!centralProducts.length){
       try{
-        const r=await SP_DB.rpc('sp_get_public_catalog');
-        if(!r.error && r.data!=null) payload=r.data;
-      }catch(e){
-        console.warn('RPC catálogo no disponible; se intenta lectura directa:',e?.message||e);
-      }
-    }
-
-    // 2) Normalizar respuestas JSON, texto JSON o RPC envuelto en arreglo.
-    for(let unwrap=0;unwrap<3;unwrap++){
-      if(typeof payload==='string'){
-        try{payload=JSON.parse(payload)}catch(e){payload=null;break}
-        continue;
-      }
-      if(Array.isArray(payload)&&payload.length===1){payload=payload[0];continue}
-      if(payload&&typeof payload==='object'&&!Array.isArray(payload)&&!payload.categories&&!payload.products){
-        const key=Object.keys(payload).find(k=>/sp_get_public_catalog/i.test(k));
-        if(key){payload=payload[key];continue}
-      }
-      break;
-    }
-
-    // 3) Respaldo directo REST del RPC.
-    if(!payload){
-      try{
-        const r=await fetch(SP_SUPABASE_URL+'/rest/v1/rpc/sp_get_public_catalog',{
-          method:'POST',
-          headers:{
-            'apikey':SP_SUPABASE_PUBLISHABLE_KEY,
-            'Authorization':'Bearer '+SP_SUPABASE_PUBLISHABLE_KEY,
-            'Content-Type':'application/json'
-          },
-          body:'{}'
-        });
-        if(r.ok) payload=await r.json();
-      }catch(e){
-        console.warn('REST RPC catálogo no disponible:',e?.message||e);
-      }
-    }
-
-    for(let unwrap=0;unwrap<3;unwrap++){
-      if(typeof payload==='string'){
-        try{payload=JSON.parse(payload)}catch(e){payload=null;break}
-        continue;
-      }
-      if(Array.isArray(payload)&&payload.length===1){payload=payload[0];continue}
-      if(payload&&typeof payload==='object'&&!Array.isArray(payload)&&!payload.categories&&!payload.products){
-        const key=Object.keys(payload).find(k=>/sp_get_public_catalog/i.test(k));
-        if(key){payload=payload[key];continue}
-      }
-      break;
-    }
-
-    let centralCats=Array.isArray(payload?.categories)?payload.categories:[];
-    let centralProducts=Array.isArray(payload?.products)?payload.products:[];
-    let centralToppings=Array.isArray(payload?.toppings)?payload.toppings:[];
-
-    // 4) Último respaldo: leer las tres tablas directamente.
-    if(!centralCats.length || !centralProducts.length){
-      if(SP_DB_ON && SP_DB){
-        const [cr,pr,tr]=await Promise.all([
-          SP_DB.from('categories').select('id,name,sort_order,active').eq('active',true).order('sort_order',{ascending:true}),
-          SP_DB.from('products').select('id,category_id,name,description,price,image_url,stock,minimum_stock,active,sort_order').eq('active',true).order('sort_order',{ascending:true}),
-          SP_DB.from('toppings').select('id,name,description,price,unit,consumption_per_addition,stock,minimum_stock,active').eq('active',true).order('name',{ascending:true})
-        ]);
-        if(!cr.error && !pr.error){
-          centralCats=cr.data||[];
-          centralProducts=pr.data||[];
-          centralToppings=tr.error?[]:(tr.data||[]);
+        const r=SP_DB_ON&&SP_DB?.rpc?await SP_DB.rpc('sp_get_public_catalog'):{data:null,error:true};
+        let payload=!r.error?r.data:null;
+        if(typeof payload==='string'){try{payload=JSON.parse(payload)}catch(_){payload=null}}
+        if(payload&&typeof payload==='object'){
+          if(!centralCats.length&&Array.isArray(payload.categories))centralCats=payload.categories;
+          if(!centralProducts.length&&Array.isArray(payload.products))centralProducts=payload.products;
+          if(!centralToppings.length&&Array.isArray(payload.toppings))centralToppings=payload.toppings;
         }
-      }
+      }catch(e){console.warn('RPC de catálogo no disponible; se conserva el catálogo local:',e?.message||e)}
     }
-
-    if(!centralCats.length || !centralProducts.length){
-      console.warn('Catálogo central sin datos; se conserva el catálogo local.');
+    if(!centralCats.length||!centralProducts.length){
+      console.warn('Catálogo central no respondió; se conserva el catálogo local.');
       return false;
     }
-
-    const catMap=Object.fromEntries(
-      centralCats.map(x=>[String(x?.id??''),String(x?.name??'')])
-    );
-
-    categories=centralCats
-      .filter(x=>x?.name)
-      .map(x=>String(x.name));
-
-    products=centralProducts
-      .filter(p=>p && p.active!==false)
-      .map((p,i)=>({
-        id:p.id,
-        cat:catMap[String(p.category_id)]||'Sin categoría',
-        name:String(p.name||'Producto'),
-        desc:String(p.description||''),
-        price:Number(p.price)||0,
-        img:String(p.image_url||''),
-        stock:Number(p.stock)||0,
-        minStock:Number(p.minimum_stock)||0,
-        active:true,
-        sort_order:p.sort_order??i
-      }));
-
-    toppings=centralToppings.length?centralToppings
-      .filter(t=>t && t.active!==false)
-      .map(t=>({
-        id:t.id,
-        name:String(t.name||''),
-        description:String(t.description||''),
-        price:Number(t.price)||0,
-        unit:t.unit||'Porción',
-        usage:Number(t.consumption_per_addition)||1,
-        stock:Number(t.stock)||0,
-        minStock:Number(t.minimum_stock)||0,
-        tracked:true,
-        active:true
-      })):toppings;
-
-    try{
-      spSaveProductsLocal();
-      localStorage.setItem(CATS,JSON.stringify(categories));
-      localStorage.setItem(TOP,JSON.stringify(toppings));
-    }catch(e){
-      console.warn('Catálogo central cargado en memoria:',e?.message||e);
-    }
-
-    console.log('Catálogo público cargado:',categories.length,'categorías,',products.length,'productos,',toppings.length,'toppings');
+    const catMap=Object.fromEntries(centralCats.map(x=>[String(x?.id??''),String(x?.name??'')]));
+    categories=centralCats.filter(x=>x?.name&&x.active!==false).map(x=>String(x.name));
+    products=centralProducts.filter(p=>p&&p.active!==false).map((p,i)=>({
+      id:p.id,cat:catMap[String(p.category_id)]||'Sin categoría',
+      name:String(p.name||'Producto'),desc:String(p.description||''),
+      price:Number(p.price)||0,img:String(p.image_url||''),stock:Number(p.stock)||0,
+      minStock:Number(p.minimum_stock)||0,active:true,sort_order:p.sort_order??i
+    }));
+    if(centralToppings.length)toppings=centralToppings.filter(t=>t&&t.active!==false).map(t=>({
+      id:t.id,name:String(t.name||''),description:String(t.description||''),price:Number(t.price)||0,
+      unit:t.unit||'Porción',usage:Number(t.consumption_per_addition)||1,stock:Number(t.stock)||0,
+      minStock:Number(t.minimum_stock)||0,tracked:true,active:true
+    }));
+    try{spSaveProductsLocal();localStorage.setItem(CATS,JSON.stringify(categories));localStorage.setItem(TOP,JSON.stringify(toppings))}catch(e){console.warn('Catálogo cargado en memoria:',e?.message||e)}
+    console.log('Catálogo central cargado:',categories.length,'categorías,',products.length,'productos,',toppings.length,'adicionales');
     return true;
-  }catch(e){
-    console.error('No se pudo cargar el catálogo central:',e?.message||e);
-    return false;
-  }
+  }catch(e){console.error('Error cargando catálogo:',e?.message||e);return false}
 };
 </script>
 
