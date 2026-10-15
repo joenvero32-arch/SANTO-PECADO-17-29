@@ -2031,25 +2031,8 @@ async function spCentralAdminList(){
     if(dp.error)throw dp.error;
     for(const p of (Array.isArray(dp.data)?dp.data:[]))domiciliosPerms[String(p.username||'').toLowerCase()]=!!p.can_manage_domicilios;
   }catch(e){console.warn('No se pudieron cargar los permisos Domicilios:',e)}
-  const localEmployees=users.filter(u=>u.role!=='admin' && String(u.user||'').toLowerCase()!=='prueba');
-  const centralHasEmployees=rows.some(u=>u.role==='employee');
-  if(!centralHasEmployees && localEmployees.length){
-    for(const u of localEmployees){
-      const saved=await SP_DB.rpc('sp_local_user_upsert',{
-        p_admin_username:currentUser.user||'admin',p_admin_pin_sha256:pinHash,p_id:null,
-        p_username:u.user,p_full_name:u.name,p_pin_sha256:await spSha256(u.pin||''),
-        p_role:'employee',
-        p_can_manage_orders:String(u.name||'').trim().toLowerCase()==='liliana' ? true : (String(u.name||'').trim().toLowerCase()==='zuleidy' ? false : !!u.allowOrders),
-        p_can_manage_inventory:String(u.name||'').trim().toLowerCase()==='liliana' ? true : (String(u.name||'').trim().toLowerCase()==='zuleidy' ? false : !!u.allowInventory),
-        p_can_manage_cash:String(u.name||'').trim().toLowerCase()==='zuleidy' ? true : (String(u.name||'').trim().toLowerCase()==='liliana' ? false : u.allowCash!==false),
-        p_active:true
-      });
-      if(saved.error)throw saved.error;
-    }
-    const again=await SP_DB.rpc('sp_local_users_list',{p_admin_username:currentUser.user||'admin',p_admin_pin_sha256:pinHash});
-    if(again.error)throw again.error;
-    rows.splice(0,rows.length,...(Array.isArray(again.data)?again.data:[]));
-  }
+  // No migrar ni crear empleados automáticamente desde la caché local al iniciar sesión.
+  // Los usuarios de Supabase se administran explícitamente desde el panel de usuarios.
   users=rows.map(u=>({id:u.id,user:u.username,name:u.full_name,pin:'',pinHash:'',role:u.role,allowOrders:!!u.can_manage_orders,allowInventory:!!u.can_manage_inventory,allowCash:!!u.can_manage_cash,allowDomicilios:!!domiciliosPerms[String(u.username||'').toLowerCase()],active:u.active!==false}));
   users=users.filter(u=>String(u.user||'').toLowerCase()!=='prueba');
   const admin=users.find(u=>u.role==='admin'&&String(u.user).toLowerCase()==='admin');
