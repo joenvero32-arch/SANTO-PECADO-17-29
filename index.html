@@ -1375,6 +1375,13 @@ async function setOrderStatus(no,status,stayDetail=false){
       // última actualización y el objeto global quedó incompleto.
       let __statusUser=currentUser?.user||'';
       let __statusPinHash=currentUser?.pinHash||'';
+      // Primero recuperar la credencial validada al iniciar sesión; no almacenar el PIN en texto plano.
+      try{
+        const __validatedUser=sessionStorage.getItem('sp_validated_pin_username')||'';
+        const __validatedHash=sessionStorage.getItem('sp_validated_pin_hash')||'';
+        if(!__statusUser)__statusUser=__validatedUser;
+        if(!__statusPinHash)__statusPinHash=__validatedHash;
+      }catch(_){}
       if(!__statusPinHash){
         try{
           const __savedSession=JSON.parse(sessionStorage.getItem(SESSION)||'null');
@@ -1910,6 +1917,12 @@ async function submitLogin(){
       const central=await spLocalUserLogin(user,pin);
       if(central){
         currentUser=central;
+        // Mantener la credencial validada por PIN en una clave de sesión propia,
+        // independiente de los objetos de usuario que otros módulos puedan reconstruir.
+        try{
+          sessionStorage.setItem('sp_validated_pin_username',String(currentUser.user||user));
+          sessionStorage.setItem('sp_validated_pin_hash',String(currentUser.pinHash||await spSha256(pin)));
+        }catch(_){}
         sessionStorage.setItem(SESSION,JSON.stringify(currentUser));
         // Registrar el acceso central una sola vez mediante RPC validada por PIN.
         // No usar auditLog aquí: esa función excluye este evento para evitar duplicados.
