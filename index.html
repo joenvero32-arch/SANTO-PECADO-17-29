@@ -2784,16 +2784,42 @@ function changeOpeningCash(day){
 }
 function closeCash(day,expected){
   if(!can('allowCash')){alert('Tu usuario no tiene permiso para operar caja.');return}
-  const raw=prompt('Efectivo contado físicamente en caja:',String(expected));if(raw===null)return;
-  const counted=Number(raw.replace(/[^0-9.-]/g,''));if(!Number.isFinite(counted)||counted<0){alert('Valor no válido.');return}
-  const reason=prompt('Observación del cierre (opcional):','')||'';
-  const rec={id:Date.now(),day,date:new Date().toISOString(),expected,counted,difference:counted-expected,reason,user:currentUser?.name||'Administrador',status:isAdmin()?'aprobado':'pendiente',approvedBy:isAdmin()?(currentUser?.name||'Administrador'):null,approvedAt:isAdmin()?new Date().toISOString():null};
-    const openingRecord=cashCurrentOpening(day);
+  const openingRecord=cashCurrentOpening(day);
   if(!openingRecord){alert('No puedes cerrar esta caja porque no tienes una apertura activa asociada a tu usuario.');return}
-  rec.userKey=cashUserKey();rec.sessionId=openingRecord.sessionId||('cash-'+cashUserKey()+'-'+openingRecord.id);
-  cashClosures.unshift(rec);cashClosures=cashClosures.slice(0,365);auditLog('Cierre de caja',`Efectivo esperado ${money(expected)} · Contado ${money(counted)} · Diferencia ${money(counted-expected)}`);save();
-  if(isAdmin()) adminCash(); else employeeCash();
+  document.getElementById('panel').innerHTML=`
+    <div class="panelHead"><div><div class="dashKicker">CIERRE DE CAJA</div><h2>🔐 Contar efectivo</h2></div><button type="button" class="close" onclick="cancelCashClose()">✕</button></div>
+    <div class="notice" style="margin:12px 0">Cuenta el efectivo físico antes de confirmar el cierre. Este registro quedará asociado a tu usuario.</div>
+    <div class="totalBox"><span>💰 Efectivo esperado</span><strong>${money(expected)}</strong></div>
+    <div class="formGrid" style="margin-top:16px">
+      <div class="field full"><label>💵 EFECTIVO CONTADO EN CAJA (COP)</label><input id="cashCloseCounted" type="number" inputmode="numeric" min="0" step="1" value="${Math.max(0,Number(expected)||0)}" placeholder="Ej. 47000" style="font-size:22px;font-weight:700"></div>
+      <div class="field full"><label>📝 OBSERVACIÓN (OPCIONAL)</label><textarea id="cashCloseReason" rows="3" placeholder="Novedades o diferencias, si las hay"></textarea></div>
+    </div>
+    <div class="notice" style="margin-top:12px">Diferencia frente al efectivo esperado: <b id="cashCloseDifference">${money(0)}</b></div>
+    <div class="modalBtns" style="margin-top:16px"><button type="button" class="secondary" onclick="cancelCashClose()">Cancelar</button><button type="button" class="primary" onclick="saveCashClose('${String(day).replace(/'/g,"\\'")}',${Number(expected)||0})">✅ Confirmar cierre</button></div>`;
+  document.getElementById('modal').classList.add('open');
+  const input=document.getElementById('cashCloseCounted');
+  const updateDifference=()=>{const value=Number(input?.value);const node=document.getElementById('cashCloseDifference');if(node)node.textContent=money(Number.isFinite(value)&&value>=0?value-Number(expected||0):0)};
+  input?.addEventListener('input',updateDifference);
+  setTimeout(()=>{input?.focus();input?.select()},50);
 }
+function cancelCashClose(){
+  if(isAdmin())adminCash();else employeeCash();
+}
+function saveCashClose(day,expected){
+  if(!can('allowCash')){alert('Tu usuario no tiene permiso para operar caja.');return}
+  const input=document.getElementById('cashCloseCounted');
+  const raw=String(input?.value??'').trim();
+  if(raw===''||!Number.isFinite(Number(raw))||Number(raw)<0){alert('Ingresa un valor válido para el efectivo contado.');input?.focus();return}
+  const counted=Number(raw);
+  const reason=(document.getElementById('cashCloseReason')?.value||'').trim();
+  const openingRecord=cashCurrentOpening(day);
+  if(!openingRecord){alert('No puedes cerrar esta caja porque no tienes una apertura activa asociada a tu usuario.');return}
+  const rec={id:Date.now(),day,date:new Date().toISOString(),expected:Number(expected)||0,counted,difference:counted-(Number(expected)||0),reason,user:currentUser?.name||'Administrador',status:isAdmin()?'aprobado':'pendiente',approvedBy:isAdmin()?(currentUser?.name||'Administrador'):null,approvedAt:isAdmin()?new Date().toISOString():null};
+  rec.userKey=cashUserKey();rec.sessionId=openingRecord.sessionId||('cash-'+cashUserKey()+'-'+openingRecord.id);
+  cashClosures.unshift(rec);cashClosures=cashClosures.slice(0,365);auditLog('Cierre de caja',`Efectivo esperado ${money(expected)} · Contado ${money(counted)} · Diferencia ${money(counted-(Number(expected)||0))}`);save();
+  if(isAdmin())adminCash();else employeeCash();
+}
+
 function approveCashClosure(id){
   if(!isAdmin()){alert('Solo el administrador o dueño puede confirmar cierres.');return}
   const rec=cashClosures.find(c=>String(c.id)===String(id)&&c.type!=='apertura');
