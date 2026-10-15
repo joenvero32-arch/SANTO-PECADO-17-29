@@ -1395,12 +1395,19 @@ function statusMarkup(order){
 async function selectAndAssignActiveDriver(order,orders){
   if(!can('allowDomicilios'))return false;
   let drivers=[];
-  const pinHash=currentUser?.pinHash||(currentUser?.pin?await spSha256(currentUser.pin):'');
+  let pinHash=currentUser?.pinHash||(currentUser?.pin?await spSha256(currentUser.pin):'');
+  let driverUser=currentUser?.user||'';
+  try{
+    const savedSession=JSON.parse(sessionStorage.getItem(SESSION)||'null');
+    pinHash=pinHash||sessionStorage.getItem('sp_validated_pin_hash')||savedSession?.pinHash||'';
+    driverUser=driverUser||sessionStorage.getItem('sp_validated_pin_username')||savedSession?.user||'';
+    if(pinHash&&driverUser&&currentUser){currentUser.pinHash=pinHash;currentUser.user=driverUser;}
+  }catch(_){}
   if(SP_DB_ON){
     try{
-      if(!currentUser?.user||!pinHash)throw new Error('No se encontró la validación de PIN de la sesión.');
+      if(!driverUser||!pinHash)throw new Error('No se encontró la validación de PIN. Cierra sesión y vuelve a entrar con tu PIN.');
       const res=await SP_DB.rpc('sp_operational_delivery_drivers_by_pin',{
-        p_username:currentUser.user,
+        p_username:driverUser,
         p_pin_sha256:pinHash
       });
       if(res.error)throw res.error;
@@ -2937,9 +2944,16 @@ async function adminDomicilios(search=''){
       }else if(localUser && localPin && (isAdmin() || currentUser?.role==='admin')){
         ({data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders_pin',{p_username:localUser,p_pin:localPin}));
       }else if(currentUser?.central && can('allowDomicilios')){
-        const pinHash=currentUser.pinHash||(currentUser.pin?await spSha256(currentUser.pin):'');
-        if(!pinHash)throw new Error('No se encontró la validación PIN para Domicilios.');
-        ({data:centralOrders,error}=await SP_DB.rpc('sp_get_delivery_orders_by_pin',{p_username:currentUser.user,p_pin_sha256:pinHash}));
+        let pinHash=currentUser.pinHash||(currentUser.pin?await spSha256(currentUser.pin):'');
+        let domUser=currentUser.user||'';
+        try{
+          const savedSession=JSON.parse(sessionStorage.getItem(SESSION)||'null');
+          pinHash=pinHash||sessionStorage.getItem('sp_validated_pin_hash')||savedSession?.pinHash||'';
+          domUser=domUser||sessionStorage.getItem('sp_validated_pin_username')||savedSession?.user||'';
+          if(pinHash&&domUser&&currentUser){currentUser.pinHash=pinHash;currentUser.user=domUser;}
+        }catch(_){}
+        if(!pinHash||!domUser)throw new Error('No se encontró la validación PIN para Domicilios. Cierra sesión y vuelve a ingresar con tu PIN.');
+        ({data:centralOrders,error}=await SP_DB.rpc('sp_get_delivery_orders_by_pin',{p_username:domUser,p_pin_sha256:pinHash}));
       }else if(currentUser?.central && isAdmin()){
         ({data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders'));
       }else{
