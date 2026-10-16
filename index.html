@@ -3782,7 +3782,22 @@ async function adminOrders(){
         throw new Error('No hay credenciales disponibles para sincronizar pedidos.');
       }
       if(error)throw error;
-      const rows=Array.isArray(centralOrders)?centralOrders:[];
+      // Algunas funciones RPC devuelven JSONB como objeto en vez de arreglo.
+      // Normalizarlo antes de pintar Pedidos para no ocultar órdenes recientes.
+      let rows=Array.isArray(centralOrders)?centralOrders:[];
+      if(!rows.length && centralOrders && typeof centralOrders==='object'){
+        for(const key of ['orders','data','result','items','records']){
+          if(Array.isArray(centralOrders[key])){rows=centralOrders[key];break;}
+        }
+        if(!rows.length && (centralOrders.order_number || centralOrders.id)) rows=[centralOrders];
+      }
+      // Respaldo de lectura solo para la sesión central del dueño/admin.
+      // Respeta RLS de Supabase y no escribe ni altera pedidos.
+      if(currentUser?.central && isAdmin() && !rows.length){
+        const fallback=await SP_DB.from('orders').select('id,order_number,customer_name,customer_phone,order_type,address,observations,status,payment_method,payment_status,subtotal,delivery_fee,discount,total,driver_id,created_at,updated_at').order('created_at',{ascending:false}).limit(200);
+        if(!fallback.error && Array.isArray(fallback.data) && fallback.data.length) rows=fallback.data;
+        else if(fallback.error) console.warn('Respaldo de lectura de pedidos no disponible:',fallback.error);
+      }
       const central=rows.map(o=>({
         no:o.order_number,
         centralId:o.id,
