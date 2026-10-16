@@ -3756,6 +3756,17 @@ async function adminOrders(){
           p_username:localUser,
           p_pin_sha256:localPinHash
         }));
+        // Si el RPC por hash no devuelve filas, probar la validación por PIN
+        // disponible en la sesión. Evita mostrar una lista vacía cuando la sesión
+        // antigua conserva un hash desactualizado pero el PIN sigue vigente.
+        if(!error && (!Array.isArray(centralOrders) || centralOrders.length===0) && localPin){
+          const retry=await SP_DB.rpc('sp_get_admin_orders_pin',{
+            p_username:localUser,
+            p_pin:localPin
+          });
+          centralOrders=retry.data;
+          error=retry.error;
+        }
       }else if(currentUser?.role==='admin' && localUser && localPin){
         ({data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders_pin',{
           p_username:localUser,
