@@ -9,8 +9,9 @@
  function readClosures(){
   try{const a=JSON.parse(localStorage.getItem(KEY)||'[]');return Array.isArray(a)?a:[]}catch(e){return []}
  }
- function currentKey(){const u=(typeof currentUser!=='undefined'&&currentUser)||{};return String(u.user||u.username||u.name||'administrador').trim().toLowerCase()}
- function owns(x){const u=(typeof currentUser!=='undefined'&&currentUser)||{};const key=currentKey();if(x&&x.userKey)return String(x.userKey).toLowerCase()===key;return !!x&&(String(x.user||'').trim().toLowerCase()===key||String(x.user||'').trim().toLowerCase()===String(u.name||u.full_name||'').trim().toLowerCase())}
+ function identityAliases(){const u=(typeof currentUser!=='undefined'&&currentUser)||{};return [...new Set([u.user,u.username,u.name,u.full_name,u.fullName,u.id].map(v=>String(v??'').trim().toLowerCase()).filter(Boolean))]}
+ function currentKey(){const u=(typeof currentUser!=='undefined'&&currentUser)||{};return String(u.user||u.username||u.name||u.full_name||'administrador').trim().toLowerCase()}
+ function owns(x){if(!x)return false;const aliases=identityAliases();const key=String(x.userKey??'').trim().toLowerCase();const user=String(x.user??'').trim().toLowerCase();return !!((key&&aliases.includes(key))||(user&&aliases.includes(user)))}
  function latestOpen(){
   const list=readClosures(),day=localDay();
   const closes=list.filter(x=>x&&x.day===day&&x.type!=='apertura'&&owns(x)).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0));
