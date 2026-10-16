@@ -3751,14 +3751,15 @@ async function adminOrders(){
       const localPin = localAdmin?.pin || currentUser?.pin;
       const localPinHash = localAdmin?.pinHash || currentUser?.pinHash;
       const localUser = localAdmin?.user || currentUser?.user;
-      if(currentUser?.role==='admin' && localUser && localPinHash){
+      if(currentUser?.central){
+        // La sesión central del dueño ya está autenticada; usar el RPC central
+        // antes que credenciales PIN locales que pueden estar desactualizadas.
+        ({data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders'));
+      }else if(currentUser?.role==='admin' && localUser && localPinHash){
         ({data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders_hash',{
           p_username:localUser,
           p_pin_sha256:localPinHash
         }));
-        // Si el RPC por hash no devuelve filas, probar la validación por PIN
-        // disponible en la sesión. Evita mostrar una lista vacía cuando la sesión
-        // antigua conserva un hash desactualizado pero el PIN sigue vigente.
         if(!error && (!Array.isArray(centralOrders) || centralOrders.length===0) && localPin){
           const retry=await SP_DB.rpc('sp_get_admin_orders_pin',{
             p_username:localUser,
@@ -3777,8 +3778,6 @@ async function adminOrders(){
           p_username:currentUser.user,
           p_pin_sha256:currentUser.pinHash
         }));
-      }else if(currentUser?.central){
-        ({data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders'));
       }else{
         throw new Error('No hay credenciales disponibles para sincronizar pedidos.');
       }
