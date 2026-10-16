@@ -2712,9 +2712,10 @@ async function printDailyClose(){
     w.document.close();
   }).catch(e=>alert('No se pudo preparar el cierre: '+(e?.message||e)));
 }
-function cashUserKey(){return String(currentUser?.user||currentUser?.username||currentUser?.name||'administrador').trim().toLowerCase()}
-function cashUserLabel(){return String(currentUser?.name||currentUser?.full_name||currentUser?.user||'Administrador')}
-function cashOwns(rec){if(!rec)return false;const key=cashUserKey();if(rec.userKey)return String(rec.userKey).toLowerCase()===key;return String(rec.user||'').trim().toLowerCase()===key||String(rec.user||'').trim().toLowerCase()===cashUserLabel().trim().toLowerCase()}
+function cashIdentityAliases(){const u=currentUser||{};return [...new Set([u.user,u.username,u.name,u.full_name,u.fullName,u.id].map(v=>String(v??'').trim().toLowerCase()).filter(Boolean))]}
+function cashUserKey(){const u=currentUser||{};return String(u.user||u.username||u.name||u.full_name||'administrador').trim().toLowerCase()}
+function cashUserLabel(){const u=currentUser||{};return String(u.name||u.full_name||u.fullName||u.user||u.username||'Administrador')}
+function cashOwns(rec){if(!rec)return false;const aliases=cashIdentityAliases();const storedKey=String(rec.userKey??'').trim().toLowerCase();const storedUser=String(rec.user??'').trim().toLowerCase();if(storedKey&&aliases.includes(storedKey))return true;if(storedUser&&aliases.includes(storedUser))return true;return false}
 function cashCurrentOpening(day){const list=cashClosures.filter(c=>c.day===day&&c.type==='apertura'&&cashOwns(c)).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0));const closes=cashClosures.filter(c=>c.day===day&&c.type!=='apertura'&&cashOwns(c)).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0));const lastCloseAt=closes.length?new Date(closes[0].date||0).getTime():0;return list.find(c=>new Date(c.date||0).getTime()>lastCloseAt)||null}
 
 function spAskInput({title='Verificación requerida',message='',defaultValue='',password=false,placeholder='',confirmText='Continuar'}={}){
