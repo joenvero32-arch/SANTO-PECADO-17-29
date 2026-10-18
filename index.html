@@ -2658,13 +2658,15 @@ async function adminCash(){
     }
   }
   const ownUser=cashUserKey();
-  const sessionList=list.filter(o=>!!o.sold_by&&!!String(o.sold_by_username||'').trim()&&String(o.sold_by_username||'').trim().toLowerCase()===ownUser&&(!lastCloseAt||new Date(o.date||o.created||0).getTime()>lastCloseAt));
+  // La caja personal solo cuenta movimientos posteriores a su apertura vigente.
+  const sessionStart=openingRecord?new Date(openingRecord.date).getTime():lastCloseAt;
+  const sessionList=list.filter(o=>!!o.sold_by&&!!String(o.sold_by_username||'').trim()&&String(o.sold_by_username||'').trim().toLowerCase()===ownUser&&(!sessionStart||new Date(o.date||o.created||0).getTime()>sessionStart));
   const pay=paymentTotals(list),ownPay=paymentTotals(sessionList);
   const salesTotal=list.reduce((a,o)=>a+Number(o.total||0),0);
   const unattributedSales=list.filter(o=>!o.sold_by||String(o.sold_by_username||'').toLowerCase()==='sin_asignar');
   const unattributedTotal=unattributedSales.reduce((a,o)=>a+Number(o.total||0),0);
   let expenses=[]; try{expenses=await spGetCashExpenses(today)}catch(e){console.warn('Gastos de esta caja no disponibles:',e.message||e)}
-  const sessionExpenses=expenses.filter(x=>!lastCloseAt||new Date(x.created_at||x.createdAt||x.date||0).getTime()>lastCloseAt);
+  const sessionExpenses=expenses.filter(x=>!!openingRecord&&(!sessionStart||new Date(x.created_at||x.createdAt||x.date||0).getTime()>sessionStart));
   const expensesTotal=sessionExpenses.reduce((a,x)=>a+Number(x.amount||0),0);
   const cashExpenses=sessionExpenses.filter(x=>String(x.payment_method||'').trim().toLowerCase()==='efectivo').reduce((a,x)=>a+Number(x.amount||0),0);
   const expected=opening+Number(ownPay['Efectivo']||0)-cashExpenses;
