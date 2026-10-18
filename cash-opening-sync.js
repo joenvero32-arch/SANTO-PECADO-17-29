@@ -184,8 +184,12 @@
     const existing=(Array.isArray(window.cashClosures)?window.cashClosures:[]).filter(x=>x&&x.day===day&&x.type!=='apertura'&&(typeof cashOwns!=='function'||cashOwns(x)));
     if(existing.length){alert('Esta jornada ya tiene un cierre registrado. No se creará otro para evitar duplicados.');return}
     const openings=(Array.isArray(window.cashClosures)?window.cashClosures:[]).filter(x=>x&&x.day===day&&x.type==='apertura'&&(typeof cashOwns!=='function'||cashOwns(x))).sort((a,b)=>new Date(a.date||0)-new Date(b.date||0));
-    if(!openings.length){alert('No encontramos una apertura de caja para esa fecha. No se puede calcular un cierre fiable.');return}
-    const openingRecord=openings[openings.length-1];
+    // Una jornada puede comenzar legítimamente con base $0. Si no existe apertura guardada,
+    // se permite el cierre atrasado con base cero y el inicio de la jornada como referencia.
+    const openingRecord=openings.length?openings[openings.length-1]:{
+      id:'late-zero-'+day,day,opening:0,date:new Date(day+'T00:00:00').toISOString(),
+      sessionId:'late-zero-'+day, userKey:typeof cashUserKey==='function'?cashUserKey():''
+    };
     let sales=[];
     try{
       if(typeof spGetCashSales==='function')sales=await spGetCashSales(day);
