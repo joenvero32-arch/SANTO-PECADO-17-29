@@ -161,12 +161,26 @@
 (function(){
   function localDateString(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
   function moneyLate(n){return '$'+Math.round(Number(n)||0).toLocaleString('es-CO')}
+  function lateModal({title,body,fields=[],confirmText='Continuar',danger=false}={}){
+    return new Promise(resolve=>{
+      const shade=document.createElement('div');shade.style.cssText='position:fixed;inset:0;z-index:2147483000;background:rgba(5,7,12,.8);display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(5px)';
+      const card=document.createElement('div');card.style.cssText='box-sizing:border-box;width:min(100%,440px);max-height:90vh;overflow:auto;background:#17181d;color:#f7f3e9;border:1px solid #8f7131;border-radius:22px;padding:22px;box-shadow:0 24px 70px #0009;font-family:system-ui,sans-serif';
+      const top=document.createElement('div');top.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:12px';
+      const h=document.createElement('h2');h.textContent=title;h.style.cssText='font-size:21px;margin:0 0 14px;color:#e7c56e';
+      const x=document.createElement('button');x.type='button';x.textContent='×';x.style.cssText='background:#292a31;color:#fff;border:0;border-radius:10px;width:36px;height:36px;font-size:24px;margin-bottom:12px';top.append(h,x);
+      const p=document.createElement('div');p.innerHTML=body;p.style.cssText='font-size:14px;line-height:1.55;color:#d4d4d8;margin-bottom:18px';
+      const form=document.createElement('form');form.append(top,p);const inputs=[];
+      fields.forEach(f=>{const label=document.createElement('label');label.textContent=f.label;label.style.cssText='display:block;font-size:13px;color:#ddd;margin:12px 0 6px';const input=document.createElement('input');Object.assign(input,{type:f.type||'text',value:f.value||'',min:f.min||'',step:f.step||'1',required:f.required!==false});input.style.cssText='box-sizing:border-box;width:100%;padding:13px 12px;border:1px solid #565761;border-radius:12px;background:#22232a;color:#fff;font-size:17px';label.append(input);form.append(label);inputs.push(input)});
+      const actions=document.createElement('div');actions.style.cssText='display:flex;gap:10px;margin-top:22px';const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Cancelar';cancel.style.cssText='flex:1;padding:13px;border:1px solid #565761;border-radius:12px;background:#292a31;color:#eee;font-weight:600';const ok=document.createElement('button');ok.type='submit';ok.textContent=confirmText;ok.style.cssText='flex:1;padding:13px;border:0;border-radius:12px;background:'+(danger?'#9c3b32':'#d7b455')+';color:#171717;font-weight:800';actions.append(cancel,ok);form.append(actions);card.append(form);shade.append(card);document.body.append(shade);
+      const done=v=>{shade.remove();resolve(v)};cancel.onclick=x.onclick=()=>done(null);shade.onclick=e=>{if(e.target===shade)done(null)};form.onsubmit=e=>{e.preventDefault();if(inputs.some(i=>!i.reportValidity()))return;done(inputs.map(i=>i.value))};if(inputs[0])inputs[0].focus();
+    });
+  }
   async function closePreviousDay(){
     if(typeof isAdmin==='function'&&!isAdmin()){alert('Solo el dueño o administrador puede cerrar una jornada anterior.');return}
     const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
-    const day=prompt('Fecha de la jornada que vas a cerrar (AAAA-MM-DD):',localDateString(yesterday));
-    if(day===null)return;
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||day>=localDateString(new Date())){alert('Selecciona una fecha anterior a hoy en formato AAAA-MM-DD.');return}
+    const picked=await lateModal({title:'Cerrar jornada anterior',body:'Selecciona la fecha pendiente. El cierre conservará la fecha de la jornada y la hora real en que lo registres.',fields:[{label:'Fecha de la jornada',type:'date',value:localDateString(yesterday),min:'2020-01-01'}],confirmText:'Consultar jornada'});
+    if(!picked)return;const day=picked[0];
+    if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(day)||day>=localDateString(new Date())){alert('Selecciona una fecha anterior a hoy.');return}
     const existing=(Array.isArray(window.cashClosures)?window.cashClosures:[]).filter(x=>x&&x.day===day&&x.type!=='apertura'&&(typeof cashOwns!=='function'||cashOwns(x)));
     if(existing.length){alert('Esta jornada ya tiene un cierre registrado. No se creará otro para evitar duplicados.');return}
     const openings=(Array.isArray(window.cashClosures)?window.cashClosures:[]).filter(x=>x&&x.day===day&&x.type==='apertura'&&(typeof cashOwns!=='function'||cashOwns(x))).sort((a,b)=>new Date(a.date||0)-new Date(b.date||0));
@@ -192,10 +206,12 @@
       .filter(x=>new Date(x.created_at||x.createdAt||x.date||0).getTime()>closeAt);
     const cashExpenses=expenses.filter(x=>String(x.payment_method||'').trim().toLowerCase()==='efectivo').reduce((a,x)=>a+Number(x.amount||0),0);
     const expected=Number(openingRecord.opening||0)+cashSales-cashExpenses;
-    const answer=prompt('Cierre atrasado de '+day+'\nBase inicial: '+moneyLate(openingRecord.opening)+'\nVentas en efectivo atribuidas: '+moneyLate(cashSales)+'\nGastos en efectivo: '+moneyLate(cashExpenses)+'\nEfectivo esperado: '+moneyLate(expected)+'\n\nEscribe el efectivo que contaste físicamente:');
-    if(answer===null)return;
+    const countedInput=await lateModal({title:'Resumen de jornada · '+day,body:'<div style="display:grid;gap:10px"><div style="display:flex;justify-content:space-between"><span>Base inicial</span><strong>'+moneyLate(openingRecord.opening)+'</strong></div><div style="display:flex;justify-content:space-between"><span>Ventas en efectivo</span><strong>'+moneyLate(cashSales)+'</strong></div><div style="display:flex;justify-content:space-between"><span>Gastos en efectivo</span><strong style="color:#f0a09a">− '+moneyLate(cashExpenses)+'</strong></div><div style="border-top:1px solid #555;padding-top:12px;display:flex;justify-content:space-between;font-size:17px"><strong>Efectivo esperado</strong><strong style="color:#e7c56e">'+moneyLate(expected)+'</strong></div></div><p style="margin-top:14px">Verifica los valores antes de continuar. La caja de hoy no se modificará.</p>',fields:[{label:'Efectivo contado físicamente (COP)',type:'number',min:'0',step:'1',placeholder:'Ej. 500000'}],confirmText:'Revisar cierre'});
+    if(!countedInput)return;const answer=countedInput[0];
     if(answer.trim()===''||!Number.isFinite(Number(answer))||Number(answer)<0){alert('El efectivo contado no es válido. No se registró el cierre.');return}
-    if(!confirm('Confirmar cierre atrasado del '+day+' por '+moneyLate(answer)+' contado. La hora real del cierre quedará registrada ahora. ¿Continuar?'))return;
+    const diff=Number(answer)-expected;
+    const confirmed=await lateModal({title:'Confirmar cierre',body:'<p>Jornada: <strong>'+day+'</strong></p><p>Efectivo esperado: <strong>'+moneyLate(expected)+'</strong><br>Efectivo contado: <strong>'+moneyLate(answer)+'</strong><br>Diferencia: <strong style="color:'+(diff===0?'#8bd5a5':'#f0a09a')+'">'+moneyLate(diff)+'</strong></p><p>Se guardará la hora real de cierre. ¿Confirmas estos datos?</p>',confirmText:'Confirmar cierre',danger:true});
+    if(!confirmed)return;
     const now=new Date().toISOString();
     const rec={id:Date.now(),day,date:now,expected,counted:Number(answer),difference:Number(answer)-expected,reason:'Cierre atrasado realizado después de medianoche',user:currentUser?.name||'Administrador',status:'aprobado',approvedBy:currentUser?.name||'Administrador',approvedAt:now,lateClose:true,userKey,sessionId:openingRecord.sessionId||('cash-'+userKey+'-'+openingRecord.id)};
     window.cashClosures.unshift(rec);window.cashClosures=window.cashClosures.slice(0,365);
