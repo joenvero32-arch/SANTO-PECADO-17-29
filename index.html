@@ -1836,6 +1836,17 @@ async function trackOrder(noFromButton){
   const requestId=++spTrackRequestId;
   if(spStatusPollTimer){clearInterval(spStatusPollTimer);spStatusPollTimer=null}
   const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
+  // Si el administrador abre "Ver estados" sin elegir un pedido,
+  // mostrar el listado completo antes de resolver LAST_ORDER.
+  if(!noFromButton && can('allowOrders')){
+    const list=orders.slice().sort((a,b)=>new Date(b.created)-new Date(a.created));
+    document.getElementById('panel').innerHTML=`
+      <div class="panelHead"><h2>📍 Pedidos y estados</h2><button class="close" onclick="closeModal()">✕</button></div>
+      <div class="notice" style="margin:12px 0">Todos los pedidos · selecciona cualquiera para consultar su estado y pago.</div>
+      ${list.length?list.map(o=>`<button class="adminItem" style="display:block;width:100%;text-align:left;border:1px solid #252525;background:#111;color:#fff;border-radius:16px;padding:14px;margin:9px 0;cursor:pointer" onclick="trackOrder('${esc(o.no)}')"><div class="adminTop"><b>${esc(o.no)}</b><b>${money(o.total)}</b></div><div class="muted">${esc(o.name)} · ${esc(o.type)} · ${new Date(o.created).toLocaleString('es-CO')}</div><div style="margin-top:8px">${statusLabel(o)}</div><div class="muted" style="margin-top:5px">${String(o.paymentStatus||'pendiente').toLowerCase()==='pagado'?'✅ PAGADO':'⏳ PAGO PENDIENTE'} · ${esc(o.pay||o.payment_method||'')}</div></button>`).join(''):'<div class="empty">No hay pedidos cargados. Abre Pedidos para sincronizar el listado central y vuelve a Ver estados.</div>'}`;
+    document.getElementById('modal').classList.add('open');
+    return;
+  }
   if(!noFromButton){
     noFromButton=localStorage.getItem(LAST_ORDER)||'';
     if(!noFromButton){
