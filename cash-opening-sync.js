@@ -103,3 +103,55 @@
  }
  install();
 })();
+
+/* Corrección segura de atribución de ventas en Caja:
+   solo atribuye una venta sin sold_by cuando existe auditoría explícita
+   de confirmación de pago para el usuario autenticado. No modifica ventas ni pedidos. */
+(function(){
+  let installed=false;
+  function installSalesAttribution(){
+    if(installed)return;
+    if(typeof window.spGetCashSales!=='function'||typeof window.SP_DB==='undefined'||!window.SP_DB){setTimeout(installSalesAttribution,500);return;}
+    const original=window.spGetCashSales;
+    if(original.__spCashAuditAttribution){installed=true;return;}
+    const wrapped=async function(day){
+      const rows=await original.apply(this,arguments);
+      if(!Array.isArray(rows)||!rows.length)return rows;
+      const user=(typeof currentUser!=='undefined'&&currentUser)||{};
+      const username=String(user.user||user.username||'').trim().toLowerCase();
+      if(!username||typeof window.SP_DB.from!=='function')return rows;
+      try{
+        const numbers=rows.filter(x=>!x.sold_by).map(x=>String(x.no||x.order_number||'').trim()).filter(Boolean);
+        if(!numbers.length)return rows;
+        const salesResult=await window.SP_DB.from('sales').select('order_id,order_number').in('order_number',numbers);
+        if(salesResult.error)throw salesResult.error;
+        const ids=[...new Set((salesResult.data||[]).map(x=>x.order_id).filter(Boolean).map(String))];
+        if(!ids.length)return rows;
+        const auditResult=await window.SP_DB.from('audit_logs').select('entity_id,details,action,entity_type').eq('action','Pago recibido').eq('entity_type','cash_sales').in('entity_id',ids);
+        if(auditResult.error)throw auditResult.error;
+        const confirmed=new Set();
+        for(const entry of auditResult.data||[]){
+          const details=entry.details||{};
+          if(String(details.app_username||'').trim().toLowerCase()===username&&String(details.source||'')==='payment_confirmation_rpc')confirmed.add(String(entry.entity_id));
+        }
+        const orderToId=new Map((salesResult.data||[]).map(x=>[String(x.order_number||'').trim(),String(x.order_id||'')]));
+        for(const row of rows){
+          if(row.sold_by)continue;
+          const id=orderToId.get(String(row.no||row.order_number||'').trim());
+          if(id&&confirmed.has(id)){
+            row.sold_by='audit:'+id;
+            row.sold_by_username=username;
+            row.sold_by_name=String(user.name||user.full_name||username);
+          }
+        }
+      }catch(error){
+        console.warn('Caja: no se pudo verificar la atribución por auditoría; se mantienen las ventas sin asignar.',error);
+      }
+      return rows;
+    };
+    wrapped.__spCashAuditAttribution=true;
+    window.spGetCashSales=wrapped;
+    installed=true;
+  }
+  installSalesAttribution();
+})();
