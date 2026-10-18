@@ -2658,7 +2658,7 @@ async function adminCash(){
     }
   }
   const ownUser=cashUserKey();
-  const sessionList=list.filter(o=>String(o.sold_by_username||'').toLowerCase()===ownUser&&(!lastCloseAt||new Date(o.date||o.created||0).getTime()>lastCloseAt));
+  const sessionList=list.filter(o=>!!o.sold_by&&!!String(o.sold_by_username||'').trim()&&String(o.sold_by_username||'').trim().toLowerCase()===ownUser&&(!lastCloseAt||new Date(o.date||o.created||0).getTime()>lastCloseAt));
   const pay=paymentTotals(list),ownPay=paymentTotals(sessionList);
   const salesTotal=list.reduce((a,o)=>a+Number(o.total||0),0);
   const unattributedSales=list.filter(o=>!o.sold_by||String(o.sold_by_username||'').toLowerCase()==='sin_asignar');
