@@ -155,3 +155,70 @@
   }
   installSalesAttribution();
 })();
+
+
+/* Cierre atrasado de jornada: conserva la fecha de operación y registra la hora real del cierre. */
+(function(){
+  function localDateString(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+  function moneyLate(n){return '$'+Math.round(Number(n)||0).toLocaleString('es-CO')}
+  async function closePreviousDay(){
+    if(typeof isAdmin==='function'&&!isAdmin()){alert('Solo el dueño o administrador puede cerrar una jornada anterior.');return}
+    const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
+    const day=prompt('Fecha de la jornada que vas a cerrar (AAAA-MM-DD):',localDateString(yesterday));
+    if(day===null)return;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||day>=localDateString(new Date())){alert('Selecciona una fecha anterior a hoy en formato AAAA-MM-DD.');return}
+    const existing=(Array.isArray(window.cashClosures)?window.cashClosures:[]).filter(x=>x&&x.day===day&&x.type!=='apertura'&&(typeof cashOwns!=='function'||cashOwns(x)));
+    if(existing.length){alert('Esta jornada ya tiene un cierre registrado. No se creará otro para evitar duplicados.');return}
+    const openings=(Array.isArray(window.cashClosures)?window.cashClosures:[]).filter(x=>x&&x.day===day&&x.type==='apertura'&&(typeof cashOwns!=='function'||cashOwns(x))).sort((a,b)=>new Date(a.date||0)-new Date(b.date||0));
+    if(!openings.length){alert('No encontramos una apertura de caja para esa fecha. No se puede calcular un cierre fiable.');return}
+    const openingRecord=openings[openings.length-1];
+    let sales=[];
+    try{
+      if(typeof spGetCashSales==='function')sales=await spGetCashSales(day);
+      else if(typeof salesForDay==='function')sales=salesForDay(day);
+      if(!Array.isArray(sales))sales=[];
+    }catch(e){alert('No se pudieron consultar las ventas de esa jornada. No se registró ningún cierre.');return}
+    const closeAt=new Date(openingRecord.date||0).getTime();
+    sales=sales.filter(x=>String(x.paymentStatus||x.payment_status||'').toLowerCase()==='pagado'||(!x.paymentStatus&&!x.payment_status))
+      .filter(x=>localDateString(new Date(x.date||x.created||x.sold_at||0))===day)
+      .filter(x=>new Date(x.date||x.created||x.sold_at||0).getTime()>closeAt);
+    const userKey=typeof cashUserKey==='function'?cashUserKey():'';
+    const own=sales.filter(x=>x.sold_by&&String(x.sold_by_username||'').trim().toLowerCase()===String(userKey).toLowerCase());
+    if(sales.some(x=>!x.sold_by)){alert('Hay ventas sin usuario asignado en esa jornada. Primero verifica la atribución en el historial; no se hará el cierre para evitar un efectivo esperado incorrecto.');return}
+    const cashSales=own.filter(x=>String(x.pay||x.payment_method||'').trim().toLowerCase()==='efectivo').reduce((a,x)=>a+Number(x.total||0),0);
+    let expenses=[];
+    try{if(typeof spGetCashExpenses==='function')expenses=await spGetCashExpenses(day)}catch(e){alert('No se pudieron consultar los gastos de la jornada. No se registró ningún cierre.');return}
+    expenses=(Array.isArray(expenses)?expenses:[]).filter(x=>String(x.expense_date||'').slice(0,10)===day||localDateString(new Date(x.created_at||x.createdAt||x.date||0))===day)
+      .filter(x=>new Date(x.created_at||x.createdAt||x.date||0).getTime()>closeAt);
+    const cashExpenses=expenses.filter(x=>String(x.payment_method||'').trim().toLowerCase()==='efectivo').reduce((a,x)=>a+Number(x.amount||0),0);
+    const expected=Number(openingRecord.opening||0)+cashSales-cashExpenses;
+    const answer=prompt('Cierre atrasado de '+day+'\nBase inicial: '+moneyLate(openingRecord.opening)+'\nVentas en efectivo atribuidas: '+moneyLate(cashSales)+'\nGastos en efectivo: '+moneyLate(cashExpenses)+'\nEfectivo esperado: '+moneyLate(expected)+'\n\nEscribe el efectivo que contaste físicamente:');
+    if(answer===null)return;
+    if(answer.trim()===''||!Number.isFinite(Number(answer))||Number(answer)<0){alert('El efectivo contado no es válido. No se registró el cierre.');return}
+    if(!confirm('Confirmar cierre atrasado del '+day+' por '+moneyLate(answer)+' contado. La hora real del cierre quedará registrada ahora. ¿Continuar?'))return;
+    const now=new Date().toISOString();
+    const rec={id:Date.now(),day,date:now,expected,counted:Number(answer),difference:Number(answer)-expected,reason:'Cierre atrasado realizado después de medianoche',user:currentUser?.name||'Administrador',status:'aprobado',approvedBy:currentUser?.name||'Administrador',approvedAt:now,lateClose:true,userKey,sessionId:openingRecord.sessionId||('cash-'+userKey+'-'+openingRecord.id)};
+    window.cashClosures.unshift(rec);window.cashClosures=window.cashClosures.slice(0,365);
+    if(typeof auditLog==='function')auditLog('Cierre atrasado de caja','Jornada '+day+' · Registrado '+new Date(now).toLocaleString('es-CO')+' · Diferencia '+moneyLate(rec.difference));
+    if(typeof save==='function')save();
+    alert('Cierre atrasado registrado para '+day+'. La caja de hoy no se modificó.');
+    if(typeof adminCash==='function')adminCash();
+  }
+  function addButton(){
+    const panel=document.getElementById('panel');
+    if(!panel||!panel.innerHTML.includes('Caja del día')||panel.querySelector('#spLateCloseButton'))return;
+    const target=panel.querySelector('.cashHero');
+    if(!target)return;
+    const b=document.createElement('button');b.id='spLateCloseButton';b.className='mini';b.type='button';b.textContent='🗓️ Cerrar jornada anterior';b.style.marginTop='8px';b.addEventListener('click',closePreviousDay);target.appendChild(b);
+  }
+  function install(){
+    if(typeof window.adminCash==='function'&&!window.adminCash.__spLateCloseWrapped){
+      const original=window.adminCash;
+      const wrapped=async function(){const result=await original.apply(this,arguments);setTimeout(addButton,0);return result};
+      wrapped.__spLateCloseWrapped=true;window.adminCash=wrapped;
+    }
+    setTimeout(addButton,0);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(install,0));else install();
+  setTimeout(install,700);
+})();
