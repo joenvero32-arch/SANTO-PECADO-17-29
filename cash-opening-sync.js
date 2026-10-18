@@ -201,16 +201,20 @@
       .filter(x=>localDateString(new Date(x.date||x.created||x.sold_at||0))===day)
       .filter(x=>new Date(x.date||x.created||x.sold_at||0).getTime()>closeAt);
     const userKey=typeof cashUserKey==='function'?cashUserKey():'';
-    const own=sales.filter(x=>x.sold_by&&String(x.sold_by_username||'').trim().toLowerCase()===String(userKey).toLowerCase());
-    if(sales.some(x=>!x.sold_by)){alert('Hay ventas sin usuario asignado en esa jornada. Primero verifica la atribución en el historial; no se hará el cierre para evitar un efectivo esperado incorrecto.');return}
-    const cashSales=own.filter(x=>String(x.pay||x.payment_method||'').trim().toLowerCase()==='efectivo').reduce((a,x)=>a+Number(x.total||0),0);
+    // El cierre suma las ventas reales de la jornada aunque sold_by sea NULL.
+    const paidSales=sales.filter(x=>String(x.paymentStatus||x.payment_status||'').toLowerCase()==='pagado'||(!x.paymentStatus&&!x.payment_status));
+    const normalizePay=x=>String(x.pay||x.payment_method||x.paymentMethod||'').trim().toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');
+    const cashSales=paidSales.filter(x=>normalizePay(x)==='efectivo').reduce((a,x)=>a+Number(x.total||0),0);
+    const totalSales=paidSales.reduce((a,x)=>a+Number(x.total||0),0);
     let expenses=[];
     try{if(typeof spGetCashExpenses==='function')expenses=await spGetCashExpenses(day)}catch(e){alert('No se pudieron consultar los gastos de la jornada. No se registró ningún cierre.');return}
-    expenses=(Array.isArray(expenses)?expenses:[]).filter(x=>String(x.expense_date||'').slice(0,10)===day||localDateString(new Date(x.created_at||x.createdAt||x.date||0))===day)
-      .filter(x=>new Date(x.created_at||x.createdAt||x.date||0).getTime()>closeAt);
+    expenses=(Array.isArray(expenses)?expenses:[]).filter(x=>{
+      const expenseDay=String(x.expense_date||'').slice(0,10);
+      return expenseDay?expenseDay===day:localDateString(new Date(x.created_at||x.createdAt||x.date||0))===day;
+    });
     const cashExpenses=expenses.filter(x=>String(x.payment_method||'').trim().toLowerCase()==='efectivo').reduce((a,x)=>a+Number(x.amount||0),0);
     const expected=Number(openingRecord.opening||0)+cashSales-cashExpenses;
-    const countedInput=await lateModal({title:'Resumen de jornada · '+day,body:'<div style="display:grid;gap:10px"><div style="display:flex;justify-content:space-between"><span>Base inicial</span><strong>'+moneyLate(openingRecord.opening)+'</strong></div><div style="display:flex;justify-content:space-between"><span>Ventas en efectivo</span><strong>'+moneyLate(cashSales)+'</strong></div><div style="display:flex;justify-content:space-between"><span>Gastos en efectivo</span><strong style="color:#f0a09a">− '+moneyLate(cashExpenses)+'</strong></div><div style="border-top:1px solid #555;padding-top:12px;display:flex;justify-content:space-between;font-size:17px"><strong>Efectivo esperado</strong><strong style="color:#e7c56e">'+moneyLate(expected)+'</strong></div></div><p style="margin-top:14px">Verifica los valores antes de continuar. La caja de hoy no se modificará.</p>',fields:[{label:'Efectivo contado físicamente (COP)',type:'number',min:'0',step:'1',placeholder:'Ej. 500000'}],confirmText:'Revisar cierre'});
+    const countedInput=await lateModal({title:'Resumen de jornada · '+day,body:'<div style="display:grid;gap:10px"><div style="display:flex;justify-content:space-between"><span>Base inicial</span><strong>'+moneyLate(openingRecord.opening)+'</strong></div><div style="display:flex;justify-content:space-between"><span>Ventas totales</span><strong>'+moneyLate(totalSales)+'</strong></div><div style="display:flex;justify-content:space-between"><span>Ventas en efectivo</span><strong>'+moneyLate(cashSales)+'</strong></div><div style="display:flex;justify-content:space-between"><span>Gastos en efectivo</span><strong style="color:#f0a09a">− '+moneyLate(cashExpenses)+'</strong></div><div style="border-top:1px solid #555;padding-top:12px;display:flex;justify-content:space-between;font-size:17px"><strong>Efectivo esperado</strong><strong style="color:#e7c56e">'+moneyLate(expected)+'</strong></div></div><p style="margin-top:14px">Verifica los valores antes de continuar. La caja de hoy no se modificará.</p>',fields:[{label:'Efectivo contado físicamente (COP)',type:'number',min:'0',step:'1',placeholder:'Ej. 500000'}],confirmText:'Revisar cierre'});
     if(!countedInput)return;const answer=countedInput[0];
     if(answer.trim()===''||!Number.isFinite(Number(answer))||Number(answer)<0){alert('El efectivo contado no es válido. No se registró el cierre.');return}
     const diff=Number(answer)-expected;
