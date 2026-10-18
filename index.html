@@ -582,7 +582,7 @@ function submitTrackOrderPrompt(event){
     <div class="brandText">SANTO PECADO 17-29<small>CATÁLOGO PREMIUM</small></div>
   </div>
   <div class="topActions">
-    <button class="statusBtn" onclick="trackOrder()">📍 Estado</button>
+    <button class="statusBtn" onclick="trackOrderFromHeader()">📍 Estado</button>
     <button class="iconBtn" onclick="openCart()">🛒 <span id="cartCount">0</span></button>
     <button class="adminBtn" onclick="openAdmin()">⚙️ Administración</button>
   </div>
@@ -1832,6 +1832,16 @@ function openStatusWhatsAppFromOrder(no,status){
 }
 let spTrackRequestId=0;
 let spTrackPromptActive=false;
+function trackOrderFromHeader(){
+  // En sesión de dueño, Estado debe abrir el listado operativo completo,
+  // no el último pedido del navegador. Los clientes conservan su rastreo individual.
+  try{
+    if(typeof currentUser!=='undefined'&&currentUser&&currentUser.role==='admin'){
+      if(typeof adminOrders==='function'){adminOrders();return;}
+    }
+  }catch(e){console.warn('No se pudo abrir el listado administrativo de pedidos:',e)}
+  trackOrder();
+}
 async function trackOrder(noFromButton){
   const requestId=++spTrackRequestId;
   if(spStatusPollTimer){clearInterval(spStatusPollTimer);spStatusPollTimer=null}
