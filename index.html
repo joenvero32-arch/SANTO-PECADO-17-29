@@ -2604,18 +2604,32 @@ async function addBusinessExpense(){
 }
 async function adminExpenses(){
   if(!isAdmin()){alert('Solo el administrador o dueño.');return}
+  const today=dayKey(new Date());
   let list=[];
-  try{list=await getBusinessExpenses(dayKey(new Date(Date.now()-29*86400000)),dayKey(new Date()))}catch(e){alert('No se pudieron cargar los gastos: '+e.message);return}
+  try{list=await getBusinessExpenses(today,today)}catch(e){alert('No se pudieron cargar los gastos de hoy: '+e.message);return}
+  renderBusinessExpenses(list,'today');
+}
+async function adminExpensesHistory(){
+  if(!isAdmin()){alert('Solo el administrador o dueño.');return}
+  const today=dayKey(new Date());
+  const from=dayKey(new Date(Date.now()-29*86400000));
+  let list=[];
+  try{list=await getBusinessExpenses(from,today)}catch(e){alert('No se pudo cargar el historial de gastos: '+e.message);return}
+  renderBusinessExpenses(list,'history');
+}
+function renderBusinessExpenses(list,view){
   const total=list.reduce((a,x)=>a+Number(x.amount||0),0);
   const payroll=list.filter(x=>x.expense_type==='Nómina').reduce((a,x)=>a+Number(x.amount||0),0);
   const other=list.filter(x=>x.expense_type==='Gasto').reduce((a,x)=>a+Number(x.amount||0),0);
+  const title=view==='today'?'Gastos de hoy':'Historial de gastos · últimos 30 días';
   let html='<div class="panelHead"><h2>💸 Nómina y gastos</h2><button class="close" onclick="adminDashboard()">✕</button></div>';
   html+=navTabs('expenses');
-  html+='<div class="statgrid dashGrid"><div class="stat"><small>Últimos 30 días</small><b>'+money(total)+'</b></div><div class="stat"><small>Nómina</small><b>'+money(payroll)+'</b></div><div class="stat"><small>Otros gastos</small><b>'+money(other)+'</b></div></div>';
-  html+='<div class="notice">Los registros de nómina y gastos se descuentan en el resumen del cierre.</div><div class="adminActions"><button class="primary" onclick="addBusinessExpense()">➕ Registrar nómina/gasto</button></div>';
-  html+='<div class="dashSection"><h3>Registros recientes</h3>';
+  html+='<div class="statgrid dashGrid"><div class="stat"><small>'+ (view==='today'?'Total de hoy':'Últimos 30 días') +'</small><b>'+money(total)+'</b></div><div class="stat"><small>Nómina</small><b>'+money(payroll)+'</b></div><div class="stat"><small>Otros gastos</small><b>'+money(other)+'</b></div></div>';
+  html+='<div class="notice">Los registros de nómina y gastos se descuentan en el resumen del cierre.</div><div class="adminActions"><button class="primary" onclick="addBusinessExpense()">➕ Registrar nómina/gasto</button>';
+  html+=view==='today'?'<button class="mini" onclick="adminExpensesHistory()">📅 Ver historial de 30 días</button>':'<button class="mini" onclick="adminExpenses()">↩ Ver solo los gastos de hoy</button>';
+  html+='</div><div class="dashSection"><h3>'+title+'</h3>';
   html+=list.map(x=>'<div class="adminItem"><b>'+esc(x.expense_type)+' · '+money(x.amount)+'</b><br>'+esc(x.category)+' · '+esc(x.description)+'<br><span class="muted">'+(x.employee_name?esc(x.employee_name)+' · ':'')+esc(x.payment_method)+'</span></div>').join('');
-  if(!list.length)html+='<div class="empty">No hay registros en los últimos 30 días.</div>';
+  if(!list.length)html+='<div class="empty">'+(view==='today'?'No hay gastos registrados hoy.':'No hay registros en los últimos 30 días.')+'</div>';
   html+='</div>';
   document.getElementById('panel').innerHTML=html; document.getElementById('modal').classList.add('open');
 }
