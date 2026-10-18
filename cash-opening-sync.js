@@ -203,8 +203,8 @@
     const userKey=typeof cashUserKey==='function'?cashUserKey():'';
     // El cierre suma las ventas reales de la jornada aunque sold_by sea NULL.
     const paidSales=sales.filter(x=>String(x.paymentStatus||x.payment_status||'').toLowerCase()==='pagado'||(!x.paymentStatus&&!x.payment_status));
-    const normalizePay=x=>String(x.pay||x.payment_method||x.paymentMethod||'').trim().toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');
-    const cashSales=paidSales.filter(x=>normalizePay(x)==='efectivo').reduce((a,x)=>a+Number(x.total||0),0);
+    const normalizePay=x=>String(x.pay||x.payment_method||x.paymentMethod||'').trim().toLowerCase().normalize('NFD').replace(/[^a-z]/g,'');
+    const cashSales=paidSales.filter(x=>normalizePay(x)==='efectivo'||normalizePay(x).includes('efectivo')).reduce((a,x)=>a+Number(x.total||0),0);
     const totalSales=paidSales.reduce((a,x)=>a+Number(x.total||0),0);
     let expenses=[];
     try{if(typeof spGetCashExpenses==='function')expenses=await spGetCashExpenses(day)}catch(e){alert('No se pudieron consultar los gastos de la jornada. No se registró ningún cierre.');return}
