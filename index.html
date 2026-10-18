@@ -3619,6 +3619,12 @@ async function confirmOrderPayment(no){
     await adminOrders();
     return;
   }
+  const savedPaymentLock=Number(localStorage.getItem(paymentLockKey)||0);
+  // Recuperar bloqueos abandonados si el navegador se cerró o la petición quedó colgada.
+  // Nunca se libera un bloqueo reciente, para evitar doble confirmación.
+  if(savedPaymentLock && Date.now()-savedPaymentLock>90000){
+    localStorage.removeItem(paymentLockKey);
+  }
   if(SP_PAYMENT_CONFIRMING.has(key)||localStorage.getItem(paymentLockKey)){
     alert('Estamos procesando el pago de este pedido. Espera un momento.');
     return;
