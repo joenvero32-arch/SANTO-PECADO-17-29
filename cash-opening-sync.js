@@ -180,7 +180,7 @@
     const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
     const picked=await lateModal({title:'Cerrar jornada anterior',body:'Selecciona la fecha pendiente. El cierre conservará la fecha de la jornada y la hora real en que lo registres.',fields:[{label:'Fecha de la jornada',type:'date',value:localDateString(yesterday),min:'2020-01-01'}],confirmText:'Consultar jornada'});
     if(!picked)return;const day=picked[0];
-    if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(day)||day>=localDateString(new Date())){alert('Selecciona una fecha anterior a hoy.');return}
+    if(!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(day)||day>=localDateString(new Date())){alert('Selecciona una fecha anterior a hoy.');return}
     const existing=(Array.isArray(window.cashClosures)?window.cashClosures:[]).filter(x=>x&&x.day===day&&x.type!=='apertura'&&(typeof cashOwns!=='function'||cashOwns(x)));
     if(existing.length){alert('Esta jornada ya tiene un cierre registrado. No se creará otro para evitar duplicados.');return}
     const openings=(Array.isArray(window.cashClosures)?window.cashClosures:[]).filter(x=>x&&x.day===day&&x.type==='apertura'&&(typeof cashOwns!=='function'||cashOwns(x))).sort((a,b)=>new Date(a.date||0)-new Date(b.date||0));
