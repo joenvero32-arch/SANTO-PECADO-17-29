@@ -3900,7 +3900,7 @@ async function adminOrders(){
       // Respaldo de lectura solo para la sesión central del dueño/admin.
       // Respeta RLS de Supabase y no escribe ni altera pedidos.
       if(currentUser?.central && isAdmin() && !rows.length){
-        const fallback=await SP_DB.from('orders').select('id,order_number,customer_name,customer_phone,order_type,address,observations,status,payment_method,payment_status,subtotal,delivery_fee,discount,total,driver_id,created_at,updated_at').order('created_at',{ascending:false}).limit(200);
+        const fallback=await SP_DB.from('orders').select('id,order_number,customer_name,customer_phone,order_type,order_channel,address,observations,status,payment_method,payment_status,subtotal,delivery_fee,discount,total,driver_id,created_at,updated_at').order('created_at',{ascending:false}).limit(200);
         if(!fallback.error && Array.isArray(fallback.data) && fallback.data.length) rows=fallback.data;
         else if(fallback.error) console.warn('Respaldo de lectura de pedidos no disponible:',fallback.error);
       }
@@ -3910,6 +3910,7 @@ async function adminOrders(){
         name:o.customer_name||'',
         phone:o.customer_phone||'',
         type:o.order_type==='delivery'?'Domicilio':o.order_type==='pickup'?'Recoger':'Local',
+        orderChannel:o.order_channel||'desconocido',
         pay:o.payment_method||'',
         paymentStatus:o.payment_status||'pendiente',
         addr:o.address||'',
