@@ -1,6 +1,6 @@
 /* Origen central de pedidos: celular y punto físico, sin duplicar pedidos. */
 (function(){
-  const CHANNELS={celular:'📱 Pedido por celular',punto_fisico:'🖥️ Pedido en punto físico',desconocido:'Origen anterior/no identificado'};
+  const CHANNELS={celular:'📱 Pedido por celular',punto_fisico:'🖥️ Pedido en punto físico',desconocido:'Origen por configurar'};
   function install(){
     const db=window.SP_DB;
     if(!db||typeof db.rpc!=='function'){setTimeout(install,400);return}
@@ -11,7 +11,7 @@
         const order={...args.p_order};
         let physical=false;
         try{physical=typeof window.isEmployeeOrderMode==='function'&&window.isEmployeeOrderMode()}catch(_){}
-        order.order_channel=physical?'punto_fisico':'celular';
+        order.order_channel=physical?'desconocido':'celular';
         args={...args,p_order:order};
       }
       return original(name,args,options);
@@ -28,7 +28,7 @@
       const orderNo=card.querySelector('b')?.textContent?.trim();
       if(!orderNo)return;
       let order=null;
-      try{order=(JSON.parse(localStorage.getItem('sp_premium_orders_v1')||'[]')).find(x=>String(x.no)===orderNo)}catch(_){}
+      try{order=(JSON.parse(localStorage.getItem('sp_premium_orders_v2')||'[]')).find(x=>String(x.no)===orderNo)}catch(_){}
       if(!order)return;
       const channel=order.orderChannel||'desconocido';
       const line=document.createElement('div');line.className='spOrderChannel';
