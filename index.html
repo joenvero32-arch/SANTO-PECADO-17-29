@@ -2667,7 +2667,7 @@ async function adminCash(){
   const unattributedTotal=unattributedSales.reduce((a,o)=>a+Number(o.total||0),0);
   let expenses=[]; try{expenses=await spGetCashExpenses(today)}catch(e){console.warn('Gastos de hoy no disponibles:',e.message||e)}
   // Mostrar todos los gastos del día por separado, incluso si aún no se abrió caja.
-  const dayExpenses=expenses.filter(x=>dayKey(x.expense_date||x.created_at||x.createdAt||x.date||today)===today);
+  const dayExpenses=expenses.filter(x=>{const d=String(x.expense_date||'').slice(0,10);return d?d===today:dayKey(x.created_at||x.createdAt||x.date||today)===today});
   // Solo gastos posteriores a la apertura vigente se descuentan del efectivo de esta caja.
   const sessionExpenses=expenses.filter(x=>!!openingRecord&&(!sessionStart||new Date(x.created_at||x.createdAt||x.date||0).getTime()>sessionStart));
   const expensesTotal=dayExpenses.reduce((a,x)=>a+Number(x.amount||0),0);
