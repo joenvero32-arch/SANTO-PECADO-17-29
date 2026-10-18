@@ -2823,11 +2823,31 @@ function confirmOpenCash(day){
   const raw=String(input?.value??'').trim();
   const opening=Number(raw);
   if(!raw||!Number.isFinite(opening)||opening<0){alert('Ingresa una base inicial válida, igual o mayor que $0.');input?.focus();return}
-  if(!confirm('¿Confirmas la apertura de caja con una base inicial de '+money(opening)+'?'))return;
+  const panel=document.getElementById('panel');
+  panel.innerHTML=`
+    <div class="panelHead"><h2>🔐 Confirmar apertura</h2><button class="close" onclick="openCash('${String(day).replace(/'/g,"\\'")}')">✕</button></div>
+    <div class="adminItem" style="text-align:center;padding:24px 16px;border:1px solid #b88b2c;border-radius:20px;background:linear-gradient(145deg,#191710,#101010)">
+      <div style="font-size:38px;margin-bottom:10px">💵</div>
+      <div style="color:#aaa;font-size:14px">BASE INICIAL DE EFECTIVO</div>
+      <div style="font-size:34px;font-weight:900;color:#ffd35a;margin:8px 0 16px">${money(opening)}</div>
+      <div class="muted">Usuario: <b>${esc(cashUserLabel())}</b></div>
+      <div class="muted">Fecha y hora: ${new Date().toLocaleString('es-CO')}</div>
+    </div>
+    <div class="notice" style="margin:14px 0">Al confirmar, comienza un nuevo turno. Las ventas, gastos y cierres anteriores se conservan.</div>
+    <div class="adminActions" style="display:flex;gap:10px">
+      <button class="mini" style="flex:1" onclick="openCash('${String(day).replace(/'/g,"\\'")}')">← Volver</button>
+      <button class="primary" style="flex:1" onclick="finalizeOpenCash('${String(day).replace(/'/g,"\\'")}',${opening})">✓ Sí, abrir caja</button>
+    </div>`;
+  document.getElementById('modal').classList.add('open');
+}
+function finalizeOpenCash(day,opening){
+  if(!can('allowCash')){alert('Tu usuario no tiene permiso para operar caja.');return}
+  if(!Number.isFinite(Number(opening))||Number(opening)<0){alert('Base inicial no válida.');return}
   const previousClosures=cashClosures.filter(c=>c.day===day&&c.type!=='apertura'&&cashOwns(c)).sort((a,b)=>new Date(b.date)-new Date(a.date));
   const lastCloseAt=previousClosures[0]?new Date(previousClosures[0].date).getTime():0;
   const existing=cashClosures.find(c=>c.day===day&&c.type==='apertura'&&cashOwns(c)&&(!lastCloseAt||new Date(c.date).getTime()>lastCloseAt));
   if(existing){alert('Ya existe una apertura vigente para este usuario.');if(isAdmin())adminCash();else employeeCash();return}
+  opening=Number(opening);
   cashClosures.unshift({id:Date.now(),day,type:'apertura',opening,date:new Date().toISOString(),user:cashUserLabel(),userKey:cashUserKey(),sessionId:'cash-'+cashUserKey()+'-'+Date.now()});
   auditLog('Apertura de caja','Base inicial '+money(opening)); save();
   if(isAdmin()) adminCash(); else employeeCash();
