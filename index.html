@@ -2793,8 +2793,41 @@ function openCash(day){
   const lastCloseAt=previousClosures[0]?new Date(previousClosures[0].date).getTime():0;
   const existing=cashClosures.find(c=>c.day===day&&c.type==='apertura'&&cashOwns(c)&&(!lastCloseAt||new Date(c.date).getTime()>lastCloseAt));
   if(existing){alert('Tu caja de hoy ya tiene una apertura registrada. Debes cerrar esa sesión antes de abrir otra.');return}
-  const raw=prompt('Base inicial de efectivo en caja:', '0'); if(raw===null)return;
-  const opening=Number(raw.replace(/[^0-9.-]/g,'')); if(!Number.isFinite(opening)||opening<0){alert('Valor no válido.');return}
+  const panel=document.getElementById('panel');
+  panel.innerHTML=`
+    <div class="panelHead"><h2>🔓 Apertura de caja</h2><button class="close" onclick="adminCash()">✕</button></div>
+    <div class="notice" style="margin:12px 0">Vas a iniciar un turno nuevo. Los cierres anteriores, ventas y gastos se conservarán.</div>
+    <div class="adminItem" style="padding:18px;border:1px solid #b88b2c;border-radius:18px;background:linear-gradient(145deg,#171717,#101010)">
+      <label for="spCashOpeningAmount" style="display:block;color:#f5cc57;font-weight:800;margin-bottom:10px">Base inicial de efectivo</label>
+      <div style="display:flex;align-items:center;gap:10px;border:1px solid #514323;border-radius:14px;padding:12px;background:#090909">
+        <span style="color:#f5cc57;font-size:22px;font-weight:900">$</span>
+        <input id="spCashOpeningAmount" type="number" min="0" step="1000" inputmode="numeric" value="0" style="width:100%;min-width:0;background:transparent;border:0;outline:none;color:#fff;font-size:26px;font-weight:900" />
+      </div>
+      <div class="muted" style="margin-top:8px">Ingresa el dinero que realmente quedará en la caja al comenzar.</div>
+    </div>
+    <div class="cashGrid" style="margin-top:12px">
+      <div class="cashCard"><small>📅 Fecha</small><b>${new Date().toLocaleDateString('es-CO')}</b></div>
+      <div class="cashCard"><small>🕒 Hora</small><b>${new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})}</b></div>
+      <div class="cashCard"><small>👤 Usuario</small><b>${esc(cashUserLabel())}</b></div>
+    </div>
+    <div class="adminActions" style="display:flex;gap:10px;margin-top:16px">
+      <button class="mini" style="flex:1" onclick="adminCash()">Cancelar</button>
+      <button class="primary" style="flex:1" onclick="confirmOpenCash('${String(day).replace(/'/g,"\\'")}')">✓ Confirmar apertura</button>
+    </div>`;
+  document.getElementById('modal').classList.add('open');
+  setTimeout(()=>document.getElementById('spCashOpeningAmount')?.focus(),100);
+}
+function confirmOpenCash(day){
+  if(!can('allowCash')){alert('Tu usuario no tiene permiso para operar caja.');return}
+  const input=document.getElementById('spCashOpeningAmount');
+  const raw=String(input?.value??'').trim();
+  const opening=Number(raw);
+  if(!raw||!Number.isFinite(opening)||opening<0){alert('Ingresa una base inicial válida, igual o mayor que $0.');input?.focus();return}
+  if(!confirm('¿Confirmas la apertura de caja con una base inicial de '+money(opening)+'?'))return;
+  const previousClosures=cashClosures.filter(c=>c.day===day&&c.type!=='apertura'&&cashOwns(c)).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const lastCloseAt=previousClosures[0]?new Date(previousClosures[0].date).getTime():0;
+  const existing=cashClosures.find(c=>c.day===day&&c.type==='apertura'&&cashOwns(c)&&(!lastCloseAt||new Date(c.date).getTime()>lastCloseAt));
+  if(existing){alert('Ya existe una apertura vigente para este usuario.');if(isAdmin())adminCash();else employeeCash();return}
   cashClosures.unshift({id:Date.now(),day,type:'apertura',opening,date:new Date().toISOString(),user:cashUserLabel(),userKey:cashUserKey(),sessionId:'cash-'+cashUserKey()+'-'+Date.now()});
   auditLog('Apertura de caja','Base inicial '+money(opening)); save();
   if(isAdmin()) adminCash(); else employeeCash();
