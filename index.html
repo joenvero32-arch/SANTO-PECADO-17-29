@@ -2534,7 +2534,10 @@ function adminDashboard(){
 }
 async function getBusinessExpenses(from,to){
   if(!SP_DB_ON||!SP_DB?.rpc)return [];
-  const r=await SP_DB.rpc('sp_get_business_expenses',{p_from:from||null,p_to:to||null});
+  if(!currentUser||currentUser.role!=='admin'||!currentUser.user)throw new Error('Acceso de administrador requerido. Cierra sesión y vuelve a entrar con el PIN de dueño.');
+  const pinHash=currentUser.pinHash||(currentUser.pin?await spSha256(currentUser.pin):'');
+  if(!pinHash)throw new Error('No se pudo validar el PIN de administrador. Vuelve a iniciar sesión.');
+  const r=await SP_DB.rpc('sp_get_business_expenses_by_pin',{p_username:String(currentUser.user),p_pin_sha256:String(pinHash),p_from:from||null,p_to:to||null});
   if(r.error)throw r.error;
   return r.data||[];
 }
@@ -2590,7 +2593,10 @@ async function addBusinessExpense(){
     setTimeout(()=>category.focus(),60);
   });
   if(!data)return;
-  const r=await SP_DB.rpc('sp_add_business_expense',{p_expense_date:dayKey(new Date()),p_expense_type:data.type,p_category:data.category,p_description:data.description,p_employee_name:data.type==='Nómina'?(data.employee||null):null,p_payment_method:data.payment,p_amount:data.amount,p_notes:data.notes||null});
+  if(!currentUser||currentUser.role!=='admin'||!currentUser.user){alert('Acceso de administrador requerido. Cierra sesión y vuelve a entrar con el PIN de dueño.');return}
+  const pinHash=currentUser.pinHash||(currentUser.pin?await spSha256(currentUser.pin):'');
+  if(!pinHash){alert('No se pudo validar el PIN de administrador. Vuelve a iniciar sesión.');return}
+  const r=await SP_DB.rpc('sp_add_business_expense_by_pin',{p_username:String(currentUser.user),p_pin_sha256:String(pinHash),p_expense_date:dayKey(new Date()),p_expense_type:data.type,p_category:data.category,p_description:data.description,p_employee_name:data.type==='Nómina'?(data.employee||null):null,p_payment_method:data.payment,p_amount:data.amount,p_notes:data.notes||null});
   if(r.error){alert('No se pudo registrar: '+r.error.message);return}
   auditLog('Registro de '+data.type,data.category+' · '+data.description+' · '+money(data.amount));
   alert('REGISTRO GUARDADO\n'+data.type+' · '+money(data.amount)+' · '+data.payment);
