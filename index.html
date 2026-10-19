@@ -4300,19 +4300,22 @@ function saveSettings(){
     try{if(typeof spStatusPollTimer!=='undefined'&&spStatusPollTimer){clearInterval(spStatusPollTimer);spStatusPollTimer=null;}}catch(e){}
     try{
       if(typeof currentUser!=='undefined'&&currentUser){
-        if(currentUser.role==='admin'&&typeof adminProducts==='function'){
-          adminProducts();return;
-        }
-        // Para empleados autenticados por PIN, volver a Administración significa
-        // regresar al panel operativo; no debe pedir el PIN otra vez.
-        if(typeof adminDashboard==='function'){
+        // Solo dueño/administrador principal puede abrir el resumen general.
+        if(typeof isAdmin==='function'&&isAdmin()&&typeof adminDashboard==='function'){
           adminDashboard();return;
         }
-        if(currentUser.allowOrders&&typeof adminOrders==='function'){
+        // Empleados: volver al panel operativo permitido, sin solicitar PIN de nuevo.
+        if(typeof can==='function'&&can('allowOrders')&&typeof adminOrders==='function'){
           adminOrders();return;
         }
-        if(currentUser.allowCash&&typeof employeeCash==='function'){
+        if(typeof can==='function'&&can('allowCash')&&typeof employeeCash==='function'){
           employeeCash();return;
+        }
+        if(typeof can==='function'&&can('allowDomicilios')&&typeof adminDomicilios==='function'){
+          adminDomicilios();return;
+        }
+        if(typeof can==='function'&&can('allowInventory')&&typeof adminInventory==='function'){
+          adminInventory();return;
         }
       }
     }catch(e){}
