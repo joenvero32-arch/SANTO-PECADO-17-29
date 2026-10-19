@@ -2649,11 +2649,30 @@ function renderBusinessExpenses(list,view){
   html+='<div class="statgrid dashGrid"><div class="stat"><small>'+ (view==='today'?'Total de hoy':'Últimos 30 días') +'</small><b>'+money(total)+'</b></div><div class="stat"><small>Nómina</small><b>'+money(payroll)+'</b></div><div class="stat"><small>Otros gastos</small><b>'+money(other)+'</b></div></div>';
   html+='<div class="notice">Los registros de nómina y gastos se descuentan en el resumen del cierre.</div><div class="adminActions"><button class="primary" onclick="addBusinessExpense()">➕ Registrar nómina/gasto</button>';
   html+=view==='today'?'<button class="mini" onclick="adminExpensesHistory()">📅 Ver historial de 30 días</button>':'<button class="mini" onclick="adminExpenses()">↩ Ver solo los gastos de hoy</button>';
+  html+='<button class="mini" onclick="printBusinessExpenseReceipts(\'purchases\',\''+view+'\')">🖨️ Imprimir compras y gastos</button><button class="mini" onclick="printBusinessExpenseReceipts(\'payroll\',\''+view+'\')">🖨️ Imprimir nómina</button>';
   html+='</div><div class="dashSection"><h3>'+title+'</h3>';
   html+=list.map(x=>'<div class="adminItem"><b>'+esc(x.expense_type)+' · '+money(x.amount)+'</b><br>'+esc(x.category)+' · '+esc(x.description)+'<br><span class="muted">'+(x.employee_name?esc(x.employee_name)+' · ':'')+esc(x.payment_method)+'</span></div>').join('');
   if(!list.length)html+='<div class="empty">'+(view==='today'?'No hay gastos registrados hoy.':'No hay registros en los últimos 30 días.')+'</div>';
   html+='</div>';
   document.getElementById('panel').innerHTML=html; document.getElementById('modal').classList.add('open');
+}
+async function printBusinessExpenseReceipts(kind,view){
+  if(!isAdmin()){alert('Solo el administrador o dueño puede imprimir estos registros.');return}
+  const today=dayKey(new Date());
+  const from=view==='today'?today:dayKey(new Date(Date.now()-29*86400000));
+  let list=[];
+  try{list=await getBusinessExpenses(from,today)}catch(e){alert('No se pudieron consultar los registros para imprimir: '+(e?.message||e));return}
+  const isPayroll=x=>String(x.expense_type||'').trim().toLowerCase()==='nómina';
+  const isPurchase=x=>/compra|proveedor/i.test(String(x.category||'')+' '+String(x.description||''));
+  const rows=list.filter(x=>kind==='payroll'?isPayroll(x):(!isPayroll(x)&&isPurchase(x)));
+  const title=kind==='payroll'?'NÓMINA Y PAGOS A TRABAJADORES':'COMPRAS Y GASTOS A PROVEEDORES';
+  const total=rows.reduce((a,x)=>a+Number(x.amount||0),0);
+  const escHtml=v=>esc(String(v??''));
+  const body=rows.length?rows.map(x=>'<tr><td>'+escHtml(x.expense_date||x.created_at||x.date||'')+'</td><td>'+escHtml(x.category||'')+'</td><td>'+escHtml(x.description||'')+(x.employee_name?' · '+escHtml(x.employee_name):'')+'</td><td>'+escHtml(x.payment_method||'')+'</td><td class="num">'+money(x.amount)+'</td></tr>').join(''):'<tr><td colspan="5">No hay registros para este periodo.</td></tr>';
+  const w=window.open('','_blank');
+  if(!w){alert('El navegador bloqueó la ventana de impresión. Permite ventanas emergentes para este sitio.');return}
+  w.document.write('<!doctype html><html lang="es"><head><meta charset="utf-8"><title>'+title+'</title><style>body{font:12px Arial,sans-serif;color:#111;margin:18px}h1{text-align:center;font-size:18px}p{text-align:center}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #aaa;padding:7px;text-align:left;vertical-align:top}.num{text-align:right;white-space:nowrap}.total{font-weight:bold;text-align:right;margin-top:14px}@page{margin:12mm}@media print{button{display:none}}</style></head><body><h1>SANTO PECADO 17-29</h1><p>'+title+'<br>Periodo: '+from+' a '+today+'<br>Generado: '+new Date().toLocaleString('es-CO')+'</p><table><thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción / trabajador</th><th>Pago</th><th>Valor</th></tr></thead><tbody>'+body+'</tbody></table><div class="total">TOTAL: '+money(total)+'</div><script>window.onload=()=>setTimeout(()=>window.print(),300);<\\/script></body></html>');
+  w.document.close();
 }
 async function adminCash(){
   if(!isAdmin()){alert('Solo el administrador o dueño puede consultar esta caja.');return}
