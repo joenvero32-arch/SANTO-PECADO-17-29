@@ -2652,7 +2652,7 @@ function renderBusinessExpenses(list,view){
   let html='<div class="panelHead"><h2>💸 Nómina y gastos</h2><button class="close" onclick="adminDashboard()">✕</button></div>';
   html+=navTabs('expenses');
   html+='<div class="statgrid dashGrid"><div class="stat"><small>'+ (view==='today'?'Total de hoy':'Últimos 30 días') +'</small><b>'+money(total)+'</b></div><div class="stat"><small>Nómina</small><b>'+money(payroll)+'</b></div><div class="stat"><small>Otros gastos</small><b>'+money(other)+'</b></div></div>';
-  html+='<div class="notice">Los registros de nómina y gastos se descuentan en el resumen del cierre.</div><div class="adminActions"><button class="primary" onclick="addBusinessExpense()">➕ Registrar nómina/gasto</button><button class="mini" onclick="printBusinessExpenseReceipts(\'Gasto\',\''+view+'\')">🖨️ Imprimir compras y gastos</button><button class="mini" onclick="printBusinessExpenseReceipts(\'Nómina\',\''+view+'\')">🖨️ Imprimir soportes de nómina</button>';
+  html+='<div class="notice">Los registros de nómina y gastos se descuentan en el resumen del cierre.</div><div class="adminActions"><button class="primary" onclick="addBusinessExpense()">➕ Registrar nómina/gasto</button>';
   html+=view==='today'?'<button class="mini" onclick="adminExpensesHistory()">📅 Ver historial de 30 días</button>':'<button class="mini" onclick="adminExpenses()">↩ Ver solo los gastos de hoy</button>';
   html+='</div><div class="dashSection"><h3>'+title+'</h3>';
   html+=list.map(x=>'<div class="adminItem"><b>'+esc(x.expense_type)+' · '+money(x.amount)+'</b><br>'+esc(x.category)+' · '+esc(x.description)+'<br><span class="muted">'+(x.employee_name?esc(x.employee_name)+' · ':'')+esc(x.payment_method)+'</span></div>').join('');
@@ -2660,29 +2660,7 @@ function renderBusinessExpenses(list,view){
   html+='</div>';
   document.getElementById('panel').innerHTML=html; document.getElementById('modal').classList.add('open');
 }
-async async function printBusinessExpenseReceipts(type,view){
-  if(!isAdmin()){alert('Solo el administrador o dueño puede imprimir soportes de gastos.');return}
-  const today=dayKey(new Date());
-  const from=view==='history'?dayKey(new Date(Date.now()-29*86400000)):today;
-  let records=[];
-  try{records=await getBusinessExpenses(from,today)}catch(e){alert('No se pudieron consultar los gastos: '+(e?.message||e));return}
-  records=records.filter(x=>String(x.expense_type||'').toLowerCase()===String(type).toLowerCase());
-  if(!records.length){alert(type==='Nómina'?'No hay registros de nómina en este periodo.':'No hay registros de gastos/compras en este periodo.');return}
-  const w=window.open('','_blank');
-  if(!w){alert('Chrome bloqueó la ventana de impresión. Permite ventanas emergentes para este sitio.');return}
-  const label=type==='Nómina'?'SOPORTE DE PAGO DE NÓMINA':'SOPORTE DE COMPRA / GASTO';
-  const moneySafe=n=>money(Number(n)||0);
-  const dateSafe=x=>String(x.expense_date||x.created_at||x.date||today).slice(0,10);
-  const safe=v=>String(v||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  w.document.open();
-  w.document.write('<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+label+' · Santo Pecado 17-29</title><style>*{box-sizing:border-box}body{font:12px Arial,sans-serif;color:#111;margin:0;padding:12mm;background:#fff}.receipt{max-width:760px;margin:0 auto 18px;padding:18px;border:1px solid #aaa;page-break-after:always;break-after:page}.brand{text-align:center;border-bottom:2px solid #111;padding-bottom:10px}.brand h1{font-size:20px;margin:0 0 5px}.brand h2{font-size:14px;margin:0}.meta{display:flex;justify-content:space-between;gap:12px;margin:14px 0}.line{margin:10px 0;padding:8px 0;border-bottom:1px solid #ddd}.amount{font-size:20px;font-weight:bold;text-align:right;margin:18px 0}.signatures{display:grid;grid-template-columns:1fr 1fr;gap:35px;margin-top:55px}.sig{border-top:1px solid #111;padding-top:7px;text-align:center;min-height:50px}.small{font-size:10px;color:#444}@page{size:A4;margin:10mm}@media print{body{padding:0}.receipt{border:1px solid #777;margin:0 auto 8mm}.receipt:last-child{page-break-after:auto;break-after:auto}}</style></head><body>');
-  records.forEach((x,i)=>{
-    w.document.write('<section class="receipt"><header class="brand"><h1>SANTO PECADO 17-29</h1><h2>'+label+'</h2><div class="small">Comprobante interno para archivo y firmas</div></header><div class="meta"><span>Fecha: '+safe(dateSafe(x))+'</span><span>Soporte '+(i+1)+' de '+records.length+'</span></div><div class="line"><b>Concepto / categoría:</b><br>'+safe(x.category)+'</div><div class="line"><b>Detalle:</b><br>'+safe(x.description)+'</div>'+(type==='Nómina'?'<div class="line"><b>Trabajador que recibe:</b><br>'+safe(x.employee_name||'________________________________')+'</div>':'<div class="line"><b>Compra realizada por:</b><br>________________________________</div>')+'<div class="line"><b>Medio de pago:</b> '+safe(x.payment_method)+'</div>'+(x.notes?'<div class="line"><b>Observaciones:</b><br>'+safe(x.notes)+'</div>':'')+'<div class="amount">Valor: '+moneySafe(x.amount)+'</div><div class="signatures"><div class="sig">'+(type==='Nómina'?'Firma del trabajador que recibe':'Firma de quien realizó la compra')+'<br><br>Nombre: __________________</div><div class="sig">Firma del responsable que paga / autoriza<br><br>Nombre: __________________</div></div><p class="small">Conserve este soporte junto con la factura o comprobante correspondiente.</p></section>');
-  });
-  w.document.write('<script>window.onload=()=>setTimeout(()=>window.print(),250)<\\/script></body></html>');
-  w.document.close();
-}
-function adminCash(){
+async function adminCash(){
   if(!isAdmin()){alert('Solo el administrador o dueño puede consultar esta caja.');return}
   const today=dayKey(new Date());
   const allTodayClosures=cashClosures.filter(c=>c.day===today&&c.type!=='apertura'&&cashOwns(c)).sort((a,b)=>new Date(b.date)-new Date(a.date));
