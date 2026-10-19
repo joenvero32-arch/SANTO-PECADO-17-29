@@ -1833,11 +1833,17 @@ function openStatusWhatsAppFromOrder(no,status){
 let spTrackRequestId=0;
 let spTrackPromptActive=false;
 function trackOrderFromHeader(){
-  // En sesión de dueño, Estado debe abrir el listado operativo completo,
-  // no el último pedido del navegador. Los clientes conservan su rastreo individual.
+  // En sesión administrativa, primero refrescar desde la base central y luego
+  // mostrar el listado de estados/pagos; no caer al LAST_ORDER del navegador.
   try{
-    if(typeof currentUser!=='undefined'&&currentUser&&currentUser.role==='admin'){
-      if(typeof adminOrders==='function'){adminOrders();return;}
+    if(typeof currentUser!=='undefined'&&currentUser&&
+       (currentUser.role==='admin'||currentUser.central) &&
+       typeof adminOrders==='function'){
+      Promise.resolve(adminOrders()).then(()=>trackOrder()).catch(e=>{
+        console.warn('No se pudo refrescar el listado central de pedidos:',e);
+        trackOrder();
+      });
+      return;
     }
   }catch(e){console.warn('No se pudo abrir el listado administrativo de pedidos:',e)}
   trackOrder();
