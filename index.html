@@ -1833,19 +1833,20 @@ function openStatusWhatsAppFromOrder(no,status){
 let spTrackRequestId=0;
 let spTrackPromptActive=false;
 function trackOrderFromHeader(){
-  // En sesión administrativa, primero refrescar desde la base central y luego
-  // mostrar el listado de estados/pagos; no caer al LAST_ORDER del navegador.
+  // En sesión administrativa, abrir el listado operativo completo.
+  // No llamar después a trackOrder(): ese rastreo individual reemplaza la lista
+  // central y deja visible únicamente el último pedido del navegador.
   try{
     if(typeof currentUser!=='undefined'&&currentUser&&
        (currentUser.role==='admin'||currentUser.central) &&
        typeof adminOrders==='function'){
-      Promise.resolve(adminOrders()).then(()=>trackOrder()).catch(e=>{
-        console.warn('No se pudo refrescar el listado central de pedidos:',e);
-        trackOrder();
+      Promise.resolve().then(()=>adminOrders()).catch(e=>{
+        console.warn('No se pudo abrir el listado central de pedidos:',e);
       });
       return;
     }
   }catch(e){console.warn('No se pudo abrir el listado administrativo de pedidos:',e)}
+  // Los clientes conservan el rastreo individual de su pedido.
   trackOrder();
 }
 async function trackOrder(noFromButton){
