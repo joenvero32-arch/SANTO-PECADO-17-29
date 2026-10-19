@@ -4305,6 +4305,9 @@ function saveSettings(){
         }
         // Para empleados autenticados por PIN, volver a Administración significa
         // regresar al panel operativo; no debe pedir el PIN otra vez.
+        if(typeof adminDashboard==='function'){
+          adminDashboard();return;
+        }
         if(currentUser.allowOrders&&typeof adminOrders==='function'){
           adminOrders();return;
         }
@@ -4320,8 +4323,10 @@ function saveSettings(){
     const panel=document.getElementById('panel');
     if(!panel)return;
     const status=panel.querySelector('.statusHero');
+    const heading=panel.querySelector('.panelHead h2');
+    const ordersView=!!heading&&heading.textContent.includes('Pedidos y estados');
     let b=document.getElementById('spAdminReturn');
-    if(!status){
+    if(!status&&!ordersView){
       if(b)b.remove();
       return;
     }
@@ -4334,7 +4339,8 @@ function saveSettings(){
       b.style.cssText='display:block;width:100%;box-sizing:border-box;margin:12px 0 4px;border:0;border-radius:16px;padding:14px 16px;background:linear-gradient(135deg,#ffdf54,#f7b928);color:#17120a;font-weight:900;font-size:16px;box-shadow:0 6px 22px #0005;cursor:pointer;touch-action:manipulation;';
       b.addEventListener('click',adminReturnClick);
     }
-    if(status.nextElementSibling!==b)status.insertAdjacentElement('afterend',b);
+    const anchor=status||panel.querySelector('.notice');
+    if(anchor&&anchor.nextElementSibling!==b)anchor.insertAdjacentElement('afterend',b);
   }
   function start(){
     placeAdminReturn();
