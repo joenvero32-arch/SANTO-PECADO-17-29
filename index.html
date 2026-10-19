@@ -1833,21 +1833,15 @@ function openStatusWhatsAppFromOrder(no,status){
 let spTrackRequestId=0;
 let spTrackPromptActive=false;
 function trackOrderFromHeader(){
-  // Usar el permiso efectivo, no solo el rol o el tipo de sesión:
-  // el dueño y los empleados autorizados deben abrir Estados/Pedidos,
-  // sin redirigir a la pantalla general de Administración.
+  // El botón superior Estado debe abrir la pantalla de estados, no el panel
+  // de Administración/Pedidos. trackOrder() ya distingue entre el listado
+  // operativo de usuarios autorizados y el rastreo individual de clientes.
   try{
-    if(typeof currentUser!=='undefined'&&currentUser&&can('allowOrders') &&
-       typeof adminOrders==='function'){
-      Promise.resolve().then(()=>adminOrders()).catch(e=>{
-        console.warn('No se pudo abrir el listado central de pedidos:',e);
-        trackOrder();
-      });
-      return;
-    }
-  }catch(e){console.warn('No se pudo abrir el listado administrativo de pedidos:',e)}
-  // Clientes y usuarios sin permiso conservan el rastreo individual.
-  trackOrder();
+    trackOrder();
+  }catch(e){
+    console.error('No se pudo abrir Estado del pedido:',e);
+    alert('No se pudo abrir Estado. Recarga la página e inténtalo de nuevo.');
+  }
 }
 async function trackOrder(noFromButton){
   const requestId=++spTrackRequestId;
