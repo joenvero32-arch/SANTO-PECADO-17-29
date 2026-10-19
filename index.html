@@ -3951,11 +3951,14 @@ async function adminOrders(){
       }
     }
   }
+  // Mostrar solo pedidos que aún requieren gestión. No borrar ni modificar
+  // los pedidos pagados en Supabase ni en el historial local de ventas.
+  const activeOrders=a.filter(o=>String(o.paymentStatus||'').trim().toLowerCase()!=='pagado');
   document.getElementById('panel').innerHTML=`
     <div class="panelHead"><h2>📋 Pedidos</h2><button class="close" onclick="closeModal()">✕</button></div>
     ${navTabs('orders')}
     <div class="modalBtns" style="margin:10px 0">${isAdmin()?'<button class="secondary" onclick="adminOrders()">🔄 Actualizar desde Supabase</button>':''}<button class="secondary" onclick="logoutUser()">Cerrar sesión</button></div>
-    ${a.length ? a.map(o => {
+    ${activeOrders.length ? activeOrders.map(o => {
       const list=statusList(o), current=o.status||'recibido';
       const driverInfo=o.type==='Domicilio'
         ? '<br>🛵 <b>Domiciliario:</b> '+esc(o.driverName||'Sin asignar')+(o.driverPhone?' · '+esc(o.driverPhone):'')
