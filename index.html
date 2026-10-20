@@ -4077,10 +4077,6 @@ async function adminOrders(){
           👤 ${esc(o.name)} · 📞 ${esc(o.phone)}<br>
           🚚 ${esc(o.type)} · 💳 ${esc(o.pay)}${driverInfo}<br>
           <div class="muted">${new Date(o.created).toLocaleString('es-CO')}</div>
-          <div style="margin:12px 0;padding:13px 14px;border:1px solid rgba(247,185,40,.42);border-radius:12px;background:rgba(247,185,40,.07)">
-            <div style="font-size:12px;font-weight:900;letter-spacing:.6px;color:#f7c94b;margin-bottom:7px">🛒 PEDIDO DEL CLIENTE</div>
-            <div style="white-space:pre-line;line-height:1.55;font-size:14px;font-weight:650">${esc(String(o.detail||'').trim()||'Detalle de productos no disponible en esta consulta.')}</div>
-          </div>
           ${statusMarkup(o)}
           <div class="statusActions">${statusButtons}</div>
           <div class="statusActions">
