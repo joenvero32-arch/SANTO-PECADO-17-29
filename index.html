@@ -4589,5 +4589,48 @@ function saveSettings(){
   window.alert=spNotice;
 })();
 </script>
+
+<!-- SP_PUBLIC_CATALOG_RECOVERY_GUARD_20261020 -->
+<script>
+/* Recuperación segura de la vitrina pública: solo lectura local + render; no escribe en Supabase. */
+(function(){
+  let attempted=false;
+  async function recoverPublicCatalog(){
+    if(attempted)return;
+    attempted=true;
+    try{
+      const menu=document.getElementById('products');
+      const catBar=document.getElementById('cats');
+      if(!menu||!catBar)return;
+      if(menu.querySelector('.card'))return;
+      const search=document.getElementById('search');
+      if(search)search.value='';
+      if(typeof currentCat!=='undefined')currentCat='Todos';
+      try{
+        const savedProducts=JSON.parse(localStorage.getItem('sp_premium_products_v2')||'null');
+        if(Array.isArray(savedProducts)&&savedProducts.length&&typeof products!=='undefined'&&(!Array.isArray(products)||!products.length||!products.some(p=>p&&p.active!==false))){
+          products=savedProducts;
+        }
+      }catch(e){console.warn('No se pudo leer el respaldo local de productos:',e)}
+      try{
+        const savedCategories=JSON.parse(localStorage.getItem('sp_premium_categories_v2')||'null');
+        if(Array.isArray(savedCategories)&&savedCategories.length&&typeof categories!=='undefined'&&(!Array.isArray(categories)||!categories.length)){
+          categories=savedCategories;
+        }
+      }catch(e){console.warn('No se pudo leer el respaldo local de categorías:',e)}
+      if(typeof window.loadPublicCatalog==='function'){
+        try{await window.loadPublicCatalog()}catch(e){console.warn('Catálogo central sigue pendiente; se usa respaldo disponible:',e)}
+      }
+      if(typeof currentCat!=='undefined')currentCat='Todos';
+      if(typeof render==='function')render();
+      if(!menu.querySelector('.card'))console.error('El catálogo público continúa vacío tras el intento de recuperación.');
+    }catch(e){console.error('Error en recuperación de vitrina pública:',e)}
+  }
+  function scheduleRecovery(){setTimeout(recoverPublicCatalog,1800)}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',scheduleRecovery,{once:true});
+  else scheduleRecovery();
+  window.addEventListener('load',scheduleRecovery,{once:true});
+})();
+</script>
 </body>
 </html>
