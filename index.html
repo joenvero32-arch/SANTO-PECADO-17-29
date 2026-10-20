@@ -4024,9 +4024,25 @@ async function adminOrders(){
       const localPinHash = localAdmin?.pinHash || currentUser?.pinHash;
       const localUser = localAdmin?.user || currentUser?.user;
       if(currentUser?.central){
-        // La sesión central del dueño ya está autenticada; usar el RPC central
-        // antes que credenciales PIN locales que pueden estar desactualizadas.
+        // El acceso central de la aplicación puede ser una sesión local por PIN,
+        // sin auth.uid() de Supabase. Si la RPC autenticada falla, validar con
+        // las credenciales PIN/hash que ya usa el sistema, sin abrir permisos.
         ({data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders'));
+        if(error){
+          let savedSession=null;
+          try{savedSession=JSON.parse(sessionStorage.getItem(SESSION)||'null')}catch(_){}
+          const username=localUser||savedSession?.user||sessionStorage.getItem('sp_validated_pin_username')||null;
+          const pinHash=localPinHash||savedSession?.pinHash||sessionStorage.getItem('sp_validated_pin_hash')||null;
+          const pin=localPin||savedSession?.pin||currentUser?.pin||null;
+          let retry=null;
+          if(username&&pinHash){
+            retry=await SP_DB.rpc('sp_get_admin_orders_hash',{p_username:username,p_pin_sha256:pinHash});
+          }
+          if(retry?.error&&username&&pin){
+            retry=await SP_DB.rpc('sp_get_admin_orders_pin',{p_username:username,p_pin:pin});
+          }
+          if(retry&&!retry.error){centralOrders=retry.data;error=null;}
+        }
       }else if(currentUser?.role==='admin' && localUser && localPinHash){
         ({data:centralOrders,error}=await SP_DB.rpc('sp_get_admin_orders_hash',{
           p_username:localUser,
