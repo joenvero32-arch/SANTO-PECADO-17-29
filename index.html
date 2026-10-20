@@ -3692,6 +3692,11 @@ function showPaymentConfirmation(order){
       <div style="background:#ffffff08;border:1px solid #ffffff12;border-radius:14px;padding:13px 15px;margin-bottom:18px"><div style="font-size:12px;color:#bcb6a8">PEDIDO</div><strong style="font-size:17px">${esc(order.no)}</strong><div style="font-size:13px;color:#c8c3b8;margin-top:3px">${esc(order.name||'Cliente')}</div><div style="font-size:23px;font-weight:900;color:#f7c94b;margin-top:7px">${esc(money(order.total||0))}</div></div>
       <label for="spPaymentMethod" style="display:block;font-size:13px;font-weight:800;margin-bottom:7px;color:#e9e3d5">MEDIO DE PAGO</label>
       <select id="spPaymentMethod" style="width:100%;padding:13px 14px;border-radius:12px;background:#0d0d0d;color:#fff;border:1px solid #4c4433;font:inherit;outline-color:#f7b928">${methods.map(m=>`<option value="${esc(m)}" ${m===selected?'selected':''}>${esc(m)}</option>`).join('')}</select>
+      <div id="spCashReceivedWrap" style="margin-top:16px">
+        <label for="spCashReceived" style="display:block;font-size:13px;font-weight:800;margin-bottom:7px;color:#e9e3d5">¿CON CUÁNTO PAGA?</label>
+        <input id="spCashReceived" type="number" min="0" step="1" inputmode="numeric" placeholder="Ej. 50000" style="width:100%;box-sizing:border-box;padding:13px 14px;border-radius:12px;background:#0d0d0d;color:#fff;border:1px solid #4c4433;font:inherit">
+        <div id="spCashChange" style="margin-top:8px;padding:11px 12px;border-radius:10px;background:#ffffff08;color:#f7c94b;font-weight:900">Devuelta: $0</div>
+      </div>
       <label for="spPaymentNote" style="display:block;font-size:13px;font-weight:800;margin:16px 0 7px;color:#e9e3d5">NOTA (OPCIONAL)</label>
       <textarea id="spPaymentNote" rows="2" placeholder="Añade una observación si hace falta" style="width:100%;resize:vertical;padding:12px 14px;border-radius:12px;background:#0d0d0d;color:#fff;border:1px solid #4c4433;font:inherit">${'Pago recibido y pedido entregado'}</textarea>
       <div style="font-size:12px;line-height:1.45;color:#bdb7aa;margin-top:12px">Al continuar se registrará el pago de este pedido una sola vez. El estado de preparación o entrega se conservará.</div>
@@ -3701,13 +3706,85 @@ function showPaymentConfirmation(order){
     const finish=value=>{overlay.remove();resolve(value)};
     overlay.querySelector('[data-cancel]').addEventListener('click',()=>finish(null));
     overlay.addEventListener('click',e=>{if(e.target===overlay)finish(null)});
+    const methodEl=overlay.querySelector('#spPaymentMethod');
+    const receivedEl=overlay.querySelector('#spCashReceived');
+    const changeEl=overlay.querySelector('#spCashChange');
+    const totalDue=Math.max(0,Number(order.total)||0);
+    const updateChange=()=>{
+      const isCash=methodEl.value.toLowerCase()==='efectivo';
+      overlay.querySelector('#spCashReceivedWrap').style.display=isCash?'block':'none';
+      const received=Math.max(0,Number(receivedEl.value)||0);
+      changeEl.textContent='Devuelta: '+money(Math.max(0,received-totalDue));
+      changeEl.style.color=received<totalDue?'#ff8c8c':'#f7c94b';
+    };
+    methodEl.addEventListener('change',updateChange);
+    receivedEl.addEventListener('input',updateChange);
+    updateChange();
     overlay.querySelector('[data-accept]').addEventListener('click',()=>{
-      const method=overlay.querySelector('#spPaymentMethod').value;
-      const note=overlay.querySelector('#spPaymentNote').value.trim();
+      const method=methodEl.value;
+      let note=overlay.querySelector('#spPaymentNote').value.trim();
+      const isCash=method.toLowerCase()==='efectivo';
+      const received=Math.max(0,Number(receivedEl.value)||0);
       if(!method){return}
-      finish({method,note});
+      if(isCash && received<totalDue){
+        alert('El dinero recibido no alcanza para cubrir el total del pedido.');
+        receivedEl.focus();
+        return;
+      }
+      const change=isCash?Math.max(0,received-totalDue):0;
+      if(isCash) note=(note?note+' · ':'')+'Efectivo recibido: '+money(received)+' · Devuelta: '+money(change);
+      finish({method,note,cashReceived:isCash?received:null,cashChange:change});
     });
   });
+}
+async function correctPendingOrderTotal(no){
+  if(!can('allowOrders')){alert('Tu usuario no tiene permiso para corregir pedidos.');return}
+  const key=String(no||'').trim();
+  const orders=JSON.parse(localStorage.getItem(ORDERS)||'[]');
+  const o=orders.find(x=>String(x.no)===key);
+  if(!o){alert('Pedido no encontrado.');return}
+  if(String(o.paymentStatus||'').toLowerCase()!=='pendiente'||['entregado','cancelado'].includes(String(o.status||'').toLowerCase())){
+    alert('Solo se puede corregir un pedido pendiente de pago que no esté entregado ni cancelado.');return;
+  }
+  const value=prompt('Pedido '+o.no+'\nTotal actual: '+money(o.total)+'\n\nEscribe el TOTAL CORRECTO del pedido, solo números:');
+  if(value===null)return;
+  const newTotal=Number(String(value).replace(/[^0-9.,-]/g,'').replace(/\.(?=.*\.)/g,'').replace(',','.'));
+  if(!Number.isFinite(newTotal)||newTotal<0){alert('Ingresa un total válido.');return}
+  if(newTotal===Number(o.total)){alert('El total nuevo es igual al actual; no se hizo ningún cambio.');return}
+  const reason=prompt('Indica el motivo de la corrección del pedido '+o.no+':');
+  if(reason===null)return;
+  if(!reason.trim()){alert('Debes indicar el motivo. No se hizo ningún cambio.');return}
+  if(!SP_DB_ON||!o.centralId){alert('No se puede corregir: no hay conexión o referencia central de Supabase.');return}
+  let result, authAdmin=false;
+  try{
+    const {data:{session}}=await SP_DB.auth.getSession();
+    if(session?.user?.id){
+      const {data:profile,error}=await SP_DB.from('app_users').select('role,active').eq('id',session.user.id).maybeSingle();
+      authAdmin=!error&&!!profile&&profile.active!==false&&profile.role==='admin';
+    }
+  }catch(_){}
+  const args={p_order_id:o.centralId,p_new_total:newTotal,p_reason:reason.trim()};
+  if(!authAdmin){
+    const localAdmin=((typeof users!=='undefined'&&Array.isArray(users))?users.find(x=>String(x.user||'').toLowerCase()===String(currentUser?.user||'').toLowerCase()):null)||currentUser;
+    let pinHash=currentUser?.pinHash||localAdmin?.pinHash||'';
+    const username=currentUser?.user||localAdmin?.user||'';
+    try{
+      const saved=JSON.parse(sessionStorage.getItem(SESSION)||'null');
+      pinHash=pinHash||sessionStorage.getItem('sp_validated_pin_hash')||saved?.pinHash||'';
+      const savedUsername=sessionStorage.getItem('sp_validated_pin_username')||saved?.user||saved?.username||'';
+      if(!username&&savedUsername)args.p_username=savedUsername;else args.p_username=username;
+    }catch(_){args.p_username=username}
+    if(!args.p_username||!pinHash){alert('No se encontró la validación PIN. Cierra sesión e ingresa nuevamente.');return}
+    args.p_pin_sha256=pinHash;
+  }
+  try{
+    const {data,error}=await SP_DB.rpc('sp_correct_pending_order_total',args);
+    if(error)throw error;
+    const row=Array.isArray(data)?data[0]:data;
+    if(!row||String(row.payment_status).toLowerCase()!=='pendiente')throw new Error('Supabase no confirmó la corrección del pedido pendiente.');
+    alert('✅ PRECIO CORREGIDO\nPedido: '+row.order_number+'\nValor anterior: '+money(o.total)+'\nValor nuevo: '+money(row.total)+'\nMotivo: '+reason.trim()+'\n\nSe conservó el mismo número de pedido y se registró la auditoría.');
+    await adminOrders();
+  }catch(e){console.error('Corrección de pedido:',e);alert('No se pudo corregir el pedido: '+(e?.message||'error desconocido'))}
 }
 const SP_PAYMENT_CONFIRMING=new Set();
 async function confirmOrderPayment(no){
@@ -3987,6 +4064,9 @@ async function adminOrders(){
       const paymentButton=paymentIsPaid
         ? '<button class="mini" disabled>✅ Venta registrada</button>'
         : `<button class="mini" data-no="${esc(o.no)}" onclick="confirmOrderPayment(this.dataset.no)">💰 Confirmar pago y entregar</button>`;
+      const correctPriceButton=(!paymentIsPaid && ['entregado','cancelado'].indexOf(String(o.status||'').toLowerCase())<0)
+        ? `<button class="mini" data-no="${esc(o.no)}" onclick="correctPendingOrderTotal(this.dataset.no)">✏️ Corregir total</button>`
+        : '';
       return `
         <div class="order">
           <b>${esc(o.no)}</b> · <b>${money(o.total)}</b><br>
@@ -3997,6 +4077,7 @@ async function adminOrders(){
           <div class="statusActions">${statusButtons}</div>
           <div class="statusActions">
             ${paymentButton}
+            ${correctPriceButton}
             <button class="mini" onclick="printOrder('${esc(o.no)}')">🧾 Soporte</button>
             <button class="mini" onclick="printComanda('${esc(o.no)}')">🍳 Comanda cocina</button>
             <button class="mini" onclick="registerOrderIncident('${esc(o.no)}','cambio')">📝 Registrar cambio</button>
