@@ -3362,10 +3362,13 @@ async function adminSalesByProduct(){
           }
         }catch(_){}
         if(!authAdmin){
-          const u=((typeof users!=='undefined'&&Array.isArray(users))?users.find(x=>String(x.user||'').toLowerCase()===String(currentUser?.user||'').toLowerCase()):null)||currentUser;
-          args.p_username=u?.user||currentUser?.user||null;
-          args.p_pin=u?.pin||currentUser?.pin||null;
-          if(!args.p_username||!args.p_pin)throw new Error('No se encontró la validación de administrador. Vuelve a entrar con tu PIN.');
+          let spSession=null;try{spSession=JSON.parse(sessionStorage.getItem('sp_premium_session_v1')||'null')}catch(_){}
+          const u=((typeof users!=='undefined'&&Array.isArray(users))?users.find(x=>String(x.user||'').toLowerCase()===String(currentUser?.user||spSession?.user||'').toLowerCase()):null)||currentUser||{};
+          args.p_username=u?.user||spSession?.user||null;
+          // La sesión local conserva el SHA-256 del PIN, no el PIN en texto plano.
+          // La RPC valida este hash contra las credenciales activas en Supabase.
+          args.p_pin=spSession?.pinHash||u?.pin||null;
+          if(!args.p_username||!args.p_pin)throw new Error('No se encontró la validación de administrador. Cierra sesión y vuelve a entrar con tu PIN.');
         }
         const {data,error}=await SP_DB.rpc('sp_get_paid_order_items_for_product_report',args);
         if(error)throw error;
