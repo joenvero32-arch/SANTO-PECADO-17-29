@@ -3418,7 +3418,7 @@ async function adminSales(){
 async function adminSalesByDate(dateValue){
   if(!isAdmin()){alert('Solo el administrador o dueño puede consultar ventas por fecha.');return}
   const date=String(dateValue||'').trim();
-  if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)){alert('Selecciona una fecha válida.');return}
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){alert('Selecciona una fecha válida.');return}
   const panel=document.getElementById('panel');
   if(panel)panel.innerHTML='<div class="panelHead"><h2>📅 Ventas por fecha</h2><button class="close" onclick="adminSales()">✕</button></div><div class="notice">Consultando ventas centrales y productos…</div>';
   try{
