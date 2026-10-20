@@ -3352,7 +3352,22 @@ async function adminSalesByProduct(){
       orders=(Array.isArray(central)?central:[]).filter(o=>String(o.payment_status||'').trim().toLowerCase()==='pagado'&&dayKey(o.updated_at||o.created_at)===today);
       const ids=orders.map(o=>o.id).filter(Boolean);
       if(ids.length){
-        const {data,error}=await SP_DB.from('order_items').select('order_id,product_name,quantity,unit_price').in('order_id',ids);
+        const args={p_order_ids:ids,p_username:null,p_pin:null};
+        let authAdmin=false;
+        try{
+          const {data:{session}}=await SP_DB.auth.getSession();
+          if(session?.user?.id){
+            const {data:profile,error:profileError}=await SP_DB.from('app_users').select('role,active').eq('id',session.user.id).maybeSingle();
+            authAdmin=!profileError&&!!profile&&profile.active!==false&&profile.role==='admin';
+          }
+        }catch(_){}
+        if(!authAdmin){
+          const u=((typeof users!=='undefined'&&Array.isArray(users))?users.find(x=>String(x.user||'').toLowerCase()===String(currentUser?.user||'').toLowerCase()):null)||currentUser;
+          args.p_username=u?.user||currentUser?.user||null;
+          args.p_pin=u?.pin||currentUser?.pin||null;
+          if(!args.p_username||!args.p_pin)throw new Error('No se encontró la validación de administrador. Vuelve a entrar con tu PIN.');
+        }
+        const {data,error}=await SP_DB.rpc('sp_get_paid_order_items_for_product_report',args);
         if(error)throw error;
         items=Array.isArray(data)?data:[];
       }
