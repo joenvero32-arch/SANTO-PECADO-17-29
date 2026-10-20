@@ -3400,11 +3400,88 @@ async function adminSales(){
     }catch(e){console.warn('Registro de ventas central no disponible:',e);alert('No se pudieron consultar las ventas centrales: '+(e?.message||e))}
   }
   const totalSales=list.reduce((a,o)=>a+Number(o.total||0),0);
+  const today=dayKey(new Date());
   document.getElementById('panel').innerHTML=`
     <div class="panelHead"><h2>💰 Registro de ventas</h2><button class="close" onclick="adminProducts()">✕</button></div>
-    <div class="statgrid" style="margin:14px 0"><div class="stat"><small>Ventas</small><b>${list.length}</b></div><div class="stat"><small>Total</small><b>${money(totalSales)}</b></div></div>
+    <div class="statgrid" style="margin:14px 0"><div class="stat"><small>Ventas cargadas</small><b>${list.length}</b></div><div class="stat"><small>Total cargado</small><b>${money(totalSales)}</b></div></div>
+    <div class="adminItem" style="border-color:#8a6a25;background:linear-gradient(135deg,#191710,#111)">
+      <b style="display:block;margin-bottom:8px">📅 Consultar ventas por fecha</b>
+      <div class="muted" style="margin-bottom:10px">Elige un día para ver ventas, medios de pago y productos vendidos.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input id="spSalesDate" type="date" value="${today}" max="${today}" style="flex:1;min-width:150px;min-height:44px;padding:9px;border:1px solid #6b592c;border-radius:10px;background:#191813;color:#fff">
+        <button class="primary" onclick="adminSalesByDate(document.getElementById('spSalesDate').value)">Consultar fecha</button>
+      </div>
+    </div>
     ${list.length?list.slice(0,100).map(o=>`<div class="adminItem"><b>${esc(o.no||'Venta')}</b> · <b>${money(o.total)}</b><br><span class="muted">${new Date(o.date||0).toLocaleString('es-CO')} · ${esc(o.name||'')} · ${esc(o.pay||'')}</span>${SP_DB_ON?`<div class="modalBtns" style="margin-top:8px"><button class="mini" data-sale-no="${esc(o.no)}" onclick="spAnnulRegisteredSale(this.dataset.saleNo)">⛔ Anular venta</button></div>`:''}</div>`).join(''):'<div class="empty">No hay ventas registradas todavía.</div>'}`;
   document.getElementById('modal').classList.add('open');
+}
+async function adminSalesByDate(dateValue){
+  if(!isAdmin()){alert('Solo el administrador o dueño puede consultar ventas por fecha.');return}
+  const date=String(dateValue||'').trim();
+  if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)){alert('Selecciona una fecha válida.');return}
+  const panel=document.getElementById('panel');
+  if(panel)panel.innerHTML='<div class="panelHead"><h2>📅 Ventas por fecha</h2><button class="close" onclick="adminSales()">✕</button></div><div class="notice">Consultando ventas centrales y productos…</div>';
+  try{
+    let orders=[],items=[];
+    if(SP_DB_ON&&SP_DB){
+      let pinHash=String(currentUser?.pinHash||'');
+      if(!pinHash&&currentUser?.pin)pinHash=await spSha256(currentUser.pin);
+      try{const saved=JSON.parse(sessionStorage.getItem(SESSION)||'null');pinHash=pinHash||String(saved?.pinHash||sessionStorage.getItem('sp_validated_pin_hash')||'').trim()}catch(_){}
+      const username=String(currentUser?.user||currentUser?.username||'').trim();
+      const {data,error}=await SP_DB.rpc('sp_get_sales_for_date_by_pin',{p_username:username,p_pin_sha256:pinHash,p_date:date});
+      if(error)throw error;
+      orders=Array.isArray(data)?data:[];
+      const ids=orders.map(o=>o.order_id).filter(Boolean);
+      if(ids.length){
+        let authAdmin=false;
+        try{const {data:{session}}=await SP_DB.auth.getSession();if(session?.user?.id){const {data:profile,error:pe}=await SP_DB.from('app_users').select('role,active').eq('id',session.user.id).maybeSingle();authAdmin=!pe&&!!profile&&profile.active!==false&&profile.role==='admin'}}catch(_){}
+        let p_username=null,p_pin=null;
+        if(!authAdmin){
+          let spSession=null;try{spSession=JSON.parse(sessionStorage.getItem('sp_premium_session_v1')||'null')}catch(_){}
+          const u=((typeof users!=='undefined'&&Array.isArray(users))?users.find(x=>String(x.user||'').toLowerCase()===String(currentUser?.user||spSession?.user||'').toLowerCase()):null)||currentUser||{};
+          p_username=u?.user||spSession?.user||username;
+          p_pin=spSession?.pinHash||pinHash||u?.pin||null;
+          if(!p_username||!p_pin)throw new Error('No se encontró la validación de administrador. Cierra sesión y vuelve a entrar con el PIN de dueño.');
+        }
+        const ir=await SP_DB.rpc('sp_get_paid_order_items_for_product_report',{p_order_ids:ids,p_username,p_pin});
+        if(ir.error)throw ir.error;
+        items=Array.isArray(ir.data)?ir.data:[];
+      }
+    }else{
+      orders=salesForDay(date).map(o=>({order_id:o.centralId||o.orderId||o.no,order_number:o.no,sold_at:o.date||o.created,customer_name:o.name,payment_method:o.pay,total:o.total,order_type:o.order_type,payment_status:'pagado'}));
+      items=orders.flatMap(o=>{const sale=sales.find(x=>String(x.no)===String(o.order_number));return (sale?.items||[]).map(x=>({order_id:o.order_id,product_name:x.name||x.product_name||x.productName,quantity:x.qty||x.quantity||1,unit_price:x.unit_price??x.price??0}))});
+    }
+    orders.sort((a,b)=>new Date(a.sold_at||0)-new Date(b.sold_at||0));
+    const grouped={};items.forEach(x=>{const k=String(x.order_id);(grouped[k]||(grouped[k]=[])).push(x)});
+    const total=orders.reduce((sum,o)=>sum+Number(o.total||0),0);
+    const label=new Date(date+'T12:00:00').toLocaleDateString('es-CO',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+    window.__spSalesDateReport={date,orders,items,total,label};
+    const moneySafe=n=>money(Number(n)||0);
+    let html='<div class="panelHead"><div><div class="dashKicker">CONTROL FINANCIERO</div><h2>📅 Ventas por fecha</h2><div class="muted">'+esc(label)+'</div></div><button class="close" onclick="adminSales()">✕</button></div>';
+    html+='<div class="adminItem" style="border-color:#8a6a25"><div class="statgrid"><div class="stat"><small>Ventas</small><b>'+orders.length+'</b></div><div class="stat"><small>Total del día</small><b>'+moneySafe(total)+'</b></div></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="mini" onclick="adminSales()">← Volver a ventas</button><button class="primary" onclick="printSalesByDate()">🖨️ Imprimir en POS 80 mm</button></div></div>';
+    if(!orders.length)html+='<div class="empty">No hay ventas registradas para esta fecha.</div>';
+    html+=orders.map(o=>{
+      const productRows=grouped[String(o.order_id)]||[];
+      const details=productRows.length?'<div style="margin-top:9px;padding-top:9px;border-top:1px solid #38352c">'+productRows.map(x=>'<div style="display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:3px 0"><span>'+esc(String(x.quantity||0)+' × '+(x.product_name||'Producto'))+'</span><b>'+moneySafe(Number(x.quantity||0)*Number(x.unit_price||0))+'</b></div>').join('')+'</div>':'<div class="muted" style="margin-top:8px">Detalle de productos no disponible.</div>';
+      return '<div class="adminItem"><div class="adminTop"><b>'+esc(o.order_number||'Venta')+'</b><b>'+moneySafe(o.total)+'</b></div><span class="muted">'+new Date(o.sold_at||0).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})+' · '+esc(o.customer_name||'Cliente general')+' · '+esc(o.payment_method||'Sin registrar')+'</span>'+details+'</div>';
+    }).join('');
+    if(panel)panel.innerHTML=html;
+    document.getElementById('modal').classList.add('open');
+  }catch(e){console.error('Ventas por fecha:',e);if(panel)panel.innerHTML='<div class="panelHead"><h2>📅 Ventas por fecha</h2><button class="close" onclick="adminSales()">✕</button></div><div class="notice">No se pudo consultar el reporte: '+esc(e?.message||e)+'</div><button class="mini" onclick="adminSales()">Volver</button>';document.getElementById('modal').classList.add('open')}
+}
+function printSalesByDate(){
+  if(!isAdmin()){alert('Solo el administrador o dueño puede imprimir este reporte.');return}
+  const r=window.__spSalesDateReport;
+  if(!r){alert('Primero consulta una fecha.');return}
+  const byOrder={};(r.items||[]).forEach(x=>{(byOrder[String(x.order_id)]||(byOrder[String(x.order_id)]=[])).push(x)});
+  const lines=(r.orders||[]).map((o,i)=>{
+    const details=(byOrder[String(o.order_id)]||[]).map(x=>'<div class="item">'+esc(String(x.quantity||0)+' x '+(x.product_name||'Producto'))+' <span>'+money(Number(x.quantity||0)*Number(x.unit_price||0))+'</span></div>').join('');
+    return '<section class="sale"><div class="head"><b>'+(i+1)+'. '+esc(o.order_number||'Venta')+'</b><b>'+money(o.total)+'</b></div><div class="muted">'+new Date(o.sold_at||0).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})+' · '+esc(o.customer_name||'Cliente general')+'</div><div class="muted">Pago: '+esc(o.payment_method||'Sin registrar')+'</div>'+details+'</section>';
+  }).join('');
+  const w=window.open('','_blank','width=420,height=700');
+  if(!w){alert('Chrome bloqueó la impresión. Permite ventanas emergentes para este sitio.');return}
+  w.document.write('<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ventas '+esc(r.date)+'</title><style>@page{size:80mm auto;margin:3mm}*{box-sizing:border-box}body{width:74mm;margin:0 auto;font:11px/1.35 monospace;color:#000}h1{text-align:center;font-size:15px;margin:0 0 4px}.center{text-align:center}.rule{border-top:1px dashed #000;margin:7px 0}.summary{font-size:13px;font-weight:bold;text-align:center;margin:6px 0}.sale{padding:5px 0;border-bottom:1px dashed #777}.head{display:flex;justify-content:space-between;gap:4px}.muted{font-size:10px;color:#333;margin-top:2px}.item{display:flex;justify-content:space-between;gap:3px;font-size:10px;padding:1px 0}.item span{white-space:nowrap}.foot{text-align:center;font-size:10px;margin-top:9px}@media screen{body{padding:5mm}}</style></head><body><h1>SANTO PECADO 17-29</h1><div class="center">REPORTE DE VENTAS</div><div class="center">'+esc(r.label)+'</div><div class="rule"></div><div class="summary">'+(r.orders||[]).length+' ventas · '+money(r.total)+'</div><div class="rule"></div>'+lines+'<div class="rule"></div><div class="summary">TOTAL DEL DÍA: '+money(r.total)+'</div><div class="foot">Reporte generado desde el sistema</div><script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script></body></html>');
+  w.document.close();
 }
 async function adminTodaySales(){
   if(!isAdmin()){alert('Solo el administrador o dueño puede consultar las ventas del día.');return}
