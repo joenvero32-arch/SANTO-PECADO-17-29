@@ -2720,7 +2720,7 @@ async function adminCash(){
   const transferExpenses=sessionExpenses.filter(x=>String(x.payment_method||'').trim().toLowerCase()!=='efectivo').reduce((a,x)=>a+Number(x.amount||0),0);
   const transferBalance=transferIncome-transferExpenses;
   document.getElementById('panel').innerHTML=`<div class="panelHead"><div><div class="dashKicker">CONTROL FINANCIERO</div><h2>💵 Caja del día</h2></div><button class="close" onclick="adminDashboard()">✕</button></div>${navTabs('cash')}
-  <div class="cashHero"><span>VENTAS DEL DÍA · TODAS LAS CAJAS</span><b>${money(salesTotal)}</b><small>${list.length} operación(es) · Tu base inicial: ${money(opening)}</small><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="mini" onclick="adminTodaySales()">🧾 Ventas del día</button><button class="primary" onclick="printTodaySales()">🖨️ Imprimir ventas del día</button><button class="primary" style="background:#16a34a!important;color:#fff!important;border-color:#15803d!important;box-shadow:0 4px 12px #16a34a33" onclick="printDailyClose()">🖨️ Imprimir cierre diario</button></div></div><div class="cashGrid"><div class="cashCard"><small>💸 Gastos registrados hoy</small><b>${money(expensesTotal)}</b></div><div class="cashCard"><small>📊 Neto del negocio hoy</small><b>${money(salesTotal-expensesTotal)}</b></div><div class="cashCard"><small>🏦 Saldo de transferencias</small><b>${money(transferBalance)}</b></div></div><div class="dashSection"><div class="dashSectionHead"><h3>📋 Detalle de gastos de hoy</h3><button class="mini" onclick="adminExpenses()">Ver gastos</button></div>${dayExpenses.map(x=>'<div class="alertRow"><span><b>'+esc(x.expense_type)+' · '+money(x.amount)+'</b><br>'+esc(x.category)+' · '+esc(x.description)+'<br><small>'+esc(x.payment_method||'Medio de pago no indicado')+(x.employee_name?' · '+esc(x.employee_name):'')+'</small></span><b>-'+money(x.amount)+'</b></div>').join('')||'<div class="empty">No hay gastos registrados hoy.</div>'}</div>
+  <div class="cashHero"><span>VENTAS DEL DÍA · TODAS LAS CAJAS</span><b>${money(salesTotal)}</b><small>${list.length} operación(es) · Tu base inicial: ${money(opening)}</small><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="mini" onclick="adminTodaySales()">🧾 Ventas del día</button><button class="primary" onclick="printTodaySales()">🖨️ Imprimir ventas del día</button><button class="primary" onclick="adminSalesByProduct()">📦 Ventas por producto</button><button class="primary" style="background:#16a34a!important;color:#fff!important;border-color:#15803d!important;box-shadow:0 4px 12px #16a34a33" onclick="printDailyClose()">🖨️ Imprimir cierre diario</button></div></div><div class="cashGrid"><div class="cashCard"><small>💸 Gastos registrados hoy</small><b>${money(expensesTotal)}</b></div><div class="cashCard"><small>📊 Neto del negocio hoy</small><b>${money(salesTotal-expensesTotal)}</b></div><div class="cashCard"><small>🏦 Saldo de transferencias</small><b>${money(transferBalance)}</b></div></div><div class="dashSection"><div class="dashSectionHead"><h3>📋 Detalle de gastos de hoy</h3><button class="mini" onclick="adminExpenses()">Ver gastos</button></div>${dayExpenses.map(x=>'<div class="alertRow"><span><b>'+esc(x.expense_type)+' · '+money(x.amount)+'</b><br>'+esc(x.category)+' · '+esc(x.description)+'<br><small>'+esc(x.payment_method||'Medio de pago no indicado')+(x.employee_name?' · '+esc(x.employee_name):'')+'</small></span><b>-'+money(x.amount)+'</b></div>').join('')||'<div class="empty">No hay gastos registrados hoy.</div>'}</div>
   <div class="cashGrid">${Object.entries(pay).map(([k,v])=>`<div class="cashCard"><small>Ventas del día · ${esc(k)}</small><b>${money(v)}</b></div>`).join('')||'<div class="empty">No hay ventas registradas hoy.</div>'}</div>${unattributedSales.length?`<div class="notice">⚠️ ${unattributedSales.length} venta(s) por ${money(unattributedTotal)} sin usuario asignado. Se incluyen en el total del día, pero no en tu cierre personal hasta verificar quién recibió el pago.</div>`:''}
   <div class="adminItem"><div class="adminTop"><b>💰 Efectivo esperado de tu caja</b><b>${money(expected)}</b></div><div class="muted">Tu base inicial + ventas en efectivo atribuidas a tu usuario después del último cierre − tus gastos pagados en efectivo.</div><div class="adminActions">${!openingRecord?'<button class="mini" onclick="openCash(\''+today+'\')">🔓 Abrir caja</button>':''}${openingRecord&&!list.length&&!sessionExpenses.length?'<button class="mini" onclick="changeOpeningCash(\''+today+'\')">✏️ Cambiar base</button>':''}${openingRecord?'<button class="primary" onclick="closeCash(\''+today+'\','+expected+')">🔐 Registrar cierre de caja</button>':''}</div></div>
   ${lastClose?`<div class="notice" style="margin-top:12px">Último cierre de hoy: <b>${new Date(lastClose.date).toLocaleString('es-CO')}</b> · Efectivo contado: <b>${money(lastClose.counted)}</b> · Diferencia: <b>${money(lastClose.difference)}</b> · ${esc(lastClose.user)}</div>`:''}
@@ -3341,6 +3341,53 @@ async function adminTodaySales(){
   html+=list.length?list.map(o=>'<div class="adminItem"><div class="adminTop"><b>'+esc(o.no||'Venta')+'</b><b>'+money(o.total)+'</b></div><span class="muted">'+new Date(o.date||o.created||0).toLocaleString('es-CO')+' · '+esc(o.name||'')+' · '+esc(o.pay||'')+'</span></div>').join(''):'<div class="empty">No hay ventas registradas en el día.</div>';
   document.getElementById('panel').innerHTML=html;
   document.getElementById('modal').classList.add('open');
+}
+async function adminSalesByProduct(){
+  if(!isAdmin()){alert('Solo el administrador o dueño puede consultar ventas por producto.');return}
+  const today=dayKey(new Date());
+  let orders=[],items=[];
+  try{
+    if(SP_DB_ON){
+      const central=await spGetFinanceOrders();
+      orders=(Array.isArray(central)?central:[]).filter(o=>String(o.payment_status||'').trim().toLowerCase()==='pagado'&&dayKey(o.updated_at||o.created_at)===today);
+      const ids=orders.map(o=>o.id).filter(Boolean);
+      if(ids.length){
+        const {data,error}=await SP_DB.from('order_items').select('order_id,product_name,quantity,unit_price').in('order_id',ids);
+        if(error)throw error;
+        items=Array.isArray(data)?data:[];
+      }
+    }else{
+      orders=salesForDay(today);
+      items=orders.flatMap(o=>(Array.isArray(o.items)?o.items:[]).map(x=>({...x,order_id:o.centralId||o.orderId||o.no})));
+    }
+  }catch(e){console.error('Ventas por producto:',e);alert('No se pudieron consultar los productos vendidos: '+(e?.message||e));return}
+  const summary=new Map();
+  items.forEach(x=>{
+    const name=String(x.product_name||x.name||x.productName||'Producto sin nombre').trim();
+    const qty=Math.max(0,Number(x.quantity)||0), price=Math.max(0,Number(x.unit_price??x.price)||0);
+    const key=name.toLocaleLowerCase('es');
+    const row=summary.get(key)||{name,qty:0,total:0};
+    row.qty+=qty;row.total+=qty*price;summary.set(key,row);
+  });
+  const rows=[...summary.values()].sort((a,b)=>b.qty-a.qty||a.name.localeCompare(b.name,'es'));
+  const grand=rows.reduce((a,x)=>a+x.total,0);
+  const units=rows.reduce((a,x)=>a+x.qty,0);
+  const logo=document.querySelector('.brandLogo')?.src||'';
+  const table=rows.map((x,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(x.name)+'</td><td class="num">'+x.qty+'</td><td class="num">'+money(x.total)+'</td></tr>').join('');
+  document.getElementById('panel').innerHTML='<div class="panelHead"><div><div class="dashKicker">CONTROL FINANCIERO</div><h2>📦 Ventas por producto</h2></div><button class="close" onclick="adminCash()">✕</button></div>'+navTabs('cash')+
+    '<div class="cashHero"><span>PRODUCTOS VENDIDOS · '+new Date().toLocaleDateString('es-CO')+'</span><b>'+units+' unidades</b><small>'+rows.length+' producto(s) diferentes · Total '+money(grand)+'</small><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="primary" onclick="printSalesByProduct()">🖨️ Imprimir reporte por producto</button><button class="secondary" onclick="adminSalesByProduct()">🔄 Actualizar</button></div></div>'+
+    (rows.length?'<div class="adminItem"><table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left">Producto</th><th style="text-align:right">Unidades</th><th style="text-align:right">Total vendido</th></tr></thead><tbody>'+rows.map(x=>'<tr><td style="padding:10px 5px;border-bottom:1px solid #333">'+esc(x.name)+'</td><td style="text-align:right;padding:10px 5px;border-bottom:1px solid #333">'+x.qty+'</td><td style="text-align:right;padding:10px 5px;border-bottom:1px solid #333;font-weight:800">'+money(x.total)+'</td></tr>').join('')+'</tbody></table></div>':'<div class="empty">No hay productos detallados en las ventas pagadas de hoy. Si las ventas vienen de pedidos antiguos sin renglones en order_items, el reporte no puede reconstruirlos.</div>');
+  window.SP_LAST_PRODUCT_SALES={date:today,rows,units,grand,logo};
+}
+function printSalesByProduct(){
+  if(!isAdmin()){alert('Solo el administrador o dueño puede imprimir este reporte.');return}
+  const r=window.SP_LAST_PRODUCT_SALES;
+  if(!r){alert('Primero abre Ventas por producto.');return}
+  const w=window.open('','_blank','width=900,height=700');
+  if(!w){alert('Chrome bloqueó la ventana. Permite ventanas emergentes para este sitio.');return}
+  const body=r.rows.map((x,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(x.name)+'</td><td style="text-align:right">'+x.qty+'</td><td style="text-align:right">'+money(x.total)+'</td></tr>').join('');
+  w.document.write('<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Ventas por producto</title><style>body{font:12px Arial;margin:18mm;color:#111}header{text-align:center;border-bottom:2px solid #c18a16;padding-bottom:12px}header img{max-width:90px;max-height:70px}h1{font-size:22px}table{width:100%;border-collapse:collapse;margin-top:20px}th{background:#222;color:white;text-align:left}th,td{padding:9px;border-bottom:1px solid #ddd}td:nth-child(n+3){text-align:right}.total{margin-top:20px;padding:15px;background:#171717;color:white;font-size:18px;font-weight:bold}@page{size:letter portrait;margin:12mm}@media print{body{margin:0}th{print-color-adjust:exact}}</style></head><body><header><img src="'+(r.logo||'')+'"><h1>SANTO PECADO 17-29</h1><b>REPORTE DE VENTAS POR PRODUCTO</b><div>'+esc(r.date)+'</div></header><p>Unidades vendidas: <b>'+r.units+'</b> · Productos diferentes: <b>'+r.rows.length+'</b></p><table><thead><tr><th>#</th><th>Producto</th><th>Unidades</th><th>Total vendido</th></tr></thead><tbody>'+body+'</tbody></table><div class="total">TOTAL: '+money(r.grand)+'</div><script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>');
+  w.document.close();
 }
 function printTodaySales(){
   if(!isAdmin()){alert('Solo el administrador o dueño puede imprimir las ventas del día.');return}
