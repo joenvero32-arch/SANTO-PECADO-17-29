@@ -3316,6 +3316,29 @@ async function spGetFinanceOrders(){
   if(!Array.isArray(data)) throw new Error('Supabase no devolvió una lista válida de pedidos.');
   return data;
 }
+
+function spConfirmAnnulSale(orderNo){
+  return new Promise(resolve=>{
+    const overlay=document.createElement('div');
+    overlay.setAttribute('role','presentation');
+    overlay.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.78);backdrop-filter:blur(5px);display:flex;align-items:center;justify-content:center;padding:18px;';
+    const box=document.createElement('section');
+    box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');box.setAttribute('aria-labelledby','spAnnulTitle');
+    box.style.cssText='width:min(100%,420px);background:#171613;color:#fff;border:1px solid rgba(247,185,40,.42);border-radius:22px;padding:22px;box-shadow:0 24px 70px rgba(0,0,0,.6);font-family:inherit;';
+    const eyebrow=document.createElement('div');eyebrow.textContent='VENTAS · CONFIRMACIÓN';eyebrow.style.cssText='font-size:11px;letter-spacing:1.4px;font-weight:800;color:#f7b928;margin-bottom:12px;';
+    const title=document.createElement('h2');title.id='spAnnulTitle';title.textContent='¿Anular esta venta?';title.style.cssText='font-size:23px;line-height:1.2;margin:0 0 14px;font-weight:900;';
+    const order=document.createElement('div');order.textContent=orderNo;order.style.cssText='font-size:17px;font-weight:850;color:#ffdc72;background:#252117;border:1px solid #514323;border-radius:12px;padding:12px 14px;margin-bottom:14px;';
+    const msg=document.createElement('p');msg.textContent='La venta dejará de contar en los cálculos de ventas y de la caja que aún no se ha cerrado. El registro original se conservará y la anulación quedará en Auditoría. Los cierres confirmados no se modificarán.';msg.style.cssText='font-size:14px;line-height:1.55;color:#d1cec6;margin:0 0 22px;';
+    const actions=document.createElement('div');actions.style.cssText='display:flex;gap:10px;';
+    const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Cancelar';cancel.style.cssText='flex:1;min-height:46px;border-radius:12px;border:1px solid #49453c;background:#24221d;color:#f4f0e7;font-weight:800;';
+    const accept=document.createElement('button');accept.type='button';accept.textContent='Continuar';accept.style.cssText='flex:1;min-height:46px;border-radius:12px;border:0;background:#f7b928;color:#17120a;font-weight:900;';
+    const finish=value=>{overlay.remove();resolve(value)};
+    cancel.onclick=()=>finish(false);accept.onclick=()=>finish(true);
+    overlay.addEventListener('click',e=>{if(e.target===overlay)finish(false)});
+    box.append(eyebrow,title,order,msg,actions);actions.append(cancel,accept);overlay.append(box);document.body.append(overlay);cancel.focus();
+  });
+}
+
 async function spAnnulRegisteredSale(no){
   if(!isAdmin()){alert('Solo el dueño o administrador puede anular ventas.');return}
   const key=String(no||'').trim();if(!key)return;
@@ -3328,7 +3351,7 @@ async function spAnnulRegisteredSale(no){
     pinHash=pinHash||String(saved?.pinHash||sessionStorage.getItem('sp_validated_pin_hash')||'').trim();
   }catch(_){}
   if(!username||!pinHash){alert('No se encontró la validación PIN de esta sesión. Cierra sesión y vuelve a ingresar con tu usuario y PIN antes de anular.');return}
-  if(!confirm('ANULAR VENTA REGISTRADA\\n\\nPedido: '+key+'\\n\\nLa venta dejará de contar en ventas y en el cálculo de caja aún no cerrada. El registro original se conservará y la anulación quedará en Auditoría. Los cierres ya confirmados no se reescriben.\\n\\n¿Deseas continuar?'))return;
+  if(!await spConfirmAnnulSale(key))return;
   const reason=prompt('Escribe el motivo de la anulación de '+key+':','Error en la venta');
   if(reason===null)return;
   if(!reason.trim()){alert('El motivo es obligatorio. No se hizo ningún cambio.');return}
