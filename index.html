@@ -271,7 +271,14 @@ window.loadPublicCatalog=async function(){
         return true;
       }
 
-      // Respaldo final: conservar los productos locales existentes; si no hay, mostrar la semilla.
+      // Respaldo: recuperar primero el catálogo guardado en este navegador.
+      // Solo usar la semilla si no hay datos locales válidos; nunca escribir sobre Supabase aquí.
+      if(!Array.isArray(products)||!products.length){
+        try{const saved=JSON.parse(localStorage.getItem('sp_premium_products_v2')||'null');if(Array.isArray(saved)&&saved.length)products=saved;}catch(_){}
+      }
+      if(!Array.isArray(categories)||!categories.length){
+        try{const savedCats=JSON.parse(localStorage.getItem('sp_premium_categories_v2')||'null');if(Array.isArray(savedCats)&&savedCats.length)categories=savedCats;}catch(_){}
+      }
       if(!Array.isArray(products)||!products.length) products=seed.map((p,i)=>({...p,id:p.id||('seed-'+i),active:true}));
       products=products.map((p,i)=>({...p,id:p?.id??('product-'+i),cat:String(p?.cat||'Sin categoría'),name:String(p?.name||'Producto'),desc:String(p?.desc||''),price:Number(p?.price)||0,active:p?.active!==false}));
       if(!Array.isArray(categories)||!categories.length)categories=[...defaultCats];
