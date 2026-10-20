@@ -1254,7 +1254,7 @@ async function openMyOrder(){
   }
 
   localStorage.setItem(LAST_ORDER,String(o.no));
-  const lines=(o.detail||'').split('\\n').map(x=>x.trim()).filter(Boolean).map(x=>'<div class="cartLine"><div class="cartLineInfo"><span>'+esc(x)+'</span></div></div>').join('');
+  const lines=(o.detail||'').split('\n').map(x=>x.trim()).filter(Boolean).map(x=>'<div class="cartLine"><div class="cartLineInfo"><span>'+esc(x)+'</span></div></div>').join('');
   document.getElementById('panel').innerHTML='<div class="panelHead"><h2>🧾 Mi pedido</h2><button class="close" onclick="closeModal()">✕</button></div>'
     +'<div class="notice" style="margin:14px 0">Pedido <b>'+esc(o.no)+'</b> · '+new Date(o.created).toLocaleString('es-CO')+'</div>'
     +'<div style="margin-top:14px">'+(lines||'<div class="empty">No hay detalle disponible para este pedido.</div>')+'</div>'
@@ -4023,20 +4023,44 @@ function spToggleHiddenTestOrders(){
 function spHideOldTestOrder(no){
   if(!isAdmin()){alert('Solo el dueño o administrador puede ocultar pedidos antiguos de prueba.');return}
   const key=String(no||'').trim();
-  const o=JSON.parse(localStorage.getItem(ORDERS)||'[]').find(x=>String(x.no)===key);
+  let orders=[];try{orders=JSON.parse(localStorage.getItem(ORDERS)||'[]')}catch(_){}
+  const o=orders.find(x=>String(x.no)===key);
   if(!o){alert('No encontramos ese pedido en este dispositivo.');return}
-  const items=String(o.detail||'').trim()||'Detalle de productos no disponible en este registro.';
+  const detail=String(o.detail||'').trim()||'Detalle de productos no disponible en este registro.';
   const observations=String(o.observations||o.observation||o.notes||o.note||o.comment||'').trim()||'Sin observaciones registradas.';
-  const preview='CONFIRMAR OCULTAR PEDIDO ANTIGUO DE PRUEBA\n\nPedido: '+key+'\nCliente: '+String(o.name||'No registrado')+'\n\nPRODUCTOS, CANTIDADES Y ADICIONALES:\n'+items+'\n\nOBSERVACIONES:\n'+observations+'\n\nTOTAL: '+money(o.total)+'\n\nEsto SOLO lo oculta de la lista. No borra el pedido ni cambia pago, ventas, caja o auditoría. Los pedidos pendientes de pago no se ocultan automáticamente.\n\n¿Deseas continuar?';
-  if(!confirm(preview))return;
-  const reason=prompt('Escribe el motivo para ocultar el pedido '+key+':','Pedido antiguo de prueba');
-  if(reason===null)return;
-  if(!reason.trim()){alert('Debes escribir el motivo. No se hizo ningún cambio.');return}
-  const hidden=spGetHiddenTestOrderNumbers();
-  if(!hidden.includes(key))hidden.push(key);
-  localStorage.setItem(SP_HIDDEN_TEST_ORDERS_KEY,JSON.stringify(hidden));
-  auditLog('Pedido de prueba ocultado',reason.trim()+' · Se conservó el registro original.',key);
-  adminOrders();
+  document.getElementById('spHideOrderModal')?.remove();
+  const modal=document.createElement('div');
+  modal.id='spHideOrderModal';
+  modal.style.cssText='position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,.78);backdrop-filter:blur(5px);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
+  modal.innerHTML=`<section style="width:min(100%,460px);max-height:88dvh;overflow:auto;background:#171717;color:#f8f8f8;border:1px solid rgba(247,201,75,.5);border-radius:22px;box-shadow:0 24px 80px #000a;font-family:inherit">
+    <header style="padding:20px 20px 16px;background:linear-gradient(135deg,#292315,#171717);border-bottom:1px solid #3b3422;border-radius:22px 22px 0 0">
+      <div style="display:flex;align-items:center;gap:12px"><div style="width:46px;height:46px;border-radius:14px;background:#f7c94b20;border:1px solid #f7c94b66;display:grid;place-items:center;font-size:24px">🗃️</div><div style="flex:1"><div style="font-size:18px;font-weight:900;color:#f7c94b">Ocultar pedido antiguo</div><div style="font-size:13px;color:#bcbcbc;margin-top:4px">Revisa la información antes de continuar</div></div><button type="button" data-hide-cancel style="border:0;background:#ffffff12;color:#ddd;border-radius:10px;width:34px;height:34px;font-size:20px">×</button></div>
+    </header>
+    <div style="padding:18px 20px">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:14px"><span style="color:#bcbcbc;font-size:13px">NÚMERO DE PEDIDO</span><strong style="color:#f7c94b;font-size:16px">${esc(key)}</strong></div>
+      <div style="padding:12px 14px;background:#ffffff08;border:1px solid #ffffff12;border-radius:14px;margin-bottom:12px"><div style="font-size:12px;color:#bcbcbc;margin-bottom:5px">CLIENTE</div><div style="font-size:15px;font-weight:750">${esc(o.name||'No registrado')}</div></div>
+      <div style="padding:14px;background:#0e0e0e;border:1px solid #514523;border-radius:14px;margin-bottom:12px"><div style="font-size:12px;color:#f7c94b;font-weight:900;margin-bottom:9px;letter-spacing:.4px">🛒 PRODUCTOS, CANTIDADES Y ADICIONALES</div><div style="white-space:pre-line;line-height:1.55;font-size:14px;overflow-wrap:anywhere">${esc(detail)}</div></div>
+      <div style="padding:12px 14px;background:#ffffff08;border:1px solid #ffffff12;border-radius:14px;margin-bottom:12px"><div style="font-size:12px;color:#bcbcbc;margin-bottom:5px">OBSERVACIONES</div><div style="font-size:14px;line-height:1.5">${esc(observations)}</div></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 2px 18px"><span style="font-size:14px;color:#c8c8c8">Total del pedido</span><strong style="font-size:23px;color:#f7c94b">${money(o.total)}</strong></div>
+      <label for="spHideOrderReason" style="display:block;font-size:13px;font-weight:800;margin-bottom:7px">Motivo para ocultarlo</label>
+      <input id="spHideOrderReason" value="Pedido antiguo de prueba" maxlength="180" style="width:100%;box-sizing:border-box;background:#0e0e0e;color:#fff;border:1px solid #484848;border-radius:12px;padding:12px;font:inherit;outline-color:#f7c94b">
+      <div style="display:flex;gap:9px;align-items:flex-start;background:#f7c94b12;border:1px solid #f7c94b40;border-radius:12px;padding:11px 12px;margin-top:14px;font-size:12px;line-height:1.5;color:#e6d9ad"><span>🔒</span><span>Solo se oculta de esta lista. No se borra ni modifica el pago, las ventas, la caja o el pedido original.</span></div>
+      <div style="display:flex;gap:10px;margin-top:18px"><button type="button" data-hide-cancel style="flex:1;border:1px solid #555;background:#262626;color:#eee;border-radius:12px;padding:13px;font:inherit;font-weight:800">Cancelar</button><button type="button" id="spHideOrderConfirm" style="flex:1;border:0;background:#f7c94b;color:#171717;border-radius:12px;padding:13px;font:inherit;font-weight:900">Confirmar y ocultar</button></div>
+    </div>
+  </section>`;
+  document.body.appendChild(modal);
+  modal.querySelectorAll('[data-hide-cancel]').forEach(b=>b.onclick=()=>modal.remove());
+  modal.addEventListener('click',e=>{if(e.target===modal)modal.remove()});
+  modal.querySelector('#spHideOrderConfirm').onclick=()=>{
+    const reason=String(modal.querySelector('#spHideOrderReason')?.value||'').trim();
+    if(!reason){alert('Escribe un motivo para continuar.');return}
+    const hidden=spGetHiddenTestOrderNumbers();
+    if(!hidden.includes(key))hidden.push(key);
+    localStorage.setItem(SP_HIDDEN_TEST_ORDERS_KEY,JSON.stringify(hidden));
+    auditLog('Pedido de prueba ocultado',reason+' · Se conservó el registro original.',key);
+    modal.remove();
+    adminOrders();
+  };
 }
 function spRestoreOldTestOrder(no){
   if(!isAdmin()){alert('Solo el dueño o administrador puede restaurar pedidos ocultos.');return}
