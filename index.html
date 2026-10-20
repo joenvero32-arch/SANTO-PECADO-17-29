@@ -4102,12 +4102,12 @@ async function adminOrders(){
       localStorage.setItem(ORDERS,JSON.stringify(a));
     }catch(e){
       console.error('Error cargando pedidos centrales:',e);
+      // No mostrar como actuales los pedidos locales antiguos si falló la consulta central.
+      // Esto evita ocultar pedidos recién creados en otro dispositivo.
       const msg=e?.message||'No se pudieron cargar los pedidos centrales.';
-      if(!a.length){
-        document.getElementById('panel').innerHTML='<div class="panelHead"><h2>📋 Pedidos</h2><button class="close" onclick="closeModal()">✕</button></div>'+navTabs('orders')+'<div class="notice" style="margin-top:14px;background:rgba(255,79,100,.08);border-color:rgba(255,79,100,.3);color:#ffd0d6"><b>No se pudieron cargar los pedidos de Supabase.</b><br><br>'+esc(msg)+'<br><br>Usa el acceso central de Supabase para administración y vuelve a pulsar Actualizar.</div><div class="modalBtns" style="margin-top:12px"><button class="secondary" onclick="openAdmin()">🔐 Volver al acceso</button></div>';
-        document.getElementById('modal').classList.add('open');
-        return;
-      }
+      document.getElementById('panel').innerHTML='<div class="panelHead"><h2>📋 Pedidos</h2><button class="close" onclick="closeModal()">✕</button></div>'+navTabs('orders')+'<div class="notice" style="margin-top:14px;background:rgba(255,79,100,.08);border-color:rgba(255,79,100,.3);color:#ffd0d6"><b>No se pudieron sincronizar los pedidos de Supabase.</b><br><br>'+esc(msg)+'<br><br>Los pedidos locales no se muestran como si fueran la lista central actualizada. Pulsa reintentar o vuelve a entrar con tu usuario autorizado.</div><div class="modalBtns" style="margin-top:12px"><button class="primary" onclick="adminOrders()">🔄 Reintentar sincronización</button><button class="secondary" onclick="openAdmin()">🔐 Volver al acceso</button></div>';
+      document.getElementById('modal').classList.add('open');
+      return;
     }
   }
   // Mostrar solo pedidos que aún requieren gestión. No borrar ni modificar
