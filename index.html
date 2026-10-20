@@ -1254,7 +1254,7 @@ async function openMyOrder(){
   }
 
   localStorage.setItem(LAST_ORDER,String(o.no));
-  const lines=(o.detail||'').split('\\n').map(x=>x.trim()).filter(Boolean).map(x=>'<div class="cartLine"><div class="cartLineInfo"><span>'+esc(x)+'</span></div></div>').join('');
+  const lines=(o.detail||'').split('\n').map(x=>x.trim()).filter(Boolean).map(x=>'<div class="cartLine"><div class="cartLineInfo"><span>'+esc(x)+'</span></div></div>').join('');
   document.getElementById('panel').innerHTML='<div class="panelHead"><h2>🧾 Mi pedido</h2><button class="close" onclick="closeModal()">✕</button></div>'
     +'<div class="notice" style="margin:14px 0">Pedido <b>'+esc(o.no)+'</b> · '+new Date(o.created).toLocaleString('es-CO')+'</div>'
     +'<div style="margin-top:14px">'+(lines||'<div class="empty">No hay detalle disponible para este pedido.</div>')+'</div>'
@@ -4027,7 +4027,7 @@ function spHideOldTestOrder(no){
   if(!o){alert('No encontramos ese pedido en este dispositivo.');return}
   const items=String(o.detail||'').trim()||'Detalle de productos no disponible en este registro.';
   const observations=String(o.observations||o.observation||o.notes||o.note||o.comment||'').trim()||'Sin observaciones registradas.';
-  const preview='CONFIRMAR OCULTAR PEDIDO ANTIGUO DE PRUEBA\\n\\nPedido: '+key+'\\nCliente: '+String(o.name||'No registrado')+'\\n\\nPRODUCTOS, CANTIDADES Y ADICIONALES:\\n'+items+'\\n\\nOBSERVACIONES:\\n'+observations+'\\n\\nTOTAL: '+money(o.total)+'\\n\\nEsto SOLO lo oculta de la lista. No borra el pedido ni cambia pago, ventas, caja o auditoría. Los pedidos pendientes de pago no se ocultan automáticamente.\\n\\n¿Deseas continuar?';
+  const preview='CONFIRMAR OCULTAR PEDIDO ANTIGUO DE PRUEBA\n\nPedido: '+key+'\nCliente: '+String(o.name||'No registrado')+'\n\nPRODUCTOS, CANTIDADES Y ADICIONALES:\n'+items+'\n\nOBSERVACIONES:\n'+observations+'\n\nTOTAL: '+money(o.total)+'\n\nEsto SOLO lo oculta de la lista. No borra el pedido ni cambia pago, ventas, caja o auditoría. Los pedidos pendientes de pago no se ocultan automáticamente.\n\n¿Deseas continuar?';
   if(!confirm(preview))return;
   const reason=prompt('Escribe el motivo para ocultar el pedido '+key+':','Pedido antiguo de prueba');
   if(reason===null)return;
