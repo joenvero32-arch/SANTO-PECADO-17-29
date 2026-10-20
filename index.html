@@ -4025,7 +4025,11 @@ function spHideOldTestOrder(no){
   const key=String(no||'').trim();
   const o=JSON.parse(localStorage.getItem(ORDERS)||'[]').find(x=>String(x.no)===key);
   if(!o){alert('No encontramos ese pedido en este dispositivo.');return}
-  const reason=prompt('Solo para pedidos antiguos de PRUEBA. Este botón no borra el pedido ni modifica ventas o caja. Escribe el motivo para ocultar '+key+':','Pedido antiguo de prueba');
+  const items=String(o.detail||'').trim()||'Detalle de productos no disponible en este registro.';
+  const observations=String(o.observations||o.observation||o.notes||o.note||o.comment||'').trim()||'Sin observaciones registradas.';
+  const preview='CONFIRMAR OCULTAR PEDIDO ANTIGUO DE PRUEBA\\n\\nPedido: '+key+'\\nCliente: '+String(o.name||'No registrado')+'\\n\\nPRODUCTOS, CANTIDADES Y ADICIONALES:\\n'+items+'\\n\\nOBSERVACIONES:\\n'+observations+'\\n\\nTOTAL: '+money(o.total)+'\\n\\nEsto SOLO lo oculta de la lista. No borra el pedido ni cambia pago, ventas, caja o auditoría. Los pedidos pendientes de pago no se ocultan automáticamente.\\n\\n¿Deseas continuar?';
+  if(!confirm(preview))return;
+  const reason=prompt('Escribe el motivo para ocultar el pedido '+key+':','Pedido antiguo de prueba');
   if(reason===null)return;
   if(!reason.trim()){alert('Debes escribir el motivo. No se hizo ningún cambio.');return}
   const hidden=spGetHiddenTestOrderNumbers();
