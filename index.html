@@ -1254,7 +1254,7 @@ async function openMyOrder(){
   }
 
   localStorage.setItem(LAST_ORDER,String(o.no));
-  const lines=(o.detail||'').split('\n').map(x=>x.trim()).filter(Boolean).map(x=>'<div class="cartLine"><div class="cartLineInfo"><span>'+esc(x)+'</span></div></div>').join('');
+  const lines=(o.detail||'').split('\\n').map(x=>x.trim()).filter(Boolean).map(x=>'<div class="cartLine"><div class="cartLineInfo"><span>'+esc(x)+'</span></div></div>').join('');
   document.getElementById('panel').innerHTML='<div class="panelHead"><h2>🧾 Mi pedido</h2><button class="close" onclick="closeModal()">✕</button></div>'
     +'<div class="notice" style="margin:14px 0">Pedido <b>'+esc(o.no)+'</b> · '+new Date(o.created).toLocaleString('es-CO')+'</div>'
     +'<div style="margin-top:14px">'+(lines||'<div class="empty">No hay detalle disponible para este pedido.</div>')+'</div>'
