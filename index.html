@@ -4070,6 +4070,10 @@ async function adminOrders(){
       return `
         <div class="order">
           <b>${esc(o.no)}</b> · <b>${money(o.total)}</b><br>
+          <div style="margin:8px 0 10px;padding:12px 13px;border:1px solid #f7c94b;border-radius:12px;background:rgba(247,201,75,.10)">
+            <div style="font-size:12px;font-weight:900;color:#f7c94b;margin-bottom:5px">🛒 PRODUCTOS QUE PIDIÓ</div>
+            <div style="white-space:pre-line;line-height:1.5;font-size:15px;font-weight:800;color:#fff">${esc(String(o.detail||'').trim()||'Detalle no disponible; pulsa Actualizar desde Supabase.')}</div>
+          </div>
           👤 ${esc(o.name)} · 📞 ${esc(o.phone)}<br>
           🚚 ${esc(o.type)} · 💳 ${esc(o.pay)}${driverInfo}<br>
           <div class="muted">${new Date(o.created).toLocaleString('es-CO')}</div>
