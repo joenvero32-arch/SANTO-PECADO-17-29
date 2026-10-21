@@ -16,7 +16,7 @@
   const list=readClosures(),day=localDay();
   const closes=list.filter(x=>x&&x.day===day&&x.type!=='apertura'&&owns(x)).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0));
   const closeAt=closes.length?new Date(closes[0].date||0).getTime():0;
-  return list.filter(x=>x&&x.type==='apertura'&&x.day===day&&owns(x)&&new Date(x.date||0).getTime()>closeAt)
+  return list.filter(x=>x&&x.type==='apertura'&&!x.centralSessionId&&x.day===day&&owns(x)&&new Date(x.date||0).getTime()>closeAt)
    .sort((a,b)=>new Date(b.date||0)-new Date(a.date||0))[0]||null;
  }
  async function syncCurrent(){
@@ -96,6 +96,12 @@
    const original=window.openCash;
    const wrapped=function(){const result=original.apply(this,arguments);setTimeout(syncCurrent,0);return result;};
    wrapped.__spCashWrapped=true;window.openCash=wrapped;
+  }
+  // La apertura real se guarda al confirmar, no al mostrar el formulario.
+  if(typeof window.finalizeOpenCash==='function'&&!window.finalizeOpenCash.__spCashFinalizeWrapped){
+   const originalFinalize=window.finalizeOpenCash;
+   const wrappedFinalize=function(){const result=originalFinalize.apply(this,arguments);setTimeout(syncCurrent,0);return result;};
+   wrappedFinalize.__spCashFinalizeWrapped=true;window.finalizeOpenCash=wrappedFinalize;
   }
   // No sincronizar al entrar o cambiar de pantalla: puede ocurrir durante el inicio de sesión de otro empleado.
   // La sincronización automática solo se ejecuta después de una apertura real mediante openCash.
@@ -248,5 +254,116 @@
     setTimeout(addButton,0);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(install,0));else install();
+  setTimeout(install,700);
+})();
+
+
+/* Sincronización de lectura de la caja central entre dispositivos.
+   No crea ventas ni gastos; consulta únicamente la sesión abierta del usuario autenticado
+   por PIN y la refleja en el estado local para que PC y móvil compartan la misma apertura. */
+(function(){
+  const KEY='sp_premium_cash_closures_v1';
+  let busy=false;
+  function getUser(){
+    try{return (typeof currentUser!=='undefined'&&currentUser)||{}}catch(_){return {}}
+  }
+  function credentials(){
+    const u=getUser();
+    let username=String(u.user||u.username||'').trim();
+    let pin=String(u.pinHash||u.pin||'').trim();
+    try{
+      const saved=JSON.parse(sessionStorage.getItem('sp_premium_session_v1')||'null');
+      username=username||String(saved?.user||saved?.username||'').trim();
+      pin=pin||String(saved?.pinHash||saved?.pin||'').trim();
+    }catch(_){}
+    return {username,pin};
+  }
+  function currentDay(){
+    try{if(typeof dayKey==='function')return dayKey(new Date())}catch(_){}
+    const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  }
+  function read(){
+    try{const a=JSON.parse(localStorage.getItem(KEY)||'[]');return Array.isArray(a)?a:[]}catch(_){return []}
+  }
+  function ownsRecord(rec,u){
+    const aliases=[u.user,u.username,u.name,u.full_name,u.fullName,u.id].map(v=>String(v??'').trim().toLowerCase()).filter(Boolean);
+    return aliases.includes(String(rec?.userKey??'').trim().toLowerCase())||aliases.includes(String(rec?.user??'').trim().toLowerCase());
+  }
+  async function syncOpenSession(showError){
+    if(busy)return false;
+    const db=(typeof SP_DB!=='undefined'&&SP_DB)||window.SP_DB;
+    if(!db||typeof db.rpc!=='function')return false;
+    const u=getUser(),cred=credentials();
+    if(!cred.username||!cred.pin)return false;
+    busy=true;
+    try{
+      const result=await db.rpc('sp_get_open_cash_session_by_pin',{p_username:cred.username,p_pin:cred.pin});
+      if(result.error)throw result.error;
+      const rows=Array.isArray(result.data)?result.data:(result.data?[result.data]:[]);
+      const central=rows[0];
+      if(!central||!central.id||String(central.status||'').toLowerCase()!=='open')return true;
+      const openedMs=new Date(central.opened_at||0).getTime();
+      if(!Number.isFinite(openedMs)||openedMs<=0||!Number.isFinite(Number(central.opening_amount))||Number(central.opening_amount)<0)
+        throw new Error('La sesión central no contiene fecha o base inicial válidas.');
+      const list=read(),today=currentDay();
+      const conflict=list.some(x=>x&&x.type!=='apertura'&&ownsRecord(x,u)&&new Date(x.date||0).getTime()>openedMs);
+      if(conflict){
+        if(showError)alert('Caja central y cierre local no coinciden. No se abrió otra caja ni se modificaron cierres. Se requiere revisar el cierre pendiente antes de sincronizar.');
+        return false;
+      }
+      const candidates=list.filter(x=>x&&x.type==='apertura'&&x.day===today&&ownsRecord(x,u)&&(!x.centralSessionId||String(x.centralSessionId)===String(central.id)));
+      let rec=candidates.sort((a,b)=>new Date(b.date||0)-new Date(a.date||0))[0]||null;
+      const centralDate=new Date(openedMs).toISOString();
+      if(rec){
+        if(Number(rec.opening)!==Number(central.opening_amount)&&!rec.syncPreviousOpening){
+          rec.syncPreviousOpening={opening:rec.opening,date:rec.date,id:rec.id};
+        }
+        rec.opening=Number(central.opening_amount);
+        rec.date=centralDate;
+        rec.centralSessionId=String(central.id);
+        rec.sessionId=rec.sessionId||('central-'+String(central.id));
+        rec.user=String(u.name||u.full_name||u.fullName||cred.username);
+        rec.userKey=String(u.user||u.username||cred.username).trim().toLowerCase();
+        rec.day=today;
+      }else{
+        rec={id:'central-'+String(central.id),day:today,type:'apertura',opening:Number(central.opening_amount),
+          date:centralDate,user:String(u.name||u.full_name||u.fullName||cred.username),
+          userKey:String(u.user||u.username||cred.username).trim().toLowerCase(),
+          sessionId:'central-'+String(central.id),centralSessionId:String(central.id),syncedFromCentral:true};
+        list.unshift(rec);
+      }
+      if(typeof cashClosures!=='undefined')cashClosures=list;
+      localStorage.setItem(KEY,JSON.stringify(list.slice(0,365)));
+      console.info('Caja: sesión central sincronizada para el dispositivo',{central_id:String(central.id),opening_amount:Number(central.opening_amount),status:central.status});
+      return true;
+    }catch(e){
+      console.warn('Caja: no se pudo leer la sesión central; no se creó ninguna apertura.',e);
+      if(showError)alert('No se pudo verificar la caja central. No se creó ni modificó ninguna caja. Detalle: '+String(e?.message||e));
+      return false;
+    }finally{busy=false}
+  }
+  function install(){
+    if(typeof window.employeeCash==='function'&&!window.employeeCash.__spCentralReadWrapped){
+      const original=window.employeeCash;
+      const wrapped=async function(){await syncOpenSession(true);return await original.apply(this,arguments)};
+      wrapped.__spCentralReadWrapped=true;window.employeeCash=wrapped;
+    }
+    if(typeof window.adminCash==='function'&&!window.adminCash.__spCentralReadWrapped){
+      const original=window.adminCash;
+      const wrapped=async function(){await syncOpenSession(true);return await original.apply(this,arguments)};
+      wrapped.__spCentralReadWrapped=true;window.adminCash=wrapped;
+    }
+    if(typeof window.openCash==='function'&&!window.openCash.__spCentralReadWrapped){
+      const original=window.openCash;
+      const wrapped=async function(){
+        const ok=await syncOpenSession(true);
+        if(!ok)return;
+        return original.apply(this,arguments);
+      };
+      wrapped.__spCentralReadWrapped=true;window.openCash=wrapped;
+    }
+    if(typeof window.employeeCash!=='function'||typeof window.openCash!=='function')setTimeout(install,500);
+  }
+  install();
   setTimeout(install,700);
 })();
