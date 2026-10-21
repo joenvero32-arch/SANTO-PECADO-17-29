@@ -2524,12 +2524,30 @@ function editCategory(i){
   #spEditCategoryCard .secCancel{background:#1c1c1c;color:#ddd;border:1px solid #393939}#spEditCategoryCard .secSave{background:linear-gradient(135deg,#ffe18a,#f7b928);color:#17120a;border:0}
   </style><section id="spEditCategoryCard" role="dialog" aria-modal="true" aria-labelledby="spEditCategoryTitle"><div class="secIcon">📂</div><h2 id="spEditCategoryTitle">Editar categoría</h2><p>Cambia el nombre sin perder los productos asociados a esta categoría.</p>
   <form id="spEditCategoryForm"><label for="spEditCategoryName">NOMBRE DE LA CATEGORÍA</label><input id="spEditCategoryName" maxlength="80" autocomplete="off" required>
-  <div class="secActions"><button type="button" class="secCancel" id="spEditCategoryCancel">Cancelar</button><button type="submit" class="secSave">Guardar cambios</button></div></form></section>`;
-  document.body.appendChild(overlay);const form=overlay.querySelector('#spEditCategoryForm'),input=overlay.querySelector('#spEditCategoryName');input.value=oldName;
+  <div class="secActions"><button type="button" class="secCancel" id="spEditCategoryCancel">Cancelar</button><button type="submit" class="secSave" id="spEditCategorySave">Guardar cambios</button></div></form></section>`;
+  document.body.appendChild(overlay);const form=overlay.querySelector('#spEditCategoryForm'),input=overlay.querySelector('#spEditCategoryName'),submit=overlay.querySelector('#spEditCategorySave');input.value=oldName;
   const close=()=>overlay.remove();overlay.querySelector('#spEditCategoryCancel').onclick=close;overlay.addEventListener('click',e=>{if(e.target===overlay)close()});
-  form.onsubmit=e=>{e.preventDefault();const v=input.value.trim();if(!v){input.focus();return}if(v===oldName){close();return}
+  form.onsubmit=async e=>{
+    e.preventDefault();const v=input.value.trim();if(!v){input.focus();return}if(v===oldName){close();return}
     if(categories.some((c,j)=>j!==i&&c.toLowerCase()===v.toLowerCase())){alert('Esa categoría ya existe.');input.focus();return}
-    products.forEach(p=>{if(p.cat===oldName)p.cat=v});categories[i]=v;close();save();auditLog('Categoría modificada',oldName+' → '+v);render();adminCategories();
+    if(!SP_DB_ON||!SP_DB?.rpc){alert('No hay conexión con Supabase. El nombre no se ha cambiado.');return}
+    submit.disabled=true;submit.textContent='Guardando…';
+    try{
+      const {data,error}=await SP_DB.rpc('admin_rename_category',{p_old_name:oldName,p_new_name:v});
+      if(error)throw error;
+      const saved=Array.isArray(data)?data[0]:data;
+      if(!saved?.id||String(saved.name||'').trim()!==v)throw new Error('Supabase no confirmó el nuevo nombre.');
+      categories[i]=v;products.forEach(p=>{if(p.cat===oldName)p.cat=v});
+      localStorage.setItem(CATS,JSON.stringify(categories));
+      auditLog('Categoría modificada',oldName+' → '+v);
+      close();
+      if(typeof window.loadPublicCatalog==='function')await window.loadPublicCatalog();
+      render();adminCategories();
+    }catch(err){
+      console.warn('No se pudo guardar la categoría en Supabase:',err);
+      alert('No se pudo guardar la categoría en Supabase. No se aplicó el cambio local. Detalle: '+(err?.message||err));
+      submit.disabled=false;submit.textContent='Guardar cambios';
+    }
   };
   setTimeout(()=>input.focus(),60);
 }
