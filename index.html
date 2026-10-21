@@ -4252,6 +4252,10 @@ function ensureAdminOrdersRealtime(){
 }
 const SP_HIDDEN_TEST_ORDERS_KEY='SP_HIDDEN_TEST_ORDERS_V1';
 window.SP_SHOW_HIDDEN_TEST_ORDERS=window.SP_SHOW_HIDDEN_TEST_ORDERS===true;
+function spCanManageHiddenTestOrders(){
+  const username=String(currentUser?.user||currentUser?.username||'').trim().toLowerCase();
+  return isAdmin() || (username==='zuleidy' && can('allowOrders'));
+}
 function spGetHiddenTestOrderNumbers(){
   try{const v=JSON.parse(localStorage.getItem(SP_HIDDEN_TEST_ORDERS_KEY)||'[]');return Array.isArray(v)?v.map(String):[]}catch(_){return []}
 }
@@ -4260,7 +4264,7 @@ function spToggleHiddenTestOrders(){
   adminOrders();
 }
 function spHideOldTestOrder(no){
-  if(!isAdmin()){alert('Solo el dueño o administrador puede ocultar pedidos antiguos de prueba.');return}
+  if(!spCanManageHiddenTestOrders()){alert('Este usuario no tiene permiso para ocultar pedidos antiguos.');return}
   const key=String(no||'').trim();
   let orders=[];try{orders=JSON.parse(localStorage.getItem(ORDERS)||'[]')}catch(_){}
   const o=orders.find(x=>String(x.no)===key);
@@ -4302,7 +4306,7 @@ function spHideOldTestOrder(no){
   };
 }
 function spRestoreOldTestOrder(no){
-  if(!isAdmin()){alert('Solo el dueño o administrador puede restaurar pedidos ocultos.');return}
+  if(!spCanManageHiddenTestOrders()){alert('Este usuario no tiene permiso para restaurar pedidos ocultos.');return}
   const key=String(no||'').trim();
   localStorage.setItem(SP_HIDDEN_TEST_ORDERS_KEY,JSON.stringify(spGetHiddenTestOrderNumbers().filter(x=>x!==key)));
   auditLog('Pedido de prueba restaurado','Se volvió a mostrar en la lista de Pedidos.',key);
@@ -4440,14 +4444,14 @@ async function adminOrders(){
   document.getElementById('panel').innerHTML=`
     <div class="panelHead"><h2>📋 Pedidos</h2><button class="close" onclick="closeModal()">✕</button></div>
     ${navTabs('orders')}
-    <div class="modalBtns" style="margin:10px 0">${isAdmin()?'<button class="secondary" onclick="adminOrders()">🔄 Actualizar desde Supabase</button><button class="secondary" onclick="spToggleHiddenTestOrders()">'+(window.SP_SHOW_HIDDEN_TEST_ORDERS?'↩️ Volver a pedidos activos':'🗃️ Ver pedidos antiguos ocultos')+'</button>':''}<button class="secondary" onclick="logoutUser()">Cerrar sesión</button></div>
-    ${isAdmin()?'<div class="notice" style="margin:8px 0">Los pedidos pagados salen automáticamente de esta lista. Los pedidos pendientes permanecen hasta registrar el pago. Puedes ocultar manualmente pedidos antiguos de prueba sin borrar el registro ni afectar ventas o caja; esta vista de ocultos se guarda en este navegador.</div>':''}
+    <div class="modalBtns" style="margin:10px 0">${isAdmin()||spCanManageHiddenTestOrders()?'<button class="secondary" onclick="adminOrders()">🔄 Actualizar desde Supabase</button><button class="secondary" onclick="spToggleHiddenTestOrders()">'+(window.SP_SHOW_HIDDEN_TEST_ORDERS?'↩️ Volver a pedidos activos':'🗃️ Ver pedidos antiguos ocultos')+'</button>':''}<button class="secondary" onclick="logoutUser()">Cerrar sesión</button></div>
+    ${isAdmin()||spCanManageHiddenTestOrders()?'<div class="notice" style="margin:8px 0">Puedes ocultar pedidos antiguos de prueba de esta lista sin borrar el registro ni afectar ventas o caja. El ocultamiento se guarda solo en este navegador.</div>':''}
     ${visibleOrders.length ? visibleOrders.map(o => {
       const list=statusList(o), current=o.status||'recibido';
       const driverInfo=o.type==='Domicilio'
         ? '<br>🛵 <b>Domiciliario:</b> '+esc(o.driverName||'Sin asignar')+(o.driverPhone?' · '+esc(o.driverPhone):'')
         : '';
-      const deleteBtn=isAdmin()
+      const deleteBtn=spCanManageHiddenTestOrders()
         ? (hiddenTestOrderNumbers.has(String(o.no))
           ? `<button class="mini" data-no="${esc(o.no)}" onclick="spRestoreOldTestOrder(this.dataset.no)">↩️ Restaurar pedido</button>`
           : `<button class="mini" data-no="${esc(o.no)}" onclick="spHideOldTestOrder(this.dataset.no)">🗃️ Ocultar prueba antigua</button>`)
