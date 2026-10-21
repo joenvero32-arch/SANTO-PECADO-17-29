@@ -292,9 +292,15 @@
   async function syncOpenSession(showError){
     if(busy)return false;
     const db=(typeof SP_DB!=='undefined'&&SP_DB)||window.SP_DB;
-    if(!db||typeof db.rpc!=='function')return false;
+    if(!db||typeof db.rpc!=='function'){
+      if(showError)alert('No se puede verificar la caja central porque Supabase no está conectado. No se abrirá una caja nueva.');
+      return false;
+    }
     const u=getUser(),cred=credentials();
-    if(!cred.username||!cred.pin)return false;
+    if(!cred.username||!cred.pin){
+      if(showError)alert('No se encontró la validación de PIN de esta sesión. Cierra sesión e ingresa nuevamente con tu usuario y PIN para sincronizar Caja.');
+      return false;
+    }
     busy=true;
     try{
       const result=await db.rpc('sp_get_open_cash_session_by_pin',{p_username:cred.username,p_pin:cred.pin});
@@ -311,8 +317,9 @@
         if(showError)alert('Caja central y cierre local no coinciden. No se abrió otra caja ni se modificaron cierres. Se requiere revisar el cierre pendiente antes de sincronizar.');
         return false;
       }
-      const candidates=list.filter(x=>x&&x.type==='apertura'&&x.day===today&&ownsRecord(x,u)&&(!x.centralSessionId||String(x.centralSessionId)===String(central.id)));
-      let rec=candidates.sort((a,b)=>new Date(b.date||0)-new Date(a.date||0))[0]||null;
+      const linked=list.filter(x=>x&&x.type==='apertura'&&ownsRecord(x,u)&&String(x.centralSessionId||'')===String(central.id));
+      const candidates=list.filter(x=>x&&x.type==='apertura'&&x.day===today&&ownsRecord(x,u)&&!x.centralSessionId);
+      let rec=linked[0]||candidates.sort((a,b)=>new Date(b.date||0)-new Date(a.date||0))[0]||null;
       const centralDate=new Date(openedMs).toISOString();
       if(rec){
         if(Number(rec.opening)!==Number(central.opening_amount)&&!rec.syncPreviousOpening){
