@@ -3390,6 +3390,69 @@ async function spAnnulRegisteredSale(no){
     await adminSales();
   }catch(e){console.error('Error al anular venta:',e);alert('No se pudo anular la venta: '+(e?.message||e)+'. No vuelvas a intentarlo hasta verificar su estado.')}
 }
+function spConfirmCancelPendingOrder(orderNo,total){
+  return new Promise(resolve=>{
+    const overlay=document.createElement('div');
+    overlay.style.cssText='position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.80);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+    const box=document.createElement('section');
+    box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');
+    box.style.cssText='width:min(100%,430px);background:#11100d;border:1px solid #8e353b;border-radius:22px;padding:22px;color:#f5f0e5;box-shadow:0 24px 70px rgba(0,0,0,.65);font-family:inherit;box-sizing:border-box;';
+    const eyebrow=document.createElement('div');eyebrow.textContent='PEDIDOS · ANULACIÓN';eyebrow.style.cssText='font-size:11px;letter-spacing:1.6px;font-weight:900;color:#ff777f;margin-bottom:12px;';
+    const title=document.createElement('h3');title.textContent='¿Anular este pedido?';title.style.cssText='font-size:23px;line-height:1.2;margin:0 0 10px;font-weight:900;';
+    const order=document.createElement('div');order.textContent=orderNo+' · '+(typeof money==='function'?money(total):total);order.style.cssText='font-size:16px;font-weight:850;color:#ffdc72;background:#252117;border:1px solid #514323;border-radius:12px;padding:11px 13px;margin-bottom:12px;';
+    const help=document.createElement('p');help.textContent='Solo se anulará si sigue pendiente y no tiene venta registrada. No se creará factura, venta ni movimiento de caja. El pedido quedará guardado en el historial.';help.style.cssText='font-size:14px;line-height:1.5;color:#d1cec6;margin:0 0 18px;';
+    const actions=document.createElement('div');actions.style.cssText='display:flex;gap:10px;';
+    const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Volver';cancel.style.cssText='flex:1;min-height:46px;border-radius:12px;border:1px solid #49453c;background:#24221d;color:#f4f0e7;font-weight:800;font-size:15px;';
+    const accept=document.createElement('button');accept.type='button';accept.textContent='Continuar';accept.style.cssText='flex:1;min-height:46px;border-radius:12px;border:0;background:#a43b42;color:#fff;font-weight:900;font-size:15px;';
+    const finish=value=>{overlay.remove();resolve(value)};
+    cancel.onclick=()=>finish(false);accept.onclick=()=>finish(true);
+    overlay.addEventListener('click',e=>{if(e.target===overlay)finish(false)});
+    box.append(eyebrow,title,order,help,actions);actions.append(cancel,accept);overlay.append(box);document.body.append(overlay);cancel.focus();
+  });
+}
+function spAskPendingCancelReason(orderNo){
+  return new Promise(resolve=>{
+    const overlay=document.createElement('div');
+    overlay.style.cssText='position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.80);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+    const box=document.createElement('section');
+    box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');
+    box.style.cssText='width:min(100%,430px);background:#11100d;border:1px solid #57451d;border-radius:22px;padding:22px;color:#f5f0e5;box-shadow:0 24px 70px rgba(0,0,0,.65);font-family:inherit;box-sizing:border-box;';
+    const eyebrow=document.createElement('div');eyebrow.textContent='PEDIDOS · MOTIVO OBLIGATORIO';eyebrow.style.cssText='font-size:11px;letter-spacing:1.6px;font-weight:900;color:#e8b93f;margin-bottom:12px;';
+    const title=document.createElement('h3');title.textContent='Motivo de anulación';title.style.cssText='font-size:23px;line-height:1.2;margin:0 0 10px;font-weight:900;';
+    const order=document.createElement('div');order.textContent=orderNo;order.style.cssText='font-size:16px;font-weight:850;color:#ffdc72;background:#252117;border:1px solid #514323;border-radius:12px;padding:11px 13px;margin-bottom:12px;';
+    const input=document.createElement('textarea');input.placeholder='Ej. El cliente cambió el pedido antes de facturar';input.rows=3;input.maxLength=500;input.setAttribute('aria-label','Motivo de anulación');input.style.cssText='display:block;width:100%;min-height:92px;resize:vertical;box-sizing:border-box;border:1px solid #5a513d;border-radius:12px;background:#1c1a15;color:#fff8e8;padding:12px;font:inherit;font-size:16px;line-height:1.4;outline:none;margin-bottom:8px;';
+    const error=document.createElement('div');error.style.cssText='min-height:18px;font-size:12px;color:#ff9c8e;margin-bottom:12px;';
+    const actions=document.createElement('div');actions.style.cssText='display:flex;gap:10px;';
+    const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Cancelar';cancel.style.cssText='flex:1;min-height:46px;border-radius:12px;border:1px solid #49453c;background:#24221d;color:#f4f0e7;font-weight:800;font-size:15px;';
+    const accept=document.createElement('button');accept.type='button';accept.textContent='Guardar motivo';accept.style.cssText='flex:1;min-height:46px;border-radius:12px;border:0;background:#f7b928;color:#17120a;font-weight:900;font-size:15px;';
+    let finished=false;const finish=v=>{if(finished)return;finished=true;overlay.remove();resolve(v)};
+    const submit=()=>{const v=input.value.trim();if(!v){error.textContent='El motivo es obligatorio.';input.focus();return}finish(v)};
+    cancel.onclick=()=>finish(null);accept.onclick=submit;overlay.addEventListener('click',e=>{if(e.target===overlay)finish(null)});
+    box.append(eyebrow,title,order,input,error,actions);actions.append(cancel,accept);overlay.append(box);document.body.append(overlay);input.focus();
+  });
+}
+async function spCancelUnpaidOrder(orderNo){
+  if(!isAdmin()){alert('Solo el dueño puede anular pedidos pendientes.');return}
+  if(!SP_DB_ON||!SP_DB){alert('No hay conexión con Supabase. No se hizo ningún cambio.');return}
+  const key=String(orderNo||'').trim();if(!key)return;
+  const localUser=currentUser||{};
+  const username=String(localUser.user||localUser.username||'').trim();
+  let pinHash=String(localUser.pinHash||'').trim();
+  if(!pinHash&&localUser.pin){try{pinHash=await spSha256(localUser.pin)}catch(_){}}
+  try{const saved=JSON.parse(sessionStorage.getItem(SESSION)||'null');pinHash=pinHash||String(saved?.pinHash||sessionStorage.getItem('sp_validated_pin_hash')||'').trim()}catch(_){}
+  if(!username||!pinHash){alert('No se encontró la validación del PIN del dueño. Cierra sesión e ingresa nuevamente con el PIN.');return}
+  const local=JSON.parse(localStorage.getItem(ORDERS)||'[]').find(o=>String(o.no)===key)||{};
+  if(!await spConfirmCancelPendingOrder(key,local.total||0))return;
+  const reason=await spAskPendingCancelReason(key);if(reason===null)return;
+  try{
+    const {data,error}=await SP_DB.rpc('sp_cancel_unpaid_order_by_pin',{p_order_number:key,p_username:username,p_pin_sha256:pinHash,p_reason:reason});
+    if(error)throw error;
+    const row=Array.isArray(data)?data[0]:data;
+    if(!row||String(row.payment_status||'').toLowerCase()!=='anulado'||String(row.status||'').toLowerCase()!=='cancelado')throw new Error('Supabase no confirmó la anulación.');
+    alert('Pedido '+key+' anulado. Se conservó el historial y no se creó venta ni pago.');
+    await adminOrders();
+  }catch(e){console.error('No se pudo anular el pedido pendiente:',e);alert('No se pudo anular el pedido: '+(e?.message||e)+'. No repitas la operación hasta verificar el estado.')}
+}
 async function adminSales(){
   if(!isAdmin()){alert('Solo el administrador o dueño tiene acceso a esta sección.');return}
   let list=Array.isArray(sales)?sales.slice():[];
@@ -4346,7 +4409,7 @@ async function adminOrders(){
   }
   // Mostrar solo pedidos que aún requieren gestión. No borrar ni modificar
   // los pedidos pagados en Supabase ni en el historial local de ventas.
-  const activeOrders=a.filter(o=>String(o.paymentStatus||'').trim().toLowerCase()!=='pagado' && !(Array.isArray(sales)&&sales.some(v=>String(v.no)===String(o.no)&&String(v.paymentStatus||'').trim().toLowerCase()==='pagado')));
+  const activeOrders=a.filter(o=>!['pagado','anulado'].includes(String(o.paymentStatus||'').trim().toLowerCase()) && !['cancelado','anulado'].includes(String(o.status||'').trim().toLowerCase()) && !(Array.isArray(sales)&&sales.some(v=>String(v.no)===String(o.no)&&String(v.paymentStatus||'').trim().toLowerCase()==='pagado')));
   const hiddenTestOrderNumbers=new Set(spGetHiddenTestOrderNumbers());
   const visibleOrders=activeOrders.filter(o=>window.SP_SHOW_HIDDEN_TEST_ORDERS?hiddenTestOrderNumbers.has(String(o.no)):!hiddenTestOrderNumbers.has(String(o.no)));
   document.getElementById('panel').innerHTML=`
@@ -4374,6 +4437,9 @@ async function adminOrders(){
       const correctPriceButton=(!paymentIsPaid && ['entregado','cancelado'].indexOf(String(o.status||'').toLowerCase())<0)
         ? `<button class="mini" data-no="${esc(o.no)}" onclick="correctPendingOrderTotal(this.dataset.no)">✏️ Corregir total</button>`
         : '';
+      const cancelPendingButton=(isAdmin() && !paymentIsPaid && String(o.paymentStatus||'pendiente').toLowerCase()!=='anulado' && !['entregado','cancelado','anulado'].includes(String(o.status||'').toLowerCase()))
+        ? `<button class="mini" data-no="${esc(o.no)}" style="border-color:#a43b42;color:#ffd5d7" onclick="spCancelUnpaidOrder(this.dataset.no)">⛔ Anular pedido</button>`
+        : '';
       return `
         <div class="order">
           <b>${esc(o.no)}</b> · <b>${money(o.total)}</b><br>
@@ -4389,6 +4455,7 @@ async function adminOrders(){
           <div class="statusActions">
             ${paymentButton}
             ${correctPriceButton}
+            ${cancelPendingButton}
             <button class="mini" onclick="printOrder('${esc(o.no)}')">🧾 Soporte</button>
             <button class="mini" onclick="printComanda('${esc(o.no)}')">🍳 Comanda cocina</button>
             <button class="mini" onclick="registerOrderIncident('${esc(o.no)}','cambio')">📝 Registrar cambio</button>
