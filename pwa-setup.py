@@ -71,19 +71,20 @@ make_icon(512).save(ROOT / "icon-512.png", format="PNG", optimize=True)
 make_icon(180).save(ROOT / "apple-touch-icon.png", format="PNG", optimize=True)
 make_icon(32).save(ROOT / "favicon-32.png", format="PNG", optimize=True)
 
-# Insertar metadatos PWA de forma idempotente en el HTML publicado.
-head_marker = "sp-pwa-head"
-if head_marker not in html:
-    tags = """
-<!-- sp-pwa-head -->
+# Insertar metadatos PWA en la cabecera REAL del documento.
+# El HTML contiene plantillas JavaScript con cadenas que incluyen </head>.
+# find() elige el cierre del head principal; rfind() lo colocaba dentro de una plantilla.
+old_head_block = """<!-- sp-pwa-head -->
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.webmanifest">
 """
-    if "</head>" not in html.lower():
-        raise SystemExit("No se encontró </head> en index.html.")
-    pos = html.lower().rfind("</head>")
-    html = html[:pos] + tags + html[pos:]
+html = html.replace(old_head_block, "")
+tags = old_head_block
+pos = html.lower().find("</head>")
+if pos < 0:
+    raise SystemExit("No se encontró el cierre real de </head> en index.html.")
+html = html[:pos] + tags + html[pos:]
 
 # Registrar el service worker existente en la raíz del dominio, sin caché de datos.
 if "sp-pwa-register" not in html:
