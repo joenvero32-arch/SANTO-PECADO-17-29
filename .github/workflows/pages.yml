@@ -62,6 +62,11 @@ jobs:
           p.write_text(s, encoding="utf-8")
           PY
 
+      - name: Generar iconos oficiales y activar instalación PWA
+        run: |
+          python -m pip install --quiet Pillow
+          python pwa-setup.py
+
       - name: Subir sitio
         uses: actions/upload-pages-artifact@v3
         with:
