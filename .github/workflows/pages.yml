@@ -4,9 +4,6 @@ on:
   push:
     branches: ["main", "principal"]
   workflow_dispatch:
-  workflow_run:
-    workflows: ["pages build and deployment"]
-    types: [completed]
 
 permissions:
   contents: read
@@ -27,6 +24,9 @@ jobs:
     steps:
       - name: Descargar repositorio
         uses: actions/checkout@v4
+
+      - name: Esperar a que termine la publicación automática de GitHub Pages
+        run: sleep 90
 
       - name: Configurar Pages
         uses: actions/configure-pages@v5
