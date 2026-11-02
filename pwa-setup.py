@@ -8,21 +8,32 @@ ROOT = Path(".")
 html_path = ROOT / "index.html"
 html = html_path.read_text(encoding="utf-8")
 
-# Reuse the exact brand mark already embedded in the live catalog header.
-match = re.search(
-    r'<img\s+class="brandLogo"\s+src="data:image/png;base64,([^"]+)"',
-    html,
-    re.IGNORECASE,
-)
-if not match:
-    raise SystemExit("No se encontró el logo oficial .brandLogo incrustado en index.html; se cancela la generación para evitar publicar un icono incorrecto.")
-
-logo_bytes = base64.b64decode(match.group(1))
-logo = Image.open(io.BytesIO(logo_bytes)).convert("RGBA")
-alpha = logo.getchannel("A")
-bbox = alpha.getbbox()
-if bbox:
-    logo = logo.crop(bbox)
+# Crear el icono de aplicación con la nueva identidad visual aprobada.
+# Diseño inspirado en el logotipo: fondo marfil, marco dorado/burdeos,
+# hamburguesa con llama y nombre Santo Pecado 17-29.
+logo = Image.new("RGBA", (1024, 1024), (250, 241, 222, 255))
+d = ImageDraw.Draw(logo)
+d.rounded_rectangle((12, 12, 1012, 1012), radius=190, fill=(124, 18, 13, 255), outline=(245, 177, 24, 255), width=24)
+d.rounded_rectangle((38, 38, 986, 986), radius=164, fill=(250, 241, 222, 255), outline=(255, 204, 74, 255), width=12)
+# Flame
+d.polygon([(512, 60), (570, 190), (548, 238), (620, 210), (650, 286), (615, 342), (410, 342), (376, 282), (430, 210), (452, 255)], fill=(130, 20, 14, 255))
+# Burger symbol
+d.rounded_rectangle((350, 360, 674, 468), radius=58, fill=(255, 185, 0, 255), outline=(126, 18, 12, 255), width=20)
+d.rounded_rectangle((330, 484, 694, 536), radius=25, fill=(126, 18, 12, 255))
+d.rounded_rectangle((350, 552, 674, 650), radius=48, fill=(255, 185, 0, 255), outline=(126, 18, 12, 255), width=18)
+# Brand typography
+font_serif = "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf"
+font_sans = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+f_brand = ImageFont.truetype(font_serif, 118)
+f_num = ImageFont.truetype(font_sans, 105)
+f_tag = ImageFont.truetype(font_sans, 42)
+for txt, y, font, color in [
+    ("SANTO", 666, f_brand, (126, 18, 12, 255)),
+    ("PECADO", 786, f_brand, (126, 18, 12, 255)),
+    ("17-29", 894, f_num, (241, 164, 0, 255)),
+]:
+    bb = d.textbbox((0, 0), txt, font=font)
+    d.text(((1024 - (bb[2]-bb[0]))/2, y), txt, font=font, fill=color)
 
 def make_icon(size: int) -> Image.Image:
     # Fondo premium borgoña/negro con acento dorado.
@@ -75,9 +86,9 @@ make_icon(32).save(ROOT / "favicon-32.png", format="PNG", optimize=True)
 # El HTML contiene plantillas JavaScript con cadenas que incluyen </head>.
 # find() elige el cierre del head principal; rfind() lo colocaba dentro de una plantilla.
 old_head_block = """<!-- sp-pwa-head -->
-<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
-<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
-<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=20261102">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20261102">
+<link rel="manifest" href="/manifest.webmanifest?v=20261102">
 """
 html = html.replace(old_head_block, "")
 tags = old_head_block
