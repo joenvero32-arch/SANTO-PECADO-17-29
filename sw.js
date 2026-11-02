@@ -20,8 +20,8 @@ self.addEventListener("push", event => {
 
   event.waitUntil(self.registration.showNotification(data.title || "Santo Pecado 17-29", {
     body: data.body || "Nueva actualización",
-    icon: "/icon-192.png",
-    badge: "/icon-192.png",
+    icon: new URL("./icon-192.png", self.registration.scope).href,
+    badge: new URL("./icon-192.png", self.registration.scope).href,
     data: data.url || "/"
   }));
 });
