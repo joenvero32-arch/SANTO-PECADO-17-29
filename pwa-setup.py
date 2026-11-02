@@ -28,9 +28,10 @@ f_brand = ImageFont.truetype(font_serif, 118)
 f_num = ImageFont.truetype(font_sans, 105)
 f_tag = ImageFont.truetype(font_sans, 42)
 for txt, y, font, color in [
-    ("SANTO", 666, f_brand, (126, 18, 12, 255)),
-    ("PECADO", 786, f_brand, (126, 18, 12, 255)),
-    ("17-29", 894, f_num, (241, 164, 0, 255)),
+    ("SANTO", 650, f_brand, (126, 18, 12, 255)),
+    ("PECADO", 765, f_brand, (126, 18, 12, 255)),
+    ("17-29", 865, f_num, (241, 164, 0, 255)),
+    ("COMIDAS RAPIDAS", 963, f_tag, (126, 18, 12, 255)),
 ]:
     bb = d.textbbox((0, 0), txt, font=font)
     d.text(((1024 - (bb[2]-bb[0]))/2, y), txt, font=font, fill=color)
@@ -58,8 +59,8 @@ def make_icon(size: int) -> Image.Image:
     )
 
     # Mantener el logotipo dentro de la zona segura para máscaras Android.
-    max_w = int(size * 0.70)
-    max_h = int(size * 0.72)
+    max_w = int(size * 0.90)
+    max_h = int(size * 0.90)
     scale = min(max_w / logo.width, max_h / logo.height)
     w = max(1, int(logo.width * scale))
     h = max(1, int(logo.height * scale))
