@@ -92,7 +92,7 @@ if "sp-pwa-register" not in html:
 <script id="sp-pwa-register">
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", function () {
-    navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(function (error) {
+    navigator.serviceWorker.register("./sw.js", { scope: "./" }).catch(function (error) {
       console.warn("No se pudo registrar el servicio de instalación de Santo Pecado.", error);
     });
   });
