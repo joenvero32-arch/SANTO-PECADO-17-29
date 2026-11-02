@@ -10,7 +10,7 @@ html = html_path.read_text(encoding="utf-8")
 
 # Reuse the exact brand mark already embedded in the live catalog header.
 match = re.search(
-    r'<img\\s+class="brandLogo"\\s+src="data:image/png;base64,([^"]+)"',
+    r'<img\s+class="brandLogo"\s+src="data:image/png;base64,([^"]+)"',
     html,
     re.IGNORECASE,
 )
