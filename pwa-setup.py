@@ -2,7 +2,7 @@ from pathlib import Path
 import base64
 import io
 import re
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 ROOT = Path(".")
 html_path = ROOT / "index.html"
