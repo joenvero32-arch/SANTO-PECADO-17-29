@@ -4102,6 +4102,28 @@ async function correctPendingOrderTotal(no){
     await adminOrders();
   }catch(e){console.error('Corrección de pedido:',e);alert('No se pudo corregir el pedido: '+(e?.message||'error desconocido'))}
 }
+function showPaymentSuccessReceipt(order,method){
+  const old=document.getElementById('spPaymentSuccessReceipt');if(old)old.remove();
+  const overlay=document.createElement('div');
+  overlay.id='spPaymentSuccessReceipt';
+  overlay.style.cssText='position:fixed;inset:0;z-index:1000002;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.82);backdrop-filter:blur(7px);font-family:inherit';
+  overlay.innerHTML=\`<section role="dialog" aria-modal="true" aria-labelledby="spPaymentSuccessTitle" style="width:min(100%,430px);box-sizing:border-box;background:linear-gradient(155deg,#1b1710,#101010 72%);color:#fff;border:1px solid rgba(247,185,40,.55);border-radius:22px;box-shadow:0 24px 80px #000b;padding:24px;text-align:center">
+    <div style="width:58px;height:58px;margin:0 auto 12px;border-radius:50%;display:grid;place-items:center;background:#1d8b5126;border:1px solid #39b978;color:#65dfa0;font-size:30px">✓</div>
+    <div style="font-size:11px;letter-spacing:1.5px;color:#f7b928;font-weight:900">SANTO PECADO 17-29</div>
+    <h2 id="spPaymentSuccessTitle" style="font-size:22px;margin:7px 0 5px">¡Pago registrado!</h2>
+    <div style="color:#c9c2b4;font-size:13px">El pago se guardó correctamente y no se volverá a registrar al imprimir.</div>
+    <div style="margin:18px 0;padding:14px;border:1px solid #ffffff1c;border-radius:14px;background:#ffffff08;text-align:left">
+      <div style="font-size:12px;color:#bdb6a8">PEDIDO</div><b style="font-size:17px">\${esc(order.no)}</b>
+      <div style="margin-top:7px;font-size:13px;color:#d7d0c2">\${esc(order.name||'Cliente')} · \${esc(method||order.pay||'')}</div>
+      <div style="margin-top:5px;font-size:24px;font-weight:900;color:#f7c94b">\${esc(money(order.total||0))}</div>
+    </div>
+    <button type="button" data-print style="width:100%;padding:14px;border:0;border-radius:12px;background:linear-gradient(135deg,#ffd85c,#f3ad16);color:#17120a;font:inherit;font-weight:900;font-size:15px">🖨️ Imprimir soporte de pago</button>
+    <button type="button" data-close style="width:100%;margin-top:10px;padding:12px;border:1px solid #5b5549;border-radius:12px;background:transparent;color:#eee;font:inherit;font-weight:800">Continuar</button>
+  </section>\`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-print]').addEventListener('click',()=>{printOrder(order.no);overlay.remove();});
+  overlay.querySelector('[data-close]').addEventListener('click',()=>overlay.remove());
+}
 const SP_PAYMENT_CONFIRMING=new Set();
 async function confirmOrderPayment(no){
   const key=String(no||'').trim();
@@ -4205,8 +4227,8 @@ async function confirmOrderPayment(no){
     save();
     auditLog('Pago recibido','Pedido '+o.no+' · '+o.pay+' · '+money(Number(row?.total??o.total??0))+(note.trim()?' · '+note.trim():''),o.no);
     localStorage.setItem(paymentAuditKey,'1');
-    alert('✅ PAGO REGISTRADO\n\nPedido: '+o.no+'\nTotal: '+money(Number(row?.total??o.total??0))+'\nPago: '+o.pay+'\nPago: PAGADO\nEstado del pedido: '+(row?.status||o.status||'recibido'));
     await adminOrders();
+    showPaymentSuccessReceipt(o,o.pay);
   }catch(e){
     console.error('Error al confirmar pago:',e);
     alert('No se pudo completar la confirmación. Verifica el estado del pedido antes de intentarlo otra vez.');
