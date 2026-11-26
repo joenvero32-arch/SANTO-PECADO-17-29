@@ -8,6 +8,7 @@
   const cardUrl=token=>SITE+'/fidelizacion.html?token='+encodeURIComponent(token);
   const qrUrl=url=>'https://api.qrserver.com/v1/create-qr-code/?size=190x190&margin=8&data='+encodeURIComponent(url);
   const seen=new Set();
+  const preparedCards=new Map();
 
   function readOrders(){try{const a=JSON.parse(localStorage.getItem('sp_premium_orders_v2')||'[]');return Array.isArray(a)?a:[]}catch(_){return[]}}
   function saveOrders(a){try{localStorage.setItem('sp_premium_orders_v2',JSON.stringify(a))}catch(e){console.warn('Fidelización: no se pudo guardar el enlace local',e)}}
@@ -32,6 +33,15 @@
       +'</section>';
   }
 
+  async function prepareOrder(orderId,phone,orderNo){
+    if(!orderId||!phone||!DB()?.connected)return null;
+    const {data,error}=await DB().rpc('sp_loyalty_register_order',{p_order_id:orderId,p_customer_phone:String(phone)});
+    if(error)throw error;
+    const card=Array.isArray(data)?data[0]:data;
+    if(card&&card.card_token)preparedCards.set(String(orderNo),card);
+    return card||null;
+  }
+
   async function attachCard(){
     const panel=document.getElementById('panel');
     if(!panel)return;
@@ -46,9 +56,7 @@
     const orderId=window.__lastCentralOrderId||order?.centralId;
     if(!order||!orderId||!DB()?.connected)return;
     try{
-      const {data,error}=await DB().rpc('sp_loyalty_register_order',{p_order_id:orderId,p_customer_phone:String(order.phone||'')});
-      if(error)throw error;
-      const card=Array.isArray(data)?data[0]:data;
+      const card=preparedCards.get(String(orderNo))||await prepareOrder(orderId,String(order.phone||''),orderNo);
       if(!card||!card.card_token)return;
       const orders=readOrders();
       const saved=orders.find(x=>String(x.no)===orderNo);
@@ -151,6 +159,7 @@
     }
     window.adminLoyalty=adminLoyalty;
     window.spLoyaltyRedeem=spLoyaltyRedeem;
+    window.spPrepareLoyaltyOrder=prepareOrder;
 
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
