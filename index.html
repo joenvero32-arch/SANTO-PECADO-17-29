@@ -4539,9 +4539,20 @@ async function adminOrders(){
     },8000);
   }
 }
-function printOrder(no){
+async function printOrder(no){
   const o=JSON.parse(localStorage.getItem(ORDERS)||'[]').find(x=>String(x.no)===String(no));
   if(!o){alert('No encontramos el pedido en este dispositivo.');return}
+  const w=window.open('','_blank','width=420,height=800');
+  if(!w){alert('El navegador bloqueó la ventana de impresión. Permite ventanas emergentes para esta página.');return}
+  // Leer el estado vigente desde Supabase usando el token de la tarjeta. Esta consulta NO registra ni suma sellos.
+  try{
+    const loyalty=JSON.parse(localStorage.getItem('sp_premium_orders_v2')||'[]');
+    const saved=Array.isArray(loyalty)?loyalty.find(x=>String(x.no)===String(no)):null;
+    if(saved){o.loyaltyUrl=saved.loyaltyUrl||o.loyaltyUrl||'';o.loyaltyToken=saved.loyaltyToken||o.loyaltyToken||'';o.loyaltyStamps=Math.max(0,Math.min(10,Number(saved.loyaltyStamps)||0));}
+    const token=o.loyaltyToken||(o.loyaltyUrl?new URL(o.loyaltyUrl).searchParams.get('token'):'');
+    const db=window.SantoPecadoCentral;
+    if(token&&db?.connected){const {data,error}=await db.rpc('sp_loyalty_get_status',{p_token:token});if(error)throw error;const card=Array.isArray(data)?data[0]:data;if(card){o.loyaltyStamps=Math.max(0,Math.min(10,Number(card.stamps_count)||0));}}
+  }catch(e){console.warn('No se pudo consultar el estado actual de fidelización; se usará el último dato guardado:',e)}
   // El avance de fidelización se guarda en el módulo independiente; unirlo solo para imprimir, sin modificar ventas ni generar sellos.
   try{const loyalty=JSON.parse(localStorage.getItem('sp_premium_orders_v2')||'[]');const saved=Array.isArray(loyalty)?loyalty.find(x=>String(x.no)===String(no)):null;if(saved){o.loyaltyUrl=saved.loyaltyUrl||o.loyaltyUrl||'';o.loyaltyStamps=Math.max(0,Math.min(10,Number(saved.loyaltyStamps)||0));}}catch(e){console.warn('No se pudo leer el avance de fidelización para reimprimir:',e)}
   const logo=document.querySelector('.brandLogo')?.src||'';
@@ -4569,8 +4580,6 @@ function printOrder(no){
   }).join('');
   const date=new Date(o.created).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'});
   const driver=o.type==='Domicilio'&&o.driverName?`<div><b>Domiciliario:</b> ${esc(o.driverName)}${o.driverPhone?' · '+esc(o.driverPhone):''}</div>`:'';
-  const w=window.open('','_blank','width=420,height=800');
-  if(!w){alert('El navegador bloqueó la ventana de impresión. Permite ventanas emergentes para esta página.');return}
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Soporte ${esc(o.no)}</title><style>
     @page{size:80mm auto;margin:0}
     *{box-sizing:border-box}
@@ -4607,7 +4616,7 @@ function printOrder(no){
       <b style='font-size:12px'>EL PECADO SE PREMIA</b>
       <div style='font-size:9px;margin:1mm 0'>Completa 10 sellos y gana tu comida favorita + una bebida personal.</div>
       <div style='display:grid;grid-template-columns:repeat(5,1fr);gap:1.5mm;margin:2mm auto;max-width:65mm'>
-        ${Array.from({length:10},(_,i)=>`<span style='border:1px solid #222;border-radius:50%;padding:2mm;background:${i<Number(o.loyaltyStamps||0)?'#f5c64b':'#fff'}'>${i+1}</span>`).join('')}
+        ${Array.from({length:10},(_,i)=>`<span style='border:1px solid #222;border-radius:50%;padding:2mm;background:${i<Number(o.loyaltyStamps||0)?'#f5c64b':'#fff'};font-weight:${i<Number(o.loyaltyStamps||0)?'900':'400'}'>${i<Number(o.loyaltyStamps||0)?'✓':i+1}</span>`).join('')}
       </div>
       ${o.loyaltyUrl?`<b style='font-size:9px'>TU QR PERSONAL · CONSULTA TUS SELLOS</b><img style='width:29mm;height:29mm;display:block;margin:2mm auto' src='https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(o.loyaltyUrl)}'>`:`<div style='font-size:9px;margin:2mm 0'>Tu QR personal estará disponible al activar tu tarjeta.</div>`}
     </div>
