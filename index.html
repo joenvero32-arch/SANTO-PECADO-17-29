@@ -4605,8 +4605,7 @@ function printOrder(no){
       <b style='font-size:12px'>EL PECADO SE PREMIA</b>
       <div style='font-size:9px;margin:1mm 0'>Completa 10 sellos y gana tu comida favorita + una bebida personal.</div>
       <div style='display:grid;grid-template-columns:repeat(5,1fr);gap:1.5mm;margin:2mm auto;max-width:65mm'>
-        <span style='border:1px solid #222;border-radius:50%;padding:2mm'>1</span><span style='border:1px solid #222;border-radius:50%;padding:2mm'>2</span><span style='border:1px solid #222;border-radius:50%;padding:2mm'>3</span><span style='border:1px solid #222;border-radius:50%;padding:2mm'>4</span><span style='border:1px solid #222;border-radius:50%;padding:2mm'>5</span>
-        <span style='border:1px solid #222;border-radius:50%;padding:2mm'>6</span><span style='border:1px solid #222;border-radius:50%;padding:2mm'>7</span><span style='border:1px solid #222;border-radius:50%;padding:2mm'>8</span><span style='border:1px solid #222;border-radius:50%;padding:2mm'>9</span><span style='border:1px solid #222;border-radius:50%;padding:2mm'>10</span>
+        ${Array.from({length:10},(_,i)=>`<span style='border:1px solid #222;border-radius:50%;padding:2mm;background:${i<Number(o.loyaltyStamps||0)?'#f5c64b':'#fff'}'>${i+1}</span>`).join('')}
       </div>
       ${o.loyaltyUrl?`<b style='font-size:9px'>TU QR PERSONAL · CONSULTA TUS SELLOS</b><img style='width:29mm;height:29mm;display:block;margin:2mm auto' src='https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(o.loyaltyUrl)}'>`:`<div style='font-size:9px;margin:2mm 0'>Tu QR personal estará disponible al activar tu tarjeta.</div>`}
     </div>
@@ -4991,6 +4990,6 @@ function saveSettings(){
   window.addEventListener('load',scheduleRecovery,{once:true});
 })();
 </script>
-<script src="loyalty.js?v=20261126-1"></script>
+<script src="loyalty.js?v=20261126-2"></script>
 </body>
 </html>
