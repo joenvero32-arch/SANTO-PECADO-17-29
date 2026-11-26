@@ -1316,7 +1316,7 @@ async function lookupCheckoutCustomer(){
  let last=localLast||null;
  if(SP_DB_ON&&SP_DB){
    try{
-     const {data,error}=await SP_DB.from('orders').select('address,payment_method,observations,created_at').eq('customer_phone',phone).order('created_at',{ascending:false}).limit(1).maybeSingle();
+     const {data,error}=await SP_DB.from('orders').select('address,payment_method,observations,created_at').in('customer_phone',[phone,'57'+phone]).order('created_at',{ascending:false}).limit(1).maybeSingle();
      if(!error&&data)last={...last,addr:data.address||last?.addr,pay:data.payment_method||last?.pay,obs:data.observations||last?.obs};
    }catch(e){console.warn('No se pudo consultar el último pedido del cliente:',e?.message||e)}
  }
