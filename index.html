@@ -1285,24 +1285,58 @@ function openCart(keep=false){
 }
 function selectTable(n){const v=Number(n);if(!TABLES.includes(v))return;const input=document.getElementById('tableNumber');if(input)input.value=String(v);document.querySelectorAll('.tableBtn').forEach(b=>b.classList.toggle('active',Number(b.dataset.table)===v));}
 function toggleOrderTypeFields(){const type=document.getElementById('type')?.value||'En el local';const field=document.getElementById('tableField');const addr=document.getElementById('addr');const addrField=document.getElementById('addressField');if(field)field.style.display=type==='En el local'?'block':'none';if(addrField)addrField.style.display=type==='Domicilio'?'block':'none';if(addr&&type!=='Domicilio')addr.value='';if(type==='Domicilio')lookupCheckoutCustomer();if(type==='En el local'&&!document.getElementById('tableNumber')?.value)selectTable(1);const totalEl=document.getElementById('orderTotal');if(totalEl)totalEl.textContent=money(orderTotal(type));const feeEl=document.getElementById('deliveryFeeNote');if(feeEl)feeEl.style.display=type==='Domicilio'?'block':'none';}
-function lookupCheckoutCustomer(){
- const phone=String(document.getElementById('ct')?.value||'').replace(/\D/g,'');
- if(phone.length<7)return null;
- const c=(Array.isArray(customers)?customers:[]).find(x=>String(x.phone||'').replace(/\D/g,'')===phone);
- if(!c)return null;
- const n=document.getElementById('cn');if(n&&!n.value.trim())n.value=String(c.name||'');
- const a=document.getElementById('addr');const t=document.getElementById('type')?.value||'';
- const saved=Array.isArray(c.addresses)&&c.addresses.length?c.addresses[0]:c.address;
- if(t==='Domicilio'&&a&&!a.value.trim()&&saved)a.value=String(saved);
+let spCheckoutLookupTimer=null;
+function scheduleCheckoutCustomerLookup(){
+  clearTimeout(spCheckoutLookupTimer);
+  spCheckoutLookupTimer=setTimeout(()=>lookupCheckoutCustomer(),450);
+}
+async function lookupCheckoutCustomer(){
+ const raw=String(document.getElementById('ct')?.value||'').replace(/\D/g,'');
+ const phone=raw.length>10&&raw.startsWith('57')?raw.slice(-10):raw;
+ const status=document.getElementById('customerLookupStatus');
+ if(phone.length<10){if(status)status.textContent='';return null}
+ if(status)status.textContent='Buscando cliente…';
+ let c=(Array.isArray(customers)?customers:[]).find(x=>{const p=String(x.phone||'').replace(/\D/g,'');return p===phone||p.slice(-10)===phone});
+ // Buscar también en la base central: así reconoce clientes aunque hayan comprado desde otro equipo.
+ if(!c&&SP_DB_ON&&SP_DB){
+   try{
+     const {data,error}=await SP_DB.from('customers').select('name,phone,address,neighborhood,notes').in('phone',[phone,'57'+phone]).limit(1).maybeSingle();
+     if(error)throw error;
+     if(data)c={...data,addresses:data.address?[data.address]:[]};
+   }catch(e){console.warn('Búsqueda central de cliente no disponible:',e?.message||e)}
+ }
+ if(!c){if(status)status.textContent='Cliente nuevo: completa sus datos una sola vez.';return null}
+ const n=document.getElementById('cn');
+ if(n&&!n.value.trim())n.value=String(c.name||'');
+ const a=document.getElementById('addr');
+ const type=document.getElementById('type')?.value||'';
+ const saved=Array.isArray(c.addresses)&&c.addresses.length?c.addresses[0]:(c.address||'');
+ // Recuperar los últimos datos del pedido cuando estén disponibles en este dispositivo.
+ const localLast=(Array.isArray(sales)?sales:[]).filter(x=>String(x.phone||'').replace(/\D/g,'').slice(-10)===phone).sort((x,y)=>new Date(y.date||0)-new Date(x.date||0))[0];
+ let last=localLast||null;
+ if(SP_DB_ON&&SP_DB){
+   try{
+     const {data,error}=await SP_DB.from('orders').select('address,payment_method,observations,created_at').eq('customer_phone',phone).order('created_at',{ascending:false}).limit(1).maybeSingle();
+     if(!error&&data)last={...last,addr:data.address||last?.addr,pay:data.payment_method||last?.pay,obs:data.observations||last?.obs};
+   }catch(e){console.warn('No se pudo consultar el último pedido del cliente:',e?.message||e)}
+ }
+ if(type==='Domicilio'&&a&&!a.value.trim()&&saved)a.value=String(saved);
+ if(a&&!a.value.trim()&&last?.addr&&type==='Domicilio')a.value=String(last.addr);
+ const pay=document.getElementById('pay');
+ if(pay&&last?.pay&&Array.from(pay.options).some(o=>o.value===last.pay||o.text===last.pay))pay.value=last.pay;
+ const obs=document.getElementById('obs');
+ if(obs&&!obs.value.trim()&&last?.obs)obs.value=String(last.obs);
+ if(status)status.textContent='✓ Cliente encontrado. Datos cargados; puedes modificarlos.';
  return c;
 }
 window.lookupCheckoutCustomer=lookupCheckoutCustomer;
+window.scheduleCheckoutCustomerLookup=scheduleCheckoutCustomerLookup;
 function checkout(){
   document.getElementById('panel').innerHTML=`
     <div class="panelHead"><h2>${isEmployeeOrderMode()?'📝 Registrar pedido':'📋 Datos del pedido'}</h2><button class="close" onclick="openCart()">✕</button></div>
     <div class="formGrid">
       <div class="field"><label>NOMBRE DEL CLIENTE</label><input id="cn" placeholder="Ej. Keira"></div>
-      <div class="field"><label>TELÉFONO</label><input id="ct" inputmode="tel" autocomplete="tel" onblur="lookupCheckoutCustomer()" placeholder="Ej. 3196985294"><small style="display:block;color:#999;margin-top:4px">Si ya eres cliente, buscamos tus datos con tu celular.</small></div>
+      <div class="field"><label>TELÉFONO</label><input id="ct" inputmode="tel" autocomplete="tel" oninput="scheduleCheckoutCustomerLookup()" onblur="lookupCheckoutCustomer()" placeholder="Ej. 3196985294"><small id="customerLookupStatus" style="display:block;color:#c9ad67;margin-top:4px">Escribe tu celular para buscar tus datos guardados.</small></div>
       <div class="field"><label>TIPO DE PEDIDO</label><select id="type" onchange="toggleOrderTypeFields()"><option>En el local</option><option>Domicilio</option><option>Recoger en el local</option></select></div><div class="field" id="tableField"><label>MESA</label><div id="tablePicker" class="tablePicker"><button type="button" class="tableBtn" data-table="1" onclick="selectTable(1)">Mesa 1</button><button type="button" class="tableBtn" data-table="2" onclick="selectTable(2)">Mesa 2</button><button type="button" class="tableBtn" data-table="3" onclick="selectTable(3)">Mesa 3</button><button type="button" class="tableBtn" data-table="4" onclick="selectTable(4)">Mesa 4</button><button type="button" class="tableBtn" data-table="5" onclick="selectTable(5)">Mesa 5</button><button type="button" class="tableBtn" data-table="6" onclick="selectTable(6)">Mesa 6</button></div><input type="hidden" id="tableNumber" value=""></div>
       <div class="field"><label>MÉTODO DE PAGO</label><select id="pay"><option>Efectivo</option><option>Nequi</option><option>Daviplata</option><option>Bancolombia</option><option>Transferencia bancaria</option><option>Tarjeta</option></select></div>
       <div class="field full" id="addressField" style="display:none"><label>DIRECCIÓN DE ENTREGA</label><input id="addr" autocomplete="street-address" placeholder="Dirección o lugar de entrega"></div>
