@@ -104,6 +104,19 @@
     return {p_username:username,p_pin_sha256:pinHash};
   }
 
+  async function spLoyaltyToggle(enabled){
+    try{
+      if(!confirm(enabled
+        ? '¿Activar EL PECADO SE PREMIA? Los clientes podrán volver a acumular sellos.'
+        : '¿Pausar EL PECADO SE PREMIA? Los clientes conservarán sus sellos y premios vigentes.'))return;
+      const creds=await adminCredentials();
+      const {data,error}=await DB().rpc('sp_loyalty_set_enabled',{...creds,p_enabled:!!enabled});
+      if(error)throw error;
+      alert(data?.is_enabled?'Promoción activada.':'Promoción pausada. Las tarjetas y premios existentes conservan su vigencia.');
+      await adminLoyalty();
+    }catch(e){alert(e.message||'No se pudo cambiar el estado de la promoción.')}
+  }
+
   async function adminLoyalty(){
     if(typeof window.isAdmin==='function'&&!window.isAdmin()){alert('Solo el administrador puede consultar fidelización.');return}
     const panel=document.getElementById('panel');
@@ -116,8 +129,10 @@
       if(error)throw error;
       const result=Array.isArray(data)?data[0]:data;
       const stats=result?.stats||{},cards=Array.isArray(result?.cards)?result.cards:[];
+      const promotionEnabled=result?.promotion_enabled!==false;
       panel.innerHTML='<div class="panelHead"><div><div class="dashKicker">FIDELIZACIÓN WEB</div><h2>🎟️ EL PECADO SE PREMIA</h2></div><button class="close" onclick="adminDashboard()">✕</button></div>'
         +(typeof window.navTabs==='function'?window.navTabs('loyalty'):'')
+        +'<div class="adminItem" style="margin:12px 0"><div class="adminTop"><b>Estado de la promoción</b><b style="color:'+(promotionEnabled?'#79d79b':'#ffb46e')+'">'+(promotionEnabled?'ACTIVA':'PAUSADA')+'</b></div><div class="muted">Pausar detiene nuevos sellos, pero no modifica las tarjetas ni los premios ya ganados.</div><button class="mini" style="margin-top:10px" onclick="spLoyaltyToggle('+(promotionEnabled?'false':'true')+')">'+(promotionEnabled?'⏸ Pausar promoción':'▶ Activar promoción')+'</button></div>'
         +'<div class="statgrid dashGrid"><div class="stat"><small>Tarjetas</small><b>'+Number(stats.cards_total||0)+'</b></div><div class="stat"><small>Activas</small><b>'+Number(stats.cards_active||0)+'</b></div><div class="stat"><small>Completadas</small><b>'+Number(stats.cards_completed||0)+'</b></div><div class="stat"><small>Premios pendientes</small><b>'+Number(stats.rewards_pending||0)+'</b></div></div>'
         +'<div class="notice" style="margin:12px 0">Solo se sellan pedidos de la página web que estén entregados y pagados y que contengan comida. Cada pedido genera un sello. Tarjeta: 30 días desde el primer sello. Premio: 30 días para reclamar.</div>'
         +(cards.length?cards.map(c=>'<div class="adminItem"><div class="adminTop"><b>'+esc(c.customer_name||'Cliente')+'</b><b>'+Number(c.stamps_count||0)+'/10 sellos</b></div><div class="muted">'+esc(c.customer_phone||'')+' · '+esc(c.status||'')+'</div><div class="muted">Tarjeta: '+(c.started_at?new Date(c.started_at).toLocaleDateString('es-CO'):'Pendiente de primer sello')+' · Vence: '+(c.expires_at?new Date(c.expires_at).toLocaleDateString('es-CO'):'—')+'</div>'
@@ -159,6 +174,7 @@
     }
     window.adminLoyalty=adminLoyalty;
     window.spLoyaltyRedeem=spLoyaltyRedeem;
+    window.spLoyaltyToggle=spLoyaltyToggle;
     window.spPrepareLoyaltyOrder=prepareOrder;
 
   }
