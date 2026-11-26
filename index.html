@@ -3512,7 +3512,7 @@ async function adminSales(){
         <button class="primary" onclick="adminSalesByDate(document.getElementById('spSalesDate').value)">Consultar fecha</button>
       </div>
     </div>
-    ${list.length?list.slice(0,100).map(o=>`<div class="adminItem"><b>${esc(o.no||'Venta')}</b> · <b>${money(o.total)}</b><br><span class="muted">${new Date(o.date||0).toLocaleString('es-CO')} · ${esc(o.name||'')} · ${esc(o.pay||'')}</span>${SP_DB_ON?`<div class="modalBtns" style="margin-top:8px"><button class="mini" data-sale-no="${esc(o.no)}" onclick="spAnnulRegisteredSale(this.dataset.saleNo)">⛔ Anular venta</button></div>`:''}</div>`).join(''):'<div class="empty">No hay ventas registradas todavía.</div>'}`;
+    ${list.length?list.slice(0,100).map(o=>`<div class="adminItem"><b>${esc(o.no||'Venta')}</b> · <b>${money(o.total)}</b><br><span class="muted">${new Date(o.date||0).toLocaleString('es-CO')} · ${esc(o.name||'')} · ${esc(o.pay||'')}</span>${SP_DB_ON?`<div class="modalBtns" style="margin-top:8px"><button class="mini" data-sale-no="${esc(o.no)}" onclick="printOrder(this.dataset.saleNo)">🖨️ Reimprimir soporte</button><button class="mini" data-sale-no="${esc(o.no)}" onclick="spAnnulRegisteredSale(this.dataset.saleNo)">⛔ Anular venta</button></div>`:''}</div>`).join(''):'<div class="empty">No hay ventas registradas todavía.</div>'}`;
   document.getElementById('modal').classList.add('open');
 }
 async function adminSalesByDate(dateValue){
@@ -4542,6 +4542,8 @@ async function adminOrders(){
 function printOrder(no){
   const o=JSON.parse(localStorage.getItem(ORDERS)||'[]').find(x=>String(x.no)===String(no));
   if(!o){alert('No encontramos el pedido en este dispositivo.');return}
+  // El avance de fidelización se guarda en el módulo independiente; unirlo solo para imprimir, sin modificar ventas ni generar sellos.
+  try{const loyalty=JSON.parse(localStorage.getItem('sp_premium_orders_v2')||'[]');const saved=Array.isArray(loyalty)?loyalty.find(x=>String(x.no)===String(no)):null;if(saved){o.loyaltyUrl=saved.loyaltyUrl||o.loyaltyUrl||'';o.loyaltyStamps=Math.max(0,Math.min(10,Number(saved.loyaltyStamps)||0));}}catch(e){console.warn('No se pudo leer el avance de fidelización para reimprimir:',e)}
   const logo=document.querySelector('.brandLogo')?.src||'';
   const detailLines=(o.detail||'').split('\n').map(x=>x.trim()).filter(Boolean);
   // Recupera el detalle y los importes guardados en la venta local, si existe.
