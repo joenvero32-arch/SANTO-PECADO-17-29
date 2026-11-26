@@ -60,7 +60,7 @@
       if(!card||!card.card_token)return;
       const orders=readOrders();
       const saved=orders.find(x=>String(x.no)===orderNo);
-      if(saved){saved.loyaltyToken=card.card_token;saved.loyaltyUrl=cardUrl(card.card_token);saved.loyaltyCardId=card.card_id;saveOrders(orders)}
+      if(saved){saved.loyaltyToken=card.card_token;saved.loyaltyUrl=cardUrl(card.card_token);saved.loyaltyCardId=card.card_id;saved.loyaltyStamps=Math.max(0,Math.min(10,Number(card.stamps_count)||0));saveOrders(orders)}
       const box=document.createElement('div');
       box.innerHTML=cardMarkup(card,orderNo);
       const ticket=box.firstElementChild;
