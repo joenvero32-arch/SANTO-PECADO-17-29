@@ -4553,8 +4553,6 @@ async function printOrder(no){
     const db=window.SantoPecadoCentral;
     if(token&&db?.connected){const {data,error}=await db.rpc('sp_loyalty_get_status',{p_token:token});if(error)throw error;const card=Array.isArray(data)?data[0]:data;if(card){o.loyaltyStamps=Math.max(0,Math.min(10,Number(card.stamps_count)||0));}}
   }catch(e){console.warn('No se pudo consultar el estado actual de fidelización; se usará el último dato guardado:',e)}
-  // El avance de fidelización se guarda en el módulo independiente; unirlo solo para imprimir, sin modificar ventas ni generar sellos.
-  try{const loyalty=JSON.parse(localStorage.getItem('sp_premium_orders_v2')||'[]');const saved=Array.isArray(loyalty)?loyalty.find(x=>String(x.no)===String(no)):null;if(saved){o.loyaltyUrl=saved.loyaltyUrl||o.loyaltyUrl||'';o.loyaltyStamps=Math.max(0,Math.min(10,Number(saved.loyaltyStamps)||0));}}catch(e){console.warn('No se pudo leer el avance de fidelización para reimprimir:',e)}
   const logo=document.querySelector('.brandLogo')?.src||'';
   const detailLines=(o.detail||'').split('\n').map(x=>x.trim()).filter(Boolean);
   // Recupera el detalle y los importes guardados en la venta local, si existe.
