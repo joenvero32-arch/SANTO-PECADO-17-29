@@ -1284,16 +1284,28 @@ function openCart(keep=false){
   document.getElementById('modal').classList.add('open');
 }
 function selectTable(n){const v=Number(n);if(!TABLES.includes(v))return;const input=document.getElementById('tableNumber');if(input)input.value=String(v);document.querySelectorAll('.tableBtn').forEach(b=>b.classList.toggle('active',Number(b.dataset.table)===v));}
-function toggleOrderTypeFields(){const type=document.getElementById('type')?.value||'En el local';const field=document.getElementById('tableField');const addr=document.getElementById('addr');if(field)field.style.display=type==='En el local'?'block':'none';if(addr&&type!=='Domicilio')addr.value='';if(type==='En el local'&&!document.getElementById('tableNumber')?.value)selectTable(1);const totalEl=document.getElementById('orderTotal');if(totalEl)totalEl.textContent=money(orderTotal(type));const feeEl=document.getElementById('deliveryFeeNote');if(feeEl)feeEl.style.display=type==='Domicilio'?'block':'none';}
+function toggleOrderTypeFields(){const type=document.getElementById('type')?.value||'En el local';const field=document.getElementById('tableField');const addr=document.getElementById('addr');const addrField=document.getElementById('addressField');if(field)field.style.display=type==='En el local'?'block':'none';if(addrField)addrField.style.display=type==='Domicilio'?'block':'none';if(addr&&type!=='Domicilio')addr.value='';if(type==='Domicilio')lookupCheckoutCustomer();if(type==='En el local'&&!document.getElementById('tableNumber')?.value)selectTable(1);const totalEl=document.getElementById('orderTotal');if(totalEl)totalEl.textContent=money(orderTotal(type));const feeEl=document.getElementById('deliveryFeeNote');if(feeEl)feeEl.style.display=type==='Domicilio'?'block':'none';}
+function lookupCheckoutCustomer(){
+ const phone=String(document.getElementById('ct')?.value||'').replace(/\D/g,'');
+ if(phone.length<7)return null;
+ const c=(Array.isArray(customers)?customers:[]).find(x=>String(x.phone||'').replace(/\D/g,'')===phone);
+ if(!c)return null;
+ const n=document.getElementById('cn');if(n&&!n.value.trim())n.value=String(c.name||'');
+ const a=document.getElementById('addr');const t=document.getElementById('type')?.value||'';
+ const saved=Array.isArray(c.addresses)&&c.addresses.length?c.addresses[0]:c.address;
+ if(t==='Domicilio'&&a&&!a.value.trim()&&saved)a.value=String(saved);
+ return c;
+}
+window.lookupCheckoutCustomer=lookupCheckoutCustomer;
 function checkout(){
   document.getElementById('panel').innerHTML=`
     <div class="panelHead"><h2>${isEmployeeOrderMode()?'📝 Registrar pedido':'📋 Datos del pedido'}</h2><button class="close" onclick="openCart()">✕</button></div>
     <div class="formGrid">
       <div class="field"><label>NOMBRE DEL CLIENTE</label><input id="cn" placeholder="Ej. Keira"></div>
-      <div class="field"><label>TELÉFONO</label><input id="ct" inputmode="tel" placeholder="Ej. 3196985294"></div>
+      <div class="field"><label>TELÉFONO</label><input id="ct" inputmode="tel" autocomplete="tel" onblur="lookupCheckoutCustomer()" placeholder="Ej. 3196985294"><small style="display:block;color:#999;margin-top:4px">Si ya eres cliente, buscamos tus datos con tu celular.</small></div>
       <div class="field"><label>TIPO DE PEDIDO</label><select id="type" onchange="toggleOrderTypeFields()"><option>En el local</option><option>Domicilio</option><option>Recoger en el local</option></select></div><div class="field" id="tableField"><label>MESA</label><div id="tablePicker" class="tablePicker"><button type="button" class="tableBtn" data-table="1" onclick="selectTable(1)">Mesa 1</button><button type="button" class="tableBtn" data-table="2" onclick="selectTable(2)">Mesa 2</button><button type="button" class="tableBtn" data-table="3" onclick="selectTable(3)">Mesa 3</button><button type="button" class="tableBtn" data-table="4" onclick="selectTable(4)">Mesa 4</button><button type="button" class="tableBtn" data-table="5" onclick="selectTable(5)">Mesa 5</button><button type="button" class="tableBtn" data-table="6" onclick="selectTable(6)">Mesa 6</button></div><input type="hidden" id="tableNumber" value=""></div>
       <div class="field"><label>MÉTODO DE PAGO</label><select id="pay"><option>Efectivo</option><option>Nequi</option><option>Daviplata</option><option>Bancolombia</option><option>Transferencia bancaria</option><option>Tarjeta</option></select></div>
-      <div class="field full"><label>DIRECCIÓN</label><input id="addr" placeholder="Dirección o lugar de entrega"></div>
+      <div class="field full" id="addressField" style="display:none"><label>DIRECCIÓN DE ENTREGA</label><input id="addr" autocomplete="street-address" placeholder="Dirección o lugar de entrega"></div>
       <div class="field full"><label>OBSERVACIONES</label><textarea id="obs" placeholder="Ej. mucha cebolla, sin piña, salsa aparte..."></textarea></div>
     </div>
     <div class="totalBox"><span>TOTAL</span><span id="orderTotal">${money(orderTotal('En el local'))}</span></div><div id="deliveryFeeNote" class="muted" style="display:none">Incluye domicilio: ${money(DELIVERY_FEE_COP)}</div>
@@ -4589,7 +4601,22 @@ function printOrder(no){
     ${o.type==='Domicilio'? `<div class="total">DOMICILIO: ${money(3000)}</div>` : ''}
     <div class="total">TOTAL: ${money(o.total)}</div>
     ${o.obs?`<div class="obs"><b>Observaciones:</b> ${esc(o.obs)}</div>`:''}
-    ${o.loyaltyUrl?`<div style="text-align:center;border-top:1px dashed #111;margin-top:3mm;padding-top:3mm"><b>EL PECADO SE PREMIA</b><div style="font-size:9px;margin:1mm 0">Escanea para consultar tu tarjeta</div><img style="width:32mm;height:32mm;display:block;margin:2mm auto" src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(o.loyaltyUrl)}"></div>`:""}\n    <div class="foot">Este documento es un soporte de compra y no constituye factura electrónica.</div>
+    <div style='text-align:center;border-top:1px dashed #111;margin-top:3mm;padding-top:3mm'>
+      <b style='font-size:12px'>EL PECADO SE PREMIA</b>
+      <div style='font-size:9px;margin:1mm 0'>Completa 10 sellos y gana tu comida favorita + una bebida personal.</div>
+      <div style='display:grid;grid-template-columns:repeat(5,1fr);gap:1.5mm;margin:2mm auto;max-width:65mm'>
+        <span style='border:1px solid #222;border-radius:50%;padding:2mm'>1</span><span style='border:1px solid #222;border-radius:50%;padding:2mm'>2</span><span style='border:1px solid #222;border-radius:50%;padding:2mm'>3</span><span style='border:1px solid #222;border-radius:50%;padding:2mm'>4</span><span style='border:1px solid #222;border-radius:50%;padding:2mm'>5</span>
+        <span style='border:1px solid #222;border-radius:50%;padding:2mm'>6</span><span style='border:1px solid #222;border-radius:50%;padding:2mm'>7</span><span style='border:1px solid #222;border-radius:50%;padding:2mm'>8</span><span style='border:1px solid #222;border-radius:50%;padding:2mm'>9</span><span style='border:1px solid #222;border-radius:50%;padding:2mm'>10</span>
+      </div>
+      ${o.loyaltyUrl?`<b style='font-size:9px'>TU QR PERSONAL · CONSULTA TUS SELLOS</b><img style='width:29mm;height:29mm;display:block;margin:2mm auto' src='https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(o.loyaltyUrl)}'>`:`<div style='font-size:9px;margin:2mm 0'>Tu QR personal estará disponible al activar tu tarjeta.</div>`}
+    </div>
+    <div style='text-align:center;border-top:1px dashed #111;margin-top:3mm;padding-top:3mm'>
+      <b style='font-size:11px'>HAZ TU PRÓXIMO PEDIDO EN LÍNEA</b>
+      <div style='font-size:9px;margin:1mm 0'>Escanea y pide fácil desde nuestra página.</div>
+      <img style='width:27mm;height:27mm;display:block;margin:2mm auto' src='https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https%3A%2F%2Fsantopecado17-29.com'>
+      <div style='font-size:9px'>santopecado17-29.com</div>
+    </div>
+    <div class='foot'>Este documento es un soporte de compra y no constituye factura electrónica.</div>
   </div></body></html>`);w.document.close();
   setTimeout(()=>{try{w.focus();w.print();}catch(e){console.warn('Impresión no disponible:',e)}},500);
 }
