@@ -4626,7 +4626,15 @@ async function printOrder(no){
     </div>
     <div class='foot'>Este documento es un soporte de compra y no constituye factura electrónica.</div>
   </div></body></html>`);w.document.close();
-  setTimeout(()=>{try{w.focus();w.print();}catch(e){console.warn('Impresión no disponible:',e)}},500);
+  // Esperar a que carguen el logo y los códigos QR externos antes de abrir el diálogo de impresión.
+  let printStarted=false;
+  const startPrint=()=>{if(printStarted)return;printStarted=true;try{w.focus();w.print()}catch(e){console.warn('Impresión no disponible:',e)}};
+  const imageLoads=Array.from(w.document.images).map(img=>{
+    if(img.complete&&img.naturalWidth>0)return Promise.resolve();
+    return new Promise(resolve=>{let settled=false;const done=()=>{if(settled)return;settled=true;resolve()};img.addEventListener('load',done,{once:true});img.addEventListener('error',done,{once:true});setTimeout(done,5500)});
+  });
+  Promise.all(imageLoads).then(()=>setTimeout(startPrint,250));
+  setTimeout(startPrint,6500);
 }
 function adminCustomers(){
   if(!isAdmin()){alert('Solo el administrador o dueño puede consultar la base de clientes.');return}
