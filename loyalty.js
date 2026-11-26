@@ -135,7 +135,8 @@
     const original=window.navTabs;
     const wrapped=function(active){
       let html=original.apply(this,arguments);
-      html=html.replace(/(<button class="tab[^"]*" onclick="adminAudit\\(\\)">🛡️ Auditoría<\\/button>)/,'$1<button class="tab '+(active==='loyalty'?'active':'')+'" onclick="adminLoyalty()">🎟️ Fidelización</button>');
+      const marker='onclick="adminAudit()">🛡️ Auditoría</button>';
+      if(html.includes(marker))html=html.replace(marker,marker+'<button class="tab '+(active==='loyalty'?'active':'')+'" onclick="adminLoyalty()">🎟️ Fidelización</button>');
       return html;
     };
     wrapped.__spLoyaltyWrapped=true;window.navTabs=wrapped;
@@ -150,10 +151,7 @@
     }
     window.adminLoyalty=adminLoyalty;
     window.spLoyaltyRedeem=spLoyaltyRedeem;
-    document.addEventListener('click',e=>{
-      const open=e.target.closest('[data-sp-loyalty-open]');
-      if(open)window.open(open.getAttribute('data-sp-loyalty-open'),'_blank','noopener');
-    });
+
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
 })();
