@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#090909">
+<title>EL PECADO SE PREMIA | Santo Pecado 17-29</title>
+<style>
+:root{color-scheme:dark;--gold:#f7c94b;--muted:#b4ada0}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:radial-gradient(circle at 10% 0%,#2b1740,transparent 32%),radial-gradient(circle at 90% 10%,#30220b,transparent 28%),#080808;color:#fff;font-family:Inter,system-ui,Arial,sans-serif;padding:24px}
+.wrap{width:min(680px,100%);margin:0 auto}
+.brand{text-align:center;color:var(--gold);font-size:11px;letter-spacing:3px;font-weight:900}
+h1{text-align:center;font-size:clamp(28px,7vw,44px);margin:10px 0 6px;line-height:1}
+.sub{text-align:center;color:#c8c1b5;margin:0 0 22px}
+.card{border:1px solid #6f5520;border-radius:24px;padding:22px;background:linear-gradient(145deg,rgba(30,25,16,.96),rgba(14,14,14,.98));box-shadow:0 24px 70px #0009}
+.progress{display:flex;justify-content:space-between;align-items:end;gap:12px;margin:8px 0 14px}
+.progress strong{font-size:28px;color:var(--gold)}
+.progress small{color:var(--muted)}
+.stamps{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:16px 0 20px}
+.stamp{aspect-ratio:1;border:1px dashed #75602c;border-radius:50%;display:grid;place-items:center;color:#a99d82;font-weight:900;background:#090909;font-size:16px}
+.stamp.filled{background:linear-gradient(145deg,#ffe58b,#d99a1b);color:#17120a;border:1px solid #ffe58b;box-shadow:0 5px 18px #d99a1b33}
+.info{padding:14px;border-radius:14px;background:#ffffff08;border:1px solid #ffffff16;color:#ddd;line-height:1.55;font-size:13px;margin-top:12px}
+.reward{padding:16px;border:1px solid #9b762c;border-radius:16px;background:#f7c94b12;margin-top:16px}
+.reward strong{color:var(--gold)}
+.code{font-size:20px;font-weight:950;letter-spacing:2px;margin:9px 0}
+.muted{color:var(--muted);font-size:12px}
+a{color:var(--gold)}
+footer{text-align:center;color:#766f63;font-size:11px;margin:18px}
+.loading,.error{text-align:center;padding:26px;color:#ddd}
+@media(max-width:420px){body{padding:14px}.card{padding:16px}.stamps{gap:7px}.stamp{font-size:13px}}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">SANTO PECADO 17-29</div>
+  <h1>EL PECADO SE PREMIA</h1>
+  <p class="sub">Cada pedido web válido te acerca a tu recompensa.</p>
+  <main id="app" class="card"><div class="loading">Consultando tu tarjeta...</div></main>
+  <footer>Fidelización exclusiva para pedidos realizados en nuestra página web.</footer>
+</div>
+<script>
+const SUPABASE_URL='https://ghucwrrvqivmbogtcgcr.supabase.co';
+const SUPABASE_KEY='sb_publishable_chFTmgoaIVvJSdpgTTuUSQ_fBNEq4WJ';
+const db=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const date=s=>s?new Date(s).toLocaleDateString('es-CO',{day:'2-digit',month:'long',year:'numeric'}):'Pendiente de la primera compra válida';
+(async()=>{
+ const token=new URLSearchParams(location.search).get('token');
+ const app=document.getElementById('app');
+ if(!token){app.innerHTML='<div class="error">No encontramos el código de tu tarjeta. Escanea el QR de tu comprobante web.</div>';return}
+ try{
+  const {data,error}=await db.rpc('sp_loyalty_get_status',{p_token:token});
+  if(error)throw error;
+  const c=Array.isArray(data)?data[0]:data;
+  if(!c){app.innerHTML='<div class="error">Esta tarjeta no existe o el enlace no es válido.</div>';return}
+  const count=Math.max(0,Math.min(10,Number(c.stamps_count)||0));
+  const stamps=Array.from({length:10},(_,i)=>'<div class="stamp '+(i<count?'filled':'')+'">'+(i<count?'✓':i+1)+'</div>').join('');
+  const state=c.status==='completed'?'Tarjeta completada':c.status==='expired'?'Tarjeta vencida':'Tarjeta activa';
+  let reward='';
+  if(c.reward){
+    const r=c.reward;
+    reward='<section class="reward"><strong>🎁 TU PREMIO</strong><p style="margin:8px 0 4px">'+esc(r.food_product_name)+' + '+esc(r.drink_description||'una bebida personal')+'</p><div class="code">'+esc(r.reward_code)+'</div><div class="muted">Estado: '+esc(r.status)+' · Reclamar antes del '+date(r.expires_at)+'</div>'
+      +(r.status==='pending'?'<p class="muted">Presenta este código en Santo Pecado 17-29 para reclamar tu premio.</p>':r.status==='redeemed'?'<p class="muted">Este premio ya fue reclamado. ¡Gracias por participar!</p>':'<p class="muted">Este premio ya no está disponible.</p>')+'</section>';
+  }
+  app.innerHTML='<div class="progress"><div><small>Tu avance</small><div><strong>'+count+'/10</strong> sellos</div></div><div class="muted">'+state+'</div></div><div class="stamps">'+stamps+'</div>'
+    +'<div class="info"><b>Vigencia de tu tarjeta:</b> 30 días desde el primer sello.<br><b>Inicio:</b> '+date(c.started_at)+'<br><b>Vence:</b> '+date(c.expires_at)+'<br><b>Regla:</b> un sello por pedido web entregado y pagado que incluya comida. Las bebidas no generan sellos.</div>'
+    +reward
+    +'<div class="info">Al completar los 10 sellos ganas tu comida más comprada durante esta tarjeta y una bebida personal gratis. Tienes 30 días para reclamar el premio.</div>';
+ }catch(e){app.innerHTML='<div class="error">No pudimos consultar tu tarjeta. Inténtalo de nuevo más tarde.</div>';console.error(e)}
+})();
+</script>
+</body>
+</html>
